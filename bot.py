@@ -7,7 +7,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 # ==================== SOZLAMALAR ====================
 BOT_TOKEN = "8437972006:AAGuK0OAtIYeNZiNUv-94VVMtqh91d27bd0"
 YOPIQ_KANAL_ID = -1001380301260
-YOPIQ_KANAL_LINK = "https://t.me/+YOPIQ_KANAL_INVITE_LINK"  # Bu ni o'zgartiring!
+YOPIQ_KANAL_LINK = "https://t.me/+UkW5zGZQakawRYVl"  # Bu ni o'zgartiring!
 # ====================================================
 
 logging.basicConfig(level=logging.INFO)
