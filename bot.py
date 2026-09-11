@@ -102,6 +102,9 @@ logger = logging.getLogger(__name__)
 
 (
     LISTING_TYPE_CHOICE,
+    RENTAL_TYPE_CHOICE,
+    QUICK_MANZIL,
+    QUICK_NARX,
     MANZIL,
     MOLJAL,
     KIMLARGA,
@@ -132,7 +135,7 @@ logger = logging.getLogger(__name__)
     LOCATION_WAIT,
     ADMIN_ADD_WAIT,
     LOCATION_OPTIONAL,
-) = range(31)
+) = range(34)
 
 BTN_ELON = "\U0001F4DD E'lon berish"
 BTN_LISTINGS = "\U0001F4CB Mening e'lonlarim"
@@ -292,7 +295,7 @@ def init_db() -> None:
 def migrate_db() -> None:
     conn = db()
     for table, needed in (
-        ("listings", {"sender_phone": "TEXT", "payment_receipt": "TEXT", "price_charged": "INTEGER", "is_quick": "INTEGER DEFAULT 0", "raw_text": "TEXT", "last_confirmed_at": "TEXT", "expired": "INTEGER DEFAULT 0", "stale_reports": "INTEGER DEFAULT 0", "receipt_warning": "TEXT", "buttons_fixed": "INTEGER DEFAULT 0", "latitude": "REAL", "longitude": "REAL", "category": "TEXT DEFAULT 'egadan'"}),
+        ("listings", {"sender_phone": "TEXT", "payment_receipt": "TEXT", "price_charged": "INTEGER", "is_quick": "INTEGER DEFAULT 0", "raw_text": "TEXT", "last_confirmed_at": "TEXT", "expired": "INTEGER DEFAULT 0", "stale_reports": "INTEGER DEFAULT 0", "receipt_warning": "TEXT", "buttons_fixed": "INTEGER DEFAULT 0", "latitude": "REAL", "longitude": "REAL", "category": "TEXT DEFAULT 'egadan'", "rental_type": "TEXT DEFAULT 'uzoq_muddat'"}),
         ("subscriptions", {"months": "INTEGER DEFAULT 1", "price_charged": "INTEGER", "target_listing_id": "INTEGER", "receipt_warning": "TEXT"}),
         ("users", {"free_views_used": "INTEGER DEFAULT 0", "bonus_views": "INTEGER DEFAULT 0", "referred_by": "INTEGER", "referral_bonus_given": "INTEGER DEFAULT 0"}),
     ):
@@ -405,13 +408,13 @@ def save_listing(data: dict, price_charged: int) -> int:
         """INSERT INTO listings
             (user_id, username, full_name, sender_phone, manzil, moljal, kimlarga, xona,
              qulaylik, narx, telefon, photos, payment_receipt, price_charged, status, created_at,
-             latitude, longitude)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)""",
+             latitude, longitude, rental_type)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)""",
         (
             data["user_id"], data.get("username"), data.get("full_name"), data.get("sender_phone"),
             data["manzil"], data["moljal"], data["kimlarga"], data["xona"], data["qulaylik"], data["narx"],
             data["telefon"], json.dumps(data["rasmlar"]), data.get("payment_receipt"), price_charged, now_str(),
-            data.get("latitude"), data.get("longitude"),
+            data.get("latitude"), data.get("longitude"), data.get("rental_type") or "uzoq_muddat",
         ),
     )
     conn.commit()
@@ -420,16 +423,18 @@ def save_listing(data: dict, price_charged: int) -> int:
     return listing_id
 
 
-def save_quick_listing(user_id: int, username, full_name, telefon: str, raw_text: str, rasmlar: list) -> int:
+def save_quick_listing(user_id: int, username, full_name, telefon: str, manzil: str, narx: str, raw_text: str, rasmlar: list) -> int:
     """Admin uchun tezkor rejim: OLX'dan ko'chirilgan matn HECH QANDAY o'zgartirishsiz,
-    aynan o'zi saqlanadi va kanalga shu holicha (branding qo'shilmasdan) chiqadi."""
+    aynan o'zi saqlanadi va kanalga shu holicha (branding qo'shilmasdan) chiqadi.
+    Manzil va narx endi MAJBURIY - shu ikkisi tufayli tezkor e'lonlar ham saytda
+    aniq manzili va narxi bilan (lite shablonda) to'g'ri ko'rinadi."""
     conn = db()
     cur = conn.execute(
         """INSERT INTO listings
             (user_id, username, full_name, manzil, moljal, kimlarga, xona, qulaylik, narx,
              telefon, photos, price_charged, status, is_quick, raw_text, created_at)
-           VALUES (?, ?, ?, '', '', '', '', '', '', ?, ?, 0, 'pending', 1, ?, ?)""",
-        (user_id, username, full_name, telefon, json.dumps(rasmlar), raw_text, now_str()),
+           VALUES (?, ?, ?, ?, '', '', '', '', ?, ?, ?, 0, 'pending', 1, ?, ?)""",
+        (user_id, username, full_name, manzil, narx, telefon, json.dumps(rasmlar), raw_text, now_str()),
     )
     conn.commit()
     listing_id = cur.lastrowid
@@ -942,6 +947,13 @@ def build_caption(data: dict, bot_username: str = None) -> str:
         "premium": "\U0001F48E <b>Premium e'lon</b>",
     }
     category_badge = f"\n{category_labels[data['category']]}" if data.get("category") in category_labels else ""
+    rental_type_labels = {
+        "kunlik": "\U0001F4C5 <b>Kunlik ijara</b>",
+        "uzoq_muddat": "\U0001F3E0 <b>Uzoq muddatli ijara</b>",
+        "dacha": "\U0001F333 <b>Dacha</b>",
+        "mehmonxona": "\U0001F6CF <b>Mehmonxona</b>",
+    }
+    rental_type_badge = f"\n{rental_type_labels[data['rental_type']]}" if data.get("rental_type") in rental_type_labels else ""
     if data.get("is_quick"):
         # Tezkor rejim: matnning o'zi o'zgartirilmaydi, lekin brend
         # sarlavha + sana + footer HAR DOIM qo'shiladi (izchillik uchun).
@@ -952,7 +964,7 @@ def build_caption(data: dict, bot_username: str = None) -> str:
             f"@{CHANNEL_USERNAME} \u2014 uyingizni maklersiz bering va oling!"
         )
     return (
-        f"\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>{trust_badge}{category_badge}{location_badge}\n\n"
+        f"\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>{trust_badge}{category_badge}{rental_type_badge}{location_badge}\n\n"
         f"\U0001F4CD <b>Manzil:</b> {esc(data['manzil'])}\n"
         f"\U0001F3AF <b>Mo'ljal:</b> {esc(data['moljal'])}\n"
         f"\U0001F465 <b>Kimlarga:</b> {esc(data['kimlarga'])}\n"
@@ -2989,10 +3001,13 @@ async def quick_phone_received(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return QUICK_PHONE
     context.user_data["telefon"] = phone
-    context.user_data["rasmlar"] = []
-    context.user_data["photo_status_msg_id"] = None
-    await quick_update_photo_status(update, context)
-    return QUICK_PHOTOS
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tophone"),
+                                       InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
+    await update.message.reply_text(
+        "\U0001F4CD Endi uyning manzilini yozing (tuman, mahalla) \u2014 bu saytda va xaritada ko'rsatiladi:",
+        reply_markup=keyboard,
+    )
+    return QUICK_MANZIL
 
 
 async def quick_back_to_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3004,6 +3019,61 @@ async def quick_back_to_phone(update: Update, context: ContextTypes.DEFAULT_TYPE
     return QUICK_PHONE
 
 
+async def quick_manzil_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if await try_escape_to_menu(update, context):
+        return ConversationHandler.END
+    raw = (update.message.text or "").strip()
+    if not raw:
+        await update.message.reply_text("\u26a0\ufe0f Bo'sh bo'lishi mumkin emas. Manzilni yozing:")
+        return QUICK_MANZIL
+    if len(raw) > 250:
+        await update.message.reply_text(f"\u26a0\ufe0f Manzil juda uzun ({len(raw)} belgi). 250 belgidan qisqaroq yozing:")
+        return QUICK_MANZIL
+    context.user_data["quick_manzil"] = raw
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tomanzil"),
+                                       InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
+    await update.message.reply_text("\U0001F4B0 Endi narxini yozing (masalan: 150$, 1.2 mln, kelishiladi):", reply_markup=keyboard)
+    return QUICK_NARX
+
+
+async def quick_back_to_manzil(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tophone"),
+                                       InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
+    await query.edit_message_text(
+        "\U0001F4CD Endi uyning manzilini yozing (tuman, mahalla) \u2014 bu saytda va xaritada ko'rsatiladi:",
+        reply_markup=keyboard,
+    )
+    return QUICK_MANZIL
+
+
+async def quick_narx_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if await try_escape_to_menu(update, context):
+        return ConversationHandler.END
+    raw = (update.message.text or "").strip()
+    if not raw:
+        await update.message.reply_text("\u26a0\ufe0f Bo'sh bo'lishi mumkin emas. Narxni yozing:")
+        return QUICK_NARX
+    if len(raw) > 200:
+        await update.message.reply_text(f"\u26a0\ufe0f Narx juda uzun ({len(raw)} belgi). Qisqaroq yozing:")
+        return QUICK_NARX
+    context.user_data["quick_narx"] = raw
+    context.user_data["rasmlar"] = []
+    context.user_data["photo_status_msg_id"] = None
+    await quick_update_photo_status(update, context)
+    return QUICK_PHOTOS
+
+
+async def quick_back_to_narx(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tomanzil"),
+                                       InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
+    await query.edit_message_text("\U0001F4B0 Endi narxini yozing (masalan: 150$, 1.2 mln, kelishiladi):", reply_markup=keyboard)
+    return QUICK_NARX
+
+
 async def quick_update_photo_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     photos = context.user_data.setdefault("rasmlar", [])
@@ -3012,7 +3082,7 @@ async def quick_update_photo_status(update: Update, context: ContextTypes.DEFAUL
     rows = []
     if n > 0:
         rows.append([InlineKeyboardButton(f"\u2705 Tayyor ({n} ta) \u2014 Davom etish", callback_data="quick_rasm_tayyor")])
-    rows.append([InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tophone"),
+    rows.append([InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tonarx"),
                  InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")])
     markup = InlineKeyboardMarkup(rows)
     msg_id = context.user_data.get("photo_status_msg_id")
@@ -3075,7 +3145,10 @@ async def quick_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user
     data = context.user_data
-    listing_id = save_quick_listing(user.id, user.username, user.full_name, data["telefon"], data["quick_text"], data["rasmlar"])
+    listing_id = save_quick_listing(
+        user.id, user.username, user.full_name, data["telefon"],
+        data["quick_manzil"], data["quick_narx"], data["quick_text"], data["rasmlar"],
+    )
     listing = get_listing(listing_id)
     channel_msg_id = await send_listing_to_channel(context, listing)
 
@@ -3303,7 +3376,7 @@ async def elon_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Xodim (admin/moderator) uchun tanlov shart emas - u har doim
         # to'lovsiz, to'g'ridan-to'g'ri joylash usulidan foydalanadi.
         context.user_data["listing_is_paid"] = False
-        return await render_step(update, context, 0)
+        return await ask_rental_type(update, context)
 
     price = listing_price()
     keyboard = InlineKeyboardMarkup([
@@ -3327,6 +3400,36 @@ async def listing_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     context.user_data["listing_is_paid"] = query.data == "listingtype_paid"
     context.user_data.setdefault("rasmlar", [])
+    await query.edit_message_reply_markup(reply_markup=None)
+    return await ask_rental_type(update, context)
+
+
+RENTAL_TYPE_OPTIONS = [
+    ("uzoq_muddat", "\U0001F3E0 Uzoq muddatli ijara"),
+    ("kunlik", "\U0001F4C5 Kunlik ijara (sutkalik)"),
+    ("dacha", "\U0001F333 Dacha"),
+    ("mehmonxona", "\U0001F6CF Mehmonxona / mehmon xona"),
+]
+RENTAL_TYPE_LABELS = dict(RENTAL_TYPE_OPTIONS)
+
+
+async def ask_rental_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton(label, callback_data=f"rentaltype_{key}")] for key, label in RENTAL_TYPE_OPTIONS]
+        + [[InlineKeyboardButton("\u274c Bekor qilish", callback_data="nav_cancel")]]
+    )
+    text = "\U0001F3F7\ufe0f <b>Uy qanday turdagi ijaraga beriladi?</b>"
+    if update.callback_query:
+        await context.bot.send_message(update.effective_chat.id, text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    else:
+        await update.effective_message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    return RENTAL_TYPE_CHOICE
+
+
+async def rental_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data["rental_type"] = query.data.split("_", 1)[1]
     await query.edit_message_reply_markup(reply_markup=None)
     return await render_step(update, context, 0)
 
@@ -4959,6 +5062,7 @@ def main():
         ],
         states={
             LISTING_TYPE_CHOICE: [nav_cb, CallbackQueryHandler(listing_type_chosen, pattern="^listingtype_(free|paid)$"), MessageHandler(~filters.COMMAND, make_reminder(LISTING_TYPE_CHOICE))],
+            RENTAL_TYPE_CHOICE: [nav_cb, CallbackQueryHandler(rental_type_chosen, pattern="^rentaltype_(uzoq_muddat|kunlik|dacha|mehmonxona)$"), MessageHandler(~filters.COMMAND, make_reminder(RENTAL_TYPE_CHOICE))],
             MANZIL: text_state(MANZIL),
             MOLJAL: text_state(MOLJAL),
             KIMLARGA: text_state(KIMLARGA),
@@ -5043,7 +5147,9 @@ def main():
         states={
             QUICK_TEXT: [CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_text_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_TEXT))],
             QUICK_PHONE: [CallbackQueryHandler(quick_back_to_text, pattern="^quick_back_totext$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_phone_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_PHONE))],
-            QUICK_PHOTOS: [CallbackQueryHandler(quick_back_to_phone, pattern="^quick_back_tophone$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), CallbackQueryHandler(quick_rasm_tayyor, pattern="^quick_rasm_tayyor$"), MessageHandler(~filters.COMMAND, quick_rasm_qabul)],
+            QUICK_MANZIL: [CallbackQueryHandler(quick_back_to_phone, pattern="^quick_back_tophone$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_manzil_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_MANZIL))],
+            QUICK_NARX: [CallbackQueryHandler(quick_back_to_manzil, pattern="^quick_back_tomanzil$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_narx_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_NARX))],
+            QUICK_PHOTOS: [CallbackQueryHandler(quick_back_to_narx, pattern="^quick_back_tonarx$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), CallbackQueryHandler(quick_rasm_tayyor, pattern="^quick_rasm_tayyor$"), MessageHandler(~filters.COMMAND, quick_rasm_qabul)],
             QUICK_CONFIRM: [CallbackQueryHandler(quick_back_to_photos, pattern="^quick_back_tophotos$"), CallbackQueryHandler(quick_post, pattern="^quick_post$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(~filters.COMMAND, quick_confirm_reminder)],
         },
         fallbacks=[CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$")],
