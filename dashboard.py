@@ -232,6 +232,37 @@ def current_subscription_days() -> int:
         return 30
 
 
+def mask_card_holder(name: str) -> str:
+    """Karta egasi ismini saytda XAVFSIZ ko'rsatish uchun - har bir so'zning
+    faqat birinchi harfi ochiq qoladi (masalan "Laziz Hamdamov" -> "Lxxxx Hxxxxxxx")."""
+    if not name:
+        return ""
+    return " ".join((w[0] + "x" * (len(w) - 1)) if len(w) > 1 else w for w in name.split())
+
+
+def render_credit_card(lang: str, card_digits: str, amount_text: str = "", with_copy: bool = False) -> str:
+    """Karta raqamini haqiqiy bank kartasiga o'xshash, chiroyli ko'rinishda
+    chiqaradi - listing_detail va /kabinet/limit ikkalasida ham ishlatiladi."""
+    card_grouped = " ".join(card_digits[i:i + 4] for i in range(0, len(card_digits), 4)) if card_digits else ""
+    masked_holder = mask_card_holder(CARD_HOLDER) or SITE_NAME
+    amount_html = f'<div class="credit-card-amount">{amount_text}</div>' if amount_text else ""
+    copy_html = ""
+    if with_copy and card_digits:
+        copy_html = (
+            f'<button type="button" class="card-copy-btn" onclick="copyCardNumber(this, \'{card_digits}\')">'
+            f'{icon("copy", 13)} <span>{t(lang, "copy_btn")}</span></button>'
+        )
+    return f"""<div class="credit-card">
+  <div class="credit-card-top"><span class="credit-card-chip"></span><span class="credit-card-brand">{t(lang,'card_brand')}</span></div>
+  <div class="credit-card-number">{esc_html(card_grouped) or '—'}</div>
+  <div class="credit-card-bottom">
+    <div><div class="credit-card-label">{t(lang,'card_holder_label')}</div><div class="credit-card-holder">{esc_html(masked_holder)}</div></div>
+    {amount_html}
+  </div>
+</div>
+{copy_html}"""
+
+
 def init_tracking_tables():
     """Faqat shu dashboard ishlatadigan, YANGI, MUSTAQIL jadvallar."""
     conn = db()
@@ -897,6 +928,12 @@ SITE_CSS = """
     background: var(--brand); color: #fff; font-weight: 700; font-size: 14px; transition: background .15s;
   }
   .paywall-cta:hover { background: var(--brand-dark); }
+  .card-copy-btn {
+    display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 10px;
+    padding: 10px; border-radius: var(--radius); border: 1px solid var(--line); background: #fff;
+    font-size: 12.5px; font-weight: 700; color: var(--ink); cursor: pointer; transition: border-color .15s;
+  }
+  .card-copy-btn:hover { border-color: var(--ink); }
   .sidebar-share { display: flex; gap: 8px; margin-top: 18px; }
   .sidebar-share button {
     flex: 1; padding: 11px; border-radius: var(--radius); border: 1px solid var(--line); background: #fff;
@@ -1843,23 +1880,16 @@ def listing_detail(request: Request, listing_id: int):
         # to'lov taklifi (kartasi bilan) sahifadan chiqmasdan ochiladi.
         buy_next = f"/kabinet/limit?listing_id={l['id']}"
         buy_link = buy_next if tg_user else f"/login?next={urllib.parse.quote(buy_next, safe='')}"
-        raw_card = current_card_number()
-        card_digits = re.sub(r"\D", "", raw_card)
-        card_grouped = " ".join(card_digits[i:i + 4] for i in range(0, len(card_digits), 4)) if card_digits else ""
+        card_digits = re.sub(r"\D", "", current_card_number())
         price = current_subscription_price()
+        card_html = render_credit_card(lang, card_digits, amount_text=f"{price:,} {t(lang,'sum')}", with_copy=True)
         phone_cta_html = (
             f'<button type="button" class="sidebar-cta" style="width:100%;border:none;cursor:pointer;" '
             f'onclick="document.getElementById(\'phoneLock\').classList.add(\'open\');this.style.display=\'none\';">'
             f'{icon("phone", 16)} {t(lang,"sidebar_cta_view_phone")}</button>'
             f'<div id="phoneLock" class="phone-lock">'
             f'<p class="phone-lock-text">{t(lang,"paywall_no_limit_msg", price=f"{price:,} " + t(lang,"sum"))}</p>'
-            f'<div class="credit-card">'
-            f'<div class="credit-card-top"><span class="credit-card-chip"></span><span class="credit-card-brand">{t(lang,"card_brand")}</span></div>'
-            f'<div class="credit-card-number">{esc_html(card_grouped) or "—"}</div>'
-            f'<div class="credit-card-bottom">'
-            f'<div><div class="credit-card-label">{t(lang,"card_holder_label")}</div><div class="credit-card-holder">{esc_html(CARD_HOLDER) or SITE_NAME}</div></div>'
-            f'<div class="credit-card-amount">{price:,} {t(lang,"sum")}</div>'
-            f'</div></div>'
+            f'{card_html}'
             f'<a href="{buy_link}" class="paywall-cta">{t(lang,"kb_buy_limit")} →</a>'
             f'</div>'
         )
@@ -2044,6 +2074,12 @@ function copyLink(btn) {{
   navigator.clipboard.writeText(window.location.href);
   const original = btn.innerHTML;
   btn.textContent = "\u2705 {t(lang,'copied_btn')}";
+  setTimeout(() => btn.innerHTML = original, 1800);
+}}
+function copyCardNumber(btn, digits) {{
+  navigator.clipboard.writeText(digits);
+  const original = btn.innerHTML;
+  btn.innerHTML = "\u2705 {t(lang,'copied_btn')}";
   setTimeout(() => btn.innerHTML = original, 1800);
 }}
 
@@ -2979,11 +3015,12 @@ def kabinet_limit_page(request: Request, listing_id: str = Query("")):
         )
     else:
         listing_field = f'<input type="hidden" name="listing_id" value="{esc_html(listing_id)}">' if listing_id else ""
-        holder_line = f" — {esc_html(CARD_HOLDER)}" if CARD_HOLDER else ""
+        card_digits = re.sub(r"\D", "", card)
+        card_html = render_credit_card(lang, card_digits, with_copy=True)
         body_inner = f"""
     <div class="kb-pay-box">
       <div class="kb-pay-price">{price:,} {t(lang,'sum')} <span>/ {days} {t(lang,'days')}</span></div>
-      <div class="kb-pay-card">{icon('coin',15)} {esc_html(card)}{holder_line}</div>
+      {card_html}
       <p class="kb-pay-hint">{t(lang,'kb_pay_hint')}</p>
     </div>
     <form id="limitForm" onsubmit="return submitLimit(event)">
@@ -2998,6 +3035,12 @@ def kabinet_limit_page(request: Request, listing_id: str = Query("")):
       <div id="limitError" class="kb-limit-error"></div>
     </form>
     <script>
+    function copyCardNumber(btn, digits) {{
+      navigator.clipboard.writeText(digits);
+      const original = btn.innerHTML;
+      btn.innerHTML = "✅ {t(lang,'copied_btn')}";
+      setTimeout(() => btn.innerHTML = original, 1800);
+    }}
     async function submitLimit(e) {{
       e.preventDefault();
       const form = e.target;
