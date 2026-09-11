@@ -223,10 +223,12 @@ init_tracking_tables()
 def get_active_listings():
     conn = db()
     rows = conn.execute(
-        """SELECT id, manzil, moljal, kimlarga, xona, narx, latitude, longitude, created_at, channel_msg_id
+        """SELECT id, manzil, moljal, kimlarga, xona, narx, latitude, longitude, created_at,
+                  channel_msg_id, price_charged, category, photos
            FROM listings
            WHERE status = 'approved' AND COALESCE(expired,0) = 0
-           AND latitude IS NOT NULL AND longitude IS NOT NULL"""
+           AND latitude IS NOT NULL AND longitude IS NOT NULL
+           ORDER BY (CASE WHEN COALESCE(price_charged,0) > 0 THEN 0 ELSE 1 END) ASC, created_at DESC"""
     ).fetchall()
     conn.close()
     result = []
@@ -236,6 +238,13 @@ def get_active_listings():
             d["post_link"] = f"https://t.me/{CHANNEL_USERNAME}/{d['channel_msg_id']}"
         else:
             d["post_link"] = None
+        try:
+            photos = _json.loads(d.pop("photos") or "[]")
+        except Exception:
+            photos = []
+        d["photo"] = photo_url(photos[0]) if photos else ""
+        d["is_paid"] = bool((d.get("price_charged") or 0) > 0)
+        d["detail_link"] = f"/uy/{d['id']}"
         result.append(d)
     return result
 
@@ -402,16 +411,20 @@ async def get_photo(file_id: str):
 
 SITE_CSS = """
   :root {
-    --brand: #FF385C; --brand-dark: #E31C5F; --brand-light: #FFE8EC;
-    --ink: #222222; --ink-soft: #484848; --muted: #717171; --line: #EBEBEB;
-    --bg: #ffffff; --bg-soft: #F7F7F7;
+    /* Premium mulk-brend palitrasi: chuqur zumrad (ishonch/o'sish) + issiq oltin (premium/TOP urg'u) */
+    --brand: #0E9F76; --brand-dark: #0A7A5C; --brand-light: #E7F7F1;
+    --gold: #D6960B; --gold-light: #FDF3DE;
+    --ink: #101826; --ink-soft: #47526B; --muted: #6B7690; --line: #E7EAF0;
+    --bg: #ffffff; --bg-soft: #F6F8FA;
     --radius-sm: 8px; --radius: 12px; --radius-lg: 20px; --radius-pill: 999px;
-    --shadow-sm: 0 1px 2px rgba(0,0,0,0.08);
-    --shadow: 0 6px 16px rgba(0,0,0,0.12);
-    --shadow-lg: 0 12px 32px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.06);
+    --shadow-sm: 0 1px 2px rgba(16,24,38,0.08);
+    --shadow: 0 6px 16px rgba(16,24,38,0.10);
+    --shadow-lg: 0 16px 36px rgba(16,24,38,0.14), 0 2px 8px rgba(16,24,38,0.06);
+    --font-display: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  h1, h2, h3, .brand, .footer-brand, .side-brand { font-family: var(--font-display); }
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     color: var(--ink); background: var(--bg); line-height: 1.5; font-size: 15px;
@@ -531,13 +544,13 @@ SITE_CSS = """
   .lc-photo { position: relative; aspect-ratio: 1/1; background: var(--bg-soft); overflow: hidden; border-radius: var(--radius); margin-bottom: 10px; }
   .listing-card:hover .lc-photo img { transform: scale(1.06); }
   .lc-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .35s ease; }
-  .lc-photo .lc-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 44px; background: linear-gradient(135deg,#FFE8EC,#FFF5F1); }
+  .lc-photo .lc-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 44px; background: linear-gradient(135deg,#E7F7F1,#F3FBF8); }
   .lc-badge {
     position: absolute; top: 10px; left: 10px; background: #fff; color: var(--ink);
     padding: 4px 11px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 700; box-shadow: var(--shadow-sm);
     display: inline-flex; align-items: center; gap: 4px;
   }
-  .lc-badge-fire { background: var(--ink); color: #fff; }
+  .lc-badge-fire { background: var(--gold); color: #fff; }
   .lc-badge .ico, .badge .ico { width: 13px; height: 13px; }
   .cat-verified { background: #E7F6EC; color: #1A7A3C; }
   .cat-subarenda { background: #EAF1FE; color: #1D4ED8; }
@@ -645,7 +658,7 @@ SITE_CSS = """
   .detail-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
   .badge { font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: var(--radius-pill); display: inline-flex; align-items: center; gap: 5px; }
   .badge.trust { background: #E7F6EC; color: #1A7A3C; }
-  .badge.paid { background: var(--brand-light); color: var(--brand-dark); }
+  .badge.paid { background: var(--gold-light); color: var(--gold); }
 
   .detail-facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 22px 0; }
   .fact-box { background: var(--bg-soft); border-radius: var(--radius); padding: 16px; }
@@ -799,9 +812,9 @@ def render_head(title: str, description: str, canonical_path: str, og_image: str
 <meta property="og:image" content="{og_image}">
 <meta property="og:url" content="{canonical}">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#0f1b2e">
+<meta name="theme-color" content="#0E9F76">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
 <style>{SITE_CSS}</style>"""
 
 
@@ -1163,7 +1176,7 @@ def listing_detail(listing_id: int):
 <script>
   const dmap = L.map('detail-map', {{ zoomControl: false }}).setView([{l['latitude']}, {l['longitude']}], 15);
   L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{ attribution: '&copy; OpenStreetMap' }}).addTo(dmap);
-  L.circleMarker([{l['latitude']}, {l['longitude']}], {{ radius: 10, fillColor: '#FF385C', color: '#fff', weight: 2, fillOpacity: 0.9 }}).addTo(dmap);
+  L.circleMarker([{l['latitude']}, {l['longitude']}], {{ radius: 10, fillColor: '#0E9F76', color: '#fff', weight: 2, fillOpacity: 0.9 }}).addTo(dmap);
 </script>"""
 
     related = get_related_listings(l["id"], l.get("manzil") or addr)
@@ -1654,14 +1667,18 @@ document.getElementById('locToggle').addEventListener('change', function() {{
   mapEl.classList.toggle('show', this.checked);
   if (this.checked && !locMap) {{
     setTimeout(() => {{
-      locMap = L.map('locationMap').setView([41.311081, 69.240562], 12);
-      L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{ attribution: '&copy; OpenStreetMap' }}).addTo(locMap);
-      locMap.on('click', (e) => setLocMarker(e.latlng.lat, e.latlng.lng));
-      if (navigator.geolocation) {{
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {{ locMap.setView([pos.coords.latitude, pos.coords.longitude], 15); }},
-          () => {{}}
-        );
+      try {{
+        locMap = L.map('locationMap').setView([41.311081, 69.240562], 12);
+        L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{ attribution: '&copy; OpenStreetMap' }}).addTo(locMap);
+        locMap.on('click', (e) => setLocMarker(e.latlng.lat, e.latlng.lng));
+        if (navigator.geolocation) {{
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {{ locMap.setView([pos.coords.latitude, pos.coords.longitude], 15); }},
+            () => {{}}
+          );
+        }}
+      }} catch (err) {{
+        mapEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">Xarita yuklanmadi. Internet aloqasini tekshiring yoki joylashuvsiz davom eting.</div>';
       }}
     }}, 50);
   }} else if (!this.checked) {{
@@ -2396,12 +2413,12 @@ ADMIN_HTML = """<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --brand: #FF385C; --brand-dark: #E31C5F; --brand-light: #FFF0F2;
-    --ink: #222222; --ink-soft: #484848; --muted: #717171; --line: #EBEBEB;
-    --bg: #F7F7F7; --card: #ffffff;
+    --brand: #0E9F76; --brand-dark: #0A7A5C; --brand-light: #E7F7F1;
+    --ink: #101826; --ink-soft: #47526B; --muted: #6B7690; --line: #E7EAF0;
+    --bg: #F6F8FA; --card: #ffffff;
     --sidebar-w: 232px;
-    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-    --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+    --shadow: 0 1px 3px rgba(16,24,38,0.06), 0 1px 2px rgba(16,24,38,0.04);
+    --shadow-md: 0 4px 16px rgba(16,24,38,0.08);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html, body { width: 100%; overflow-x: hidden; }
@@ -2717,7 +2734,7 @@ async function loadStats() {
   window._charts.push(new Chart(document.getElementById('revenueChart'), {
     type: 'bar',
     data: { labels: s.monthly_revenue.map(d => d.month), datasets: [
-      { label: "E'lon", data: s.monthly_revenue.map(d => d.listings), backgroundColor: '#FF385C', borderRadius: 6 },
+      { label: "E'lon", data: s.monthly_revenue.map(d => d.listings), backgroundColor: '#0E9F76', borderRadius: 6 },
       { label: 'Limit', data: s.monthly_revenue.map(d => d.subs), backgroundColor: '#9333EA', borderRadius: 6 }
     ]},
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: tickColor, font: { size: 11 } } } },
@@ -2737,7 +2754,7 @@ async function loadStats() {
   }));
   window._charts.push(new Chart(document.getElementById('visitsChart'), {
     type: 'line',
-    data: { labels: v.daily.map(d => d.date), datasets: [{ label: 'Tashriflar', data: v.daily.map(d => d.count), borderColor: '#FF385C', backgroundColor: 'rgba(255,56,92,0.1)', fill: true, tension: 0.35, pointRadius: 2 }] },
+    data: { labels: v.daily.map(d => d.date), datasets: [{ label: 'Tashriflar', data: v.daily.map(d => d.count), borderColor: '#0E9F76', backgroundColor: 'rgba(14,159,118,0.12)', fill: true, tension: 0.35, pointRadius: 2 }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
       scales: { y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, stepSize: 1 } }, x: { grid: { display: false }, ticks: { color: tickColor, maxRotation: 0, autoSkipPadding: 12 } } } }
   }));
@@ -2811,7 +2828,7 @@ async function loadMap() {
   const res = await fetch('/api/listings');
   const listings = await res.json();
   listings.forEach(l => {
-    const marker = L.circleMarker([l.latitude, l.longitude], { radius: 8, fillColor: '#FF385C', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map);
+    const marker = L.circleMarker([l.latitude, l.longitude], { radius: 8, fillColor: '#0E9F76', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map);
     if (l.narx) marker.bindTooltip(l.narx, { permanent: true, direction: 'top', className: 'price-label', offset: [0, -6] });
     const postBtn = l.post_link ? `<br><a href="${l.post_link}" target="_blank" class="post-link-btn">\U0001F4E2 Kanaldagi postni ko'rish</a>` : '';
     marker.bindPopup(`<b>${l.manzil || ''}</b><br>\U0001F3AF ${l.moljal || ''}<br>\U0001F6CF ${l.xona || ''} \u2014 \U0001F4B0 ${l.narx || ''}<br>\U0001F465 ${l.kimlarga || ''}<br><small>#${l.id}</small>${postBtn}`);
@@ -2837,50 +2854,176 @@ PUBLIC_MAP_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Ijaraga Uylar - Xarita</title>
+<title>Ijaraga Uylar \u2014 Interaktiv xarita</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <style>
+  :root { --map-bg: #0b1220; --map-panel: #131c2e; --map-line: #223049; --map-ink: #e9edf5; --map-muted: #8b98ac; --map-accent: #ff5470; }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html, body { width: 100%; height: 100%; overflow: hidden; }
-  body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; background: #0f1419; }
+  body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; background: var(--map-bg); }
+
   #topbar {
     position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
-    background: rgba(26,35,50,0.95); backdrop-filter: blur(6px);
-    padding: 10px 14px; display: flex; align-items: center; justify-content: space-between;
-    border-bottom: 1px solid #2a3441; color: #e8eaed;
+    background: rgba(19,28,46,0.92); backdrop-filter: blur(10px);
+    padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    border-bottom: 1px solid var(--map-line); color: var(--map-ink);
     padding-top: calc(10px + env(safe-area-inset-top));
   }
-  #topbar h1 { font-size: 15px; font-weight: 600; }
-  #topbar .count { font-size: 12px; color: #8b98a5; }
-  #topbar-left { display: flex; align-items: center; gap: 10px; }
+  #topbar h1 { font-size: 14.5px; font-weight: 700; }
+  #topbar .count { font-size: 11.5px; color: var(--map-muted); font-weight: 600; }
+  #topbar-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
   #home-link {
-    display: flex; align-items: center; justify-content: center; width: 30px; height: 30px;
-    border-radius: 8px; background: rgba(255,255,255,0.08); color: #e8eaed; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+    border-radius: 9px; background: rgba(255,255,255,0.08); color: var(--map-ink); flex-shrink: 0;
   }
   #home-link svg { width: 16px; height: 16px; }
+  #filter-btn {
+    display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.08); border: 1px solid var(--map-line);
+    color: var(--map-ink); padding: 7px 12px; border-radius: 10px; font-size: 12.5px; font-weight: 700; cursor: pointer; flex-shrink: 0;
+  }
+  #filter-btn .fcount { background: var(--map-accent); color: #fff; border-radius: 20px; padding: 0 6px; font-size: 10.5px; min-width: 16px; text-align: center; }
+
   #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; }
-  .leaflet-popup-content-wrapper { border-radius: 12px; }
-  .leaflet-popup-content { font-size: 14px; line-height: 1.6; margin: 12px 14px; min-width: 200px; }
-  .leaflet-popup-content b { font-size: 15px; }
-  .price-label { background: #e74c3c; color: #fff; font-weight: 700; font-size: 13px; padding: 3px 9px; border-radius: 10px; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); white-space: nowrap; }
-  .price-label::before { border-top-color: #e74c3c !important; }
-  .post-link-btn { display: inline-block; margin-top: 8px; background: #2ea043; color: #fff !important; text-decoration: none; padding: 6px 14px; border-radius: 8px; font-size: 13px; font-weight: 600; }
-  .post-link-btn:hover { background: #35c455; }
-  #loading { position: fixed; inset: 0; background: #0f1419; color: #8b98a5; display: flex; align-items: center; justify-content: center; font-size: 14px; z-index: 2000; }
+
+  #filter-panel {
+    position: fixed; top: 0; right: -320px; bottom: 0; width: 300px; z-index: 1500;
+    background: var(--map-panel); border-left: 1px solid var(--map-line); color: var(--map-ink);
+    padding: 18px 16px; padding-top: calc(18px + env(safe-area-inset-top)); overflow-y: auto;
+    transition: right .25s ease; box-shadow: -8px 0 30px rgba(0,0,0,.4);
+  }
+  #filter-panel.open { right: 0; }
+  #filter-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1400; display: none; }
+  #filter-overlay.open { display: block; }
+  .fp-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+  .fp-head h2 { font-size: 16px; font-weight: 800; }
+  .fp-close { background: rgba(255,255,255,0.08); border: none; color: var(--map-ink); width: 30px; height: 30px; border-radius: 8px; cursor: pointer; }
+  .fp-section { margin-bottom: 20px; }
+  .fp-label { font-size: 11.5px; font-weight: 700; color: var(--map-muted); text-transform: uppercase; letter-spacing: .3px; margin-bottom: 10px; }
+  .fp-select { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--map-line); background: #0f1826; color: var(--map-ink); font-size: 13.5px; }
+  .fp-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .fp-chip { display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 20px; border: 1px solid var(--map-line); font-size: 12.5px; font-weight: 600; cursor: pointer; background: #0f1826; }
+  .fp-chip .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .fp-chip.active { border-color: var(--map-accent); background: rgba(255,84,112,0.14); }
+  .fp-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; }
+  .fp-apply { width: 100%; background: var(--map-accent); color: #fff; border: none; padding: 13px; border-radius: 12px; font-weight: 800; font-size: 14px; cursor: pointer; margin-top: 6px; }
+  .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .slider { position: absolute; inset: 0; background: #2a3a56; border-radius: 24px; transition: .2s; cursor: pointer; }
+  .switch .slider::before { content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+  .switch input:checked + .slider { background: var(--map-accent); }
+  .switch input:checked + .slider::before { transform: translateX(18px); }
+
+  #locate-btn, #legend-btn {
+    position: fixed; right: 12px; z-index: 900; width: 42px; height: 42px; border-radius: 50%; border: none;
+    background: var(--map-panel); color: var(--map-ink); box-shadow: 0 2px 10px rgba(0,0,0,0.5); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; border: 1px solid var(--map-line);
+  }
+  #locate-btn { bottom: 90px; }
+  #legend-btn { bottom: 140px; font-size: 16px; }
+  .leaflet-control-zoom { margin-bottom: 90px !important; }
+
+  #legend-box {
+    position: fixed; left: 12px; bottom: 24px; z-index: 900; background: var(--map-panel); border: 1px solid var(--map-line);
+    border-radius: 12px; padding: 10px 12px; color: var(--map-ink); font-size: 11.5px; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.4);
+  }
+  #legend-box.show { display: block; }
+  .legend-row { display: flex; align-items: center; gap: 7px; margin: 4px 0; }
+  .legend-row .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  .cluster-icon { background: var(--map-accent); color: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; border: 3px solid rgba(255,255,255,0.85); box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+
+  .leaflet-popup-content-wrapper { border-radius: 14px; overflow: hidden; padding: 0; }
+  .leaflet-popup-content { margin: 0; width: 240px !important; }
+  .leaflet-popup-tip { background: #fff; }
+  .pcard-photo { width: 100%; height: 120px; object-fit: cover; background: #eee; display: block; }
+  .pcard-photo-empty { width: 100%; height: 120px; background: linear-gradient(135deg,#f3f4f6,#e5e7eb); display: flex; align-items: center; justify-content: center; font-size: 30px; }
+  .pcard-body { padding: 12px 13px 13px; }
+  .pcard-badges { display: flex; gap: 5px; margin-bottom: 6px; flex-wrap: wrap; }
+  .pcard-badge { font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; }
+  .pcard-title { font-size: 13.5px; font-weight: 800; color: #16202e; line-height: 1.3; margin-bottom: 3px; }
+  .pcard-meta { font-size: 11.5px; color: #6b7688; margin-bottom: 8px; }
+  .pcard-price { font-size: 15px; font-weight: 800; color: #16202e; margin-bottom: 9px; }
+  .pcard-actions { display: flex; gap: 6px; }
+  .pcard-actions a { flex: 1; text-align: center; padding: 8px 6px; border-radius: 9px; font-size: 11.5px; font-weight: 700; text-decoration: none; }
+  .pcard-btn-primary { background: var(--map-accent); color: #fff !important; }
+  .pcard-btn-secondary { background: #f1f3f6; color: #16202e !important; }
+
+  #loading { position: fixed; inset: 0; background: var(--map-bg); color: var(--map-muted); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 14px; z-index: 2000; gap: 10px; }
+  .spinner { width: 30px; height: 30px; border: 3px solid #2a3a56; border-top-color: var(--map-accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
-<div id="loading">\U0001F5FA Xarita yuklanmoqda...</div>
+<div id="loading"><div class="spinner"></div><div>Xarita yuklanmoqda...</div></div>
+
 <div id="topbar">
   <div id="topbar-left">
     <a href="/" id="home-link" aria-label="Bosh sahifa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-6h4v6h3a1 1 0 0 0 1-1v-9"/></svg></a>
-    <h1>\U0001F3E0 Ijaraga Uylar</h1>
+    <div>
+      <h1>\U0001F3E0 Ijaraga Uylar</h1>
+      <div class="count" id="count-badge"></div>
+    </div>
   </div>
-  <span class="count" id="count-badge"></span>
+  <button id="filter-btn" onclick="toggleFilters(true)">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+    Filtr <span class="fcount" id="filterCount">0</span>
+  </button>
 </div>
+
 <div id="map"></div>
+
+<button id="locate-btn" title="Mening joylashuvim" onclick="locateMe()">
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+</button>
+<button id="legend-btn" title="Belgilar" onclick="toggleLegend()">\U0001F3F7\ufe0f</button>
+<div id="legend-box">
+  <div class="legend-row"><span class="dot" style="background:#ff5470;"></span> Egasidan (oddiy)</div>
+  <div class="legend-row"><span class="dot" style="background:#16a34a;"></span> Tasdiqlangan</div>
+  <div class="legend-row"><span class="dot" style="background:#2563eb;"></span> Subarenda</div>
+  <div class="legend-row"><span class="dot" style="background:#d97706;"></span> Premium</div>
+  <div class="legend-row" style="margin-top:6px;border-top:1px solid var(--map-line);padding-top:6px;">\u26a1 TOP \u2014 pullik e'lon</div>
+</div>
+
+<div id="filter-overlay" onclick="toggleFilters(false)"></div>
+<div id="filter-panel">
+  <div class="fp-head"><h2>\U0001F50D Filtr</h2><button class="fp-close" onclick="toggleFilters(false)">\u2715</button></div>
+
+  <div class="fp-section">
+    <div class="fp-label">Xonalar soni</div>
+    <select class="fp-select" id="fXona">
+      <option value="">Farqi yo'q</option>
+      <option value="1">1 xona</option>
+      <option value="2">2 xona</option>
+      <option value="3">3 xona</option>
+      <option value="4">4+ xona</option>
+    </select>
+  </div>
+
+  <div class="fp-section">
+    <div class="fp-label">Toifa</div>
+    <div class="fp-chip-row" id="categoryChips">
+      <div class="fp-chip active" data-cat=""><span class="dot" style="background:#94a3b8;"></span> Barchasi</div>
+      <div class="fp-chip" data-cat="egadan"><span class="dot" style="background:#ff5470;"></span> Egasidan</div>
+      <div class="fp-chip" data-cat="tasdiqlangan"><span class="dot" style="background:#16a34a;"></span> Tasdiqlangan</div>
+      <div class="fp-chip" data-cat="subarenda"><span class="dot" style="background:#2563eb;"></span> Subarenda</div>
+      <div class="fp-chip" data-cat="premium"><span class="dot" style="background:#d97706;"></span> Premium</div>
+    </div>
+  </div>
+
+  <div class="fp-section">
+    <div class="fp-toggle-row">
+      <div style="font-size:13.5px;font-weight:700;">\u26a1 Faqat TOP e'lonlar</div>
+      <label class="switch"><input type="checkbox" id="fTopOnly"><span class="slider"></span></label>
+    </div>
+  </div>
+
+  <button class="fp-apply" onclick="applyFilters()">Qo'llash</button>
+</div>
 
 <script>
 if (window.Telegram && window.Telegram.WebApp) {
@@ -2892,25 +3035,115 @@ function trackClick(listingId) {
   fetch('/api/track-click/' + listingId, { method: 'POST' }).catch(() => {});
 }
 
-async function init() {
-  fetch('/api/track-view', { method: 'POST' }).catch(() => {});
+const CATEGORY_COLORS = { egadan: '#ff5470', tasdiqlangan: '#16a34a', subarenda: '#2563eb', premium: '#d97706' };
+const CATEGORY_LABELS = { egadan: 'Egasidan', tasdiqlangan: '\u2705 Tasdiqlangan', subarenda: '\U0001F3E2 Subarenda', premium: '\U0001F48E Premium' };
 
-  const map = L.map('map', { tap: true, zoomControl: false }).setView([41.311081, 69.240562], 11);
-  L.control.zoom({ position: 'bottomright' }).addTo(map);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 19 }).addTo(map);
+let map, cluster, allListings = [], userMarker = null;
 
-  const res = await fetch('/api/public-listings');
-  const listings = await res.json();
-
-  listings.forEach(l => {
-    const marker = L.circleMarker([l.latitude, l.longitude], { radius: 9, fillColor: '#e74c3c', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map);
-    if (l.narx) marker.bindTooltip(l.narx, { permanent: true, direction: 'top', className: 'price-label', offset: [0, -8] });
-    const postBtn = l.post_link ? `<a href="${l.post_link}" target="_blank" class="post-link-btn" onclick="trackClick(${l.id})">\U0001F4E2 Kanaldagi postni ko'rish</a>` : '';
-    marker.bindPopup(`<b>${l.manzil || ''}</b><br>\U0001F3AF ${l.moljal || ''}<br>\U0001F6CF ${l.xona || ''} \u2014 \U0001F4B0 ${l.narx || ''}<br>\U0001F465 ${l.kimlarga || ''}${postBtn}`);
+function toggleFilters(open) {
+  document.getElementById('filter-panel').classList.toggle('open', open);
+  document.getElementById('filter-overlay').classList.toggle('open', open);
+}
+function toggleLegend() {
+  document.getElementById('legend-box').classList.toggle('show');
+}
+document.querySelectorAll('.fp-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.fp-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
   });
+});
 
+function makeMarker(l) {
+  const cat = l.category || 'egadan';
+  const color = CATEGORY_COLORS[cat] || '#ff5470';
+  const size = l.is_paid ? 15 : 11;
+  const marker = L.circleMarker([l.latitude, l.longitude], {
+    radius: size, fillColor: color, color: '#fff', weight: l.is_paid ? 3 : 2, fillOpacity: 0.95,
+  });
+  if (l.narx) {
+    const cls = 'price-label' + (l.is_paid ? ' price-label-top' : '');
+    marker.bindTooltip((l.is_paid ? '\u26a1 ' : '') + l.narx, { permanent: false, direction: 'top', className: cls, offset: [0, -size] });
+  }
+  const photoHtml = l.photo
+    ? `<img class="pcard-photo" src="${l.photo}" loading="lazy">`
+    : `<div class="pcard-photo-empty">\U0001F3E0</div>`;
+  const badges = `<div class="pcard-badges">${l.is_paid ? '<span class="pcard-badge" style="background:#fff2e0;color:#c2650b;">\u26a1 TOP</span>' : ''}${CATEGORY_LABELS[cat] ? `<span class="pcard-badge" style="background:#eef2f7;color:#334155;">${CATEGORY_LABELS[cat]}</span>` : ''}</div>`;
+  const detailBtn = `<a href="${l.detail_link}" target="_blank" class="pcard-btn-primary">Batafsil</a>`;
+  const chanBtn = l.post_link ? `<a href="${l.post_link}" target="_blank" class="pcard-btn-secondary" onclick="trackClick(${l.id})">Kanalda</a>` : '';
+  marker.bindPopup(
+    `${photoHtml}<div class="pcard-body">${badges}` +
+    `<div class="pcard-title">${l.manzil || l.moljal || 'Manzil ko\\'rsatilmagan'}</div>` +
+    `<div class="pcard-meta">\U0001F6CF ${l.xona || '-'} \u00b7 \U0001F465 ${(l.kimlarga||'').slice(0,20) || '-'}</div>` +
+    `<div class="pcard-price">${l.narx || ''}</div>` +
+    `<div class="pcard-actions">${detailBtn}${chanBtn}</div></div>`
+  );
+  return marker;
+}
+
+function renderMarkers(listings) {
+  cluster.clearLayers();
+  listings.forEach(l => cluster.addLayer(makeMarker(l)));
   document.getElementById('count-badge').textContent = listings.length + " ta e'lon";
-  document.getElementById('loading').style.display = 'none';
+}
+
+function applyFilters() {
+  const xona = document.getElementById('fXona').value;
+  const topOnly = document.getElementById('fTopOnly').checked;
+  const cat = document.querySelector('.fp-chip.active').dataset.cat;
+
+  let filtered = allListings;
+  if (xona) filtered = filtered.filter(l => (l.xona || '').includes(xona));
+  if (topOnly) filtered = filtered.filter(l => l.is_paid);
+  if (cat) filtered = filtered.filter(l => (l.category || 'egadan') === cat);
+
+  let activeCount = 0;
+  if (xona) activeCount++;
+  if (topOnly) activeCount++;
+  if (cat) activeCount++;
+  document.getElementById('filterCount').textContent = activeCount;
+  document.getElementById('filterCount').style.display = activeCount ? 'inline-block' : 'none';
+
+  renderMarkers(filtered);
+  toggleFilters(false);
+}
+
+function locateMe() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition((pos) => {
+    const { latitude, longitude } = pos.coords;
+    if (userMarker) map.removeLayer(userMarker);
+    userMarker = L.circleMarker([latitude, longitude], { radius: 8, fillColor: '#4285F4', color: '#fff', weight: 3, fillOpacity: 1 }).addTo(map);
+    map.setView([latitude, longitude], 14);
+  }, () => alert("Joylashuvni aniqlab bo'lmadi. Brauzer sozlamalarida ruxsat berilganini tekshiring."));
+}
+
+async function init() {
+  try {
+    fetch('/api/track-view', { method: 'POST' }).catch(() => {});
+
+    map = L.map('map', { tap: true, zoomControl: false }).setView([41.311081, 69.240562], 11);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 19 }).addTo(map);
+
+    cluster = L.markerClusterGroup({
+      maxClusterRadius: 50,
+      iconCreateFunction: function(c) {
+        const count = c.getChildCount();
+        const size = count < 10 ? 34 : (count < 50 ? 42 : 50);
+        return L.divIcon({ html: `<div class="cluster-icon" style="width:${size}px;height:${size}px;">${count}</div>`, className: '', iconSize: [size, size] });
+      },
+    });
+    map.addLayer(cluster);
+
+    const res = await fetch('/api/public-listings');
+    allListings = await res.json();
+    renderMarkers(allListings);
+
+    document.getElementById('loading').style.display = 'none';
+  } catch (err) {
+    document.getElementById('loading').innerHTML = "⚠️ Xarita yuklanmadi. Internet aloqangizni tekshirib, sahifani qayta yuklang.";
+  }
 }
 
 init();
