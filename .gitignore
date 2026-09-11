@@ -1,0 +1,28 @@
+# Muhit va sirlar
+.env
+.env.*
+!.env.example
+
+# Ma'lumotlar bazasi va bot holati
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+bot_persistence.pkl
+
+# Rasm keshi
+photo_cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
