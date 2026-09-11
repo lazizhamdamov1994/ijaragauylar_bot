@@ -23,13 +23,14 @@ import re
 import secrets
 import sqlite3
 import time
+import urllib.parse
 from collections import defaultdict
 from datetime import datetime, timedelta
 
 import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -478,6 +479,13 @@ SITE_CSS = """
   }
   .mobile-menu a:last-child { border-bottom: none; }
   .mobile-menu a:hover { color: var(--brand); }
+
+  /* ============ TIL TANLAGICH (uz/ru/en) ============ */
+  .lang-switcher { display: flex; gap: 2px; background: var(--bg-soft); border-radius: var(--radius-pill); padding: 3px; flex-shrink: 0; }
+  .lang-pill { padding: 6px 10px; border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 800; color: var(--muted); letter-spacing: .3px; }
+  .lang-pill.active { background: #fff; color: var(--ink); box-shadow: var(--shadow-sm); }
+  .lang-pill:hover:not(.active) { color: var(--ink); }
+  .mobile-menu .lang-switcher { margin: 10px 6px 2px; }
   @media (max-width: 640px) {
     .header-inner { padding: 12px 16px; }
     .brand { font-size: 15px; }
@@ -797,20 +805,267 @@ SITE_CSS = """
 """
 
 
-def render_head(title: str, description: str, canonical_path: str, og_image: str = "") -> str:
+# ============================= 3 TILLI QO'LLAB-QUVVATLASH (o'zbek / rus / ingliz) =============================
+# Faqat OMMAVIY (parolsiz) sahifalar tarjima qilinadi - admin panel ichki vosita bo'lgani
+# uchun o'zbek tilida qoladi. Til ?lang= so'rov parametri yoki "lang" cookie orqali tanlanadi.
+
+SUPPORTED_LANGS = ("uz", "ru", "en")
+DEFAULT_LANG = "uz"
+LANG_META = {"uz": "O'zbekcha", "ru": "\u0420\u0443\u0441\u0441\u043a\u0438\u0439", "en": "English"}
+
+TRANSLATIONS = {
+    "nav_home": {"uz": "Bosh sahifa", "ru": "\u0413\u043b\u0430\u0432\u043d\u0430\u044f", "en": "Home"},
+    "nav_subarenda": {"uz": "Subarenda", "ru": "\u0421\u0443\u0431\u0430\u0440\u0435\u043d\u0434\u0430", "en": "Sublease"},
+    "nav_map_title": {"uz": "Xarita", "ru": "\u041a\u0430\u0440\u0442\u0430", "en": "Map"},
+    "nav_bot_title": {"uz": "Telegram bot", "ru": "Telegram-\u0431\u043e\u0442", "en": "Telegram bot"},
+    "nav_channel_title": {"uz": "Telegram kanal", "ru": "Telegram-\u043a\u0430\u043d\u0430\u043b", "en": "Telegram channel"},
+    "nav_post_cta": {"uz": "Bepul e'lon joylash", "ru": "\u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u0431\u0435\u0441\u043f\u043b\u0430\u0442\u043d\u043e", "en": "Post for free"},
+    "mobile_post": {"uz": "E'lon joylash", "ru": "\u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "Post a listing"},
+    "footer_tagline": {
+        "uz": "Maklersiz, to'g'ridan-to'g'ri uy egasi bilan bog'lanish platformasi.",
+        "ru": "\u041f\u043b\u0430\u0442\u0444\u043e\u0440\u043c\u0430 \u0434\u043b\u044f \u043f\u0440\u044f\u043c\u043e\u0439 \u0441\u0432\u044f\u0437\u0438 \u0441 \u0445\u043e\u0437\u044f\u0438\u043d\u043e\u043c \u0436\u0438\u043b\u044c\u044f, \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432.",
+        "en": "A platform to connect directly with homeowners \u2014 no agent fees.",
+    },
+    "footer_rights": {"uz": "Barcha huquqlar himoyalangan.", "ru": "\u0412\u0441\u0435 \u043f\u0440\u0430\u0432\u0430 \u0437\u0430\u0449\u0438\u0449\u0435\u043d\u044b.", "en": "All rights reserved."},
+
+    "hero_title": {
+        "uz": "Maklersiz uy ijarasi Toshkentda",
+        "ru": "\u0410\u0440\u0435\u043d\u0434\u0430 \u0436\u0438\u043b\u044c\u044f \u0432 \u0422\u0430\u0448\u043a\u0435\u043d\u0442\u0435 \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432",
+        "en": "Commission-free home rentals in Tashkent",
+    },
+    "hero_sub": {
+        "uz": "To'g'ridan-to'g'ri uy egasi bilan bog'laning \u2014 hech qanday makler haqqi to'lamang",
+        "ru": "\u0421\u0432\u044f\u0436\u0438\u0442\u0435\u0441\u044c \u043d\u0430\u043f\u0440\u044f\u043c\u0443\u044e \u0441 \u0445\u043e\u0437\u044f\u0438\u043d\u043e\u043c \u2014 \u043d\u0438\u043a\u0430\u043a\u0438\u0445 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0439 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u0430\u043c",
+        "en": "Connect directly with the homeowner \u2014 pay no agent commission",
+    },
+    "search_district_label": {"uz": "HUDUD", "ru": "\u0420\u0410\u0419\u041e\u041d", "en": "DISTRICT"},
+    "search_all_districts": {"uz": "Barcha hududlar", "ru": "\u0412\u0441\u0435 \u0440\u0430\u0439\u043e\u043d\u044b", "en": "All districts"},
+    "search_rooms_label": {"uz": "XONALAR SONI", "ru": "\u041a\u041e\u041b\u0418\u0427\u0415\u0421\u0422\u0412\u041e \u041a\u041e\u041c\u041d\u0410\u0422", "en": "ROOMS"},
+    "search_rooms_any": {"uz": "Farqi yo'q", "ru": "\u041d\u0435\u0432\u0430\u0436\u043d\u043e", "en": "Any"},
+    "search_btn": {"uz": "Qidirish", "ru": "\u041f\u043e\u0438\u0441\u043a", "en": "Search"},
+    "stat_active": {"uz": "Faol e'lon", "ru": "\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439", "en": "Active listings"},
+    "stat_users": {"uz": "Foydalanuvchi", "ru": "\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0435\u0439", "en": "Users"},
+    "stat_nofee": {"uz": "Maklersiz", "ru": "\u0411\u0435\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438", "en": "Commission-free"},
+    "section_search_results": {"uz": "Qidiruv natijalari", "ru": "\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043f\u043e\u0438\u0441\u043a\u0430", "en": "Search results"},
+    "section_latest": {"uz": "So'nggi e'lonlar", "ru": "\u041f\u043e\u0441\u043b\u0435\u0434\u043d\u0438\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", "en": "Latest listings"},
+    "section_count_suffix": {"uz": "{n} ta e'lon topildi", "ru": "\u041d\u0430\u0439\u0434\u0435\u043d\u043e \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439: {n}", "en": "{n} listings found"},
+    "empty_listings": {
+        "uz": "Hech qanday e'lon topilmadi. Boshqa filtrni sinab ko'ring.",
+        "ru": "\u041e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u044b. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0434\u0440\u0443\u0433\u043e\u0439 \u0444\u0438\u043b\u044c\u0442\u0440.",
+        "en": "No listings found. Try a different filter.",
+    },
+    "why_title": {"uz": "Nega bizni tanlashadi", "ru": "\u041f\u043e\u0447\u0435\u043c\u0443 \u0432\u044b\u0431\u0438\u0440\u0430\u044e\u0442 \u043d\u0430\u0441", "en": "Why choose us"},
+    "why1_title": {"uz": "Maklersiz", "ru": "\u0411\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432", "en": "No agent fees"},
+    "why1_desc": {"uz": "Hech qanday komissiya yoki vositachi haqqi yo'q", "ru": "\u041d\u0438\u043a\u0430\u043a\u043e\u0439 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 \u0438\u043b\u0438 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u0447\u0435\u0441\u043a\u0438\u0445 \u043f\u043b\u0430\u0442\u0435\u0436\u0435\u0439", "en": "No commission or middleman fees, ever"},
+    "why2_title": {"uz": "Tekshirilgan", "ru": "\u041f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e", "en": "Verified"},
+    "why2_desc": {"uz": "Har bir e'lon moderatsiyadan o'tadi, firibgarlar bloklanadi", "ru": "\u041a\u0430\u0436\u0434\u043e\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0445\u043e\u0434\u0438\u0442 \u043c\u043e\u0434\u0435\u0440\u0430\u0446\u0438\u044e, \u043c\u043e\u0448\u0435\u043d\u043d\u0438\u043a\u0438 \u0431\u043b\u043e\u043a\u0438\u0440\u0443\u044e\u0442\u0441\u044f", "en": "Every listing is moderated; scammers get blocked"},
+    "why3_title": {"uz": "Tezkor", "ru": "\u0411\u044b\u0441\u0442\u0440\u043e", "en": "Fast"},
+    "why3_desc": {"uz": "Bot orqali bir necha soniyada uy egasi bilan bog'laning", "ru": "\u0421\u0432\u044f\u0436\u0438\u0442\u0435\u0441\u044c \u0441 \u0445\u043e\u0437\u044f\u0438\u043d\u043e\u043c \u0447\u0435\u0440\u0435\u0437 \u0431\u043e\u0442\u0430 \u0437\u0430 \u0441\u0447\u0438\u0442\u0430\u043d\u044b\u0435 \u0441\u0435\u043a\u0443\u043d\u0434\u044b", "en": "Reach the owner via the bot in seconds"},
+    "why4_title": {"uz": "Xaritada", "ru": "\u041d\u0430 \u043a\u0430\u0440\u0442\u0435", "en": "On the map"},
+    "why4_desc": {"uz": "Uylarni interaktiv xaritada joylashuvi bo'yicha toping", "ru": "\u041d\u0430\u0445\u043e\u0434\u0438\u0442\u0435 \u0436\u0438\u043b\u044c\u0451 \u043f\u043e \u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u044e \u043d\u0430 \u0438\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0439 \u043a\u0430\u0440\u0442\u0435", "en": "Find homes by location on the interactive map"},
+
+    "breadcrumb_home": {"uz": "Bosh sahifa", "ru": "\u0413\u043b\u0430\u0432\u043d\u0430\u044f", "en": "Home"},
+    "badge_top": {"uz": "TOP e'lon", "ru": "\u0422\u041e\u041f \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "TOP listing"},
+    "badge_verified": {"uz": "Tekshirilgan e'lon", "ru": "\u041f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043d\u043e\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "Verified listing"},
+    "fact_rooms": {"uz": "Xonalar soni", "ru": "\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u043a\u043e\u043c\u043d\u0430\u0442", "en": "Rooms"},
+    "fact_for_whom": {"uz": "Kimlarga", "ru": "\u041a\u043e\u043c\u0443 \u0441\u0434\u0430\u0451\u0442\u0441\u044f", "en": "For whom"},
+    "desc_title": {"uz": "Tavsif", "ru": "\u041e\u043f\u0438\u0441\u0430\u043d\u0438\u0435", "en": "Description"},
+    "no_desc": {"uz": "Qo'shimcha ma'lumot berilmagan.", "ru": "\u0414\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u0430.", "en": "No additional details provided."},
+    "sidebar_cta": {"uz": "Telefon raqamini olish", "ru": "\u041f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u043d\u043e\u043c\u0435\u0440 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430", "en": "Get phone number"},
+    "sidebar_note": {"uz": "Telegram bot orqali xavfsiz va tez", "ru": "\u0411\u044b\u0441\u0442\u0440\u043e \u0438 \u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e \u0447\u0435\u0440\u0435\u0437 Telegram-\u0431\u043e\u0442\u0430", "en": "Fast and secure via the Telegram bot"},
+    "share_btn": {"uz": "Ulashish", "ru": "\u041f\u043e\u0434\u0435\u043b\u0438\u0442\u044c\u0441\u044f", "en": "Share"},
+    "copy_btn": {"uz": "Nusxalash", "ru": "\u0421\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c", "en": "Copy"},
+    "copied_btn": {"uz": "Nusxalandi", "ru": "\u0421\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u043d\u043e", "en": "Copied"},
+    "link_copied": {"uz": "Havola nusxalandi!", "ru": "\u0421\u0441\u044b\u043b\u043a\u0430 \u0441\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u043d\u0430!", "en": "Link copied!"},
+    "inquiry_toggle": {"uz": "Uy egasiga so'rov yuborish", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043f\u0440\u043e\u0441 \u0445\u043e\u0437\u044f\u0438\u043d\u0443", "en": "Send a request to the owner"},
+    "inquiry_name_ph": {"uz": "Ismingiz", "ru": "\u0412\u0430\u0448\u0435 \u0438\u043c\u044f", "en": "Your name"},
+    "inquiry_phone_ph": {"uz": "Telefon raqamingiz", "ru": "\u0412\u0430\u0448 \u043d\u043e\u043c\u0435\u0440 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430", "en": "Your phone number"},
+    "inquiry_msg_ph": {"uz": "Xabar (ixtiyoriy)", "ru": "\u0421\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 (\u043d\u0435\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e)", "en": "Message (optional)"},
+    "inquiry_send": {"uz": "Yuborish", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c", "en": "Send"},
+    "inquiry_success": {"uz": "So'rovingiz yuborildi!", "ru": "\u0412\u0430\u0448 \u0437\u0430\u043f\u0440\u043e\u0441 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d!", "en": "Your request has been sent!"},
+    "inquiry_error": {"uz": "Xatolik yuz berdi, qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Something went wrong, please try again."},
+    "related_title": {"uz": "O'xshash e'lonlar", "ru": "\u041f\u043e\u0445\u043e\u0436\u0438\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", "en": "Similar listings"},
+    "not_found_title": {"uz": "E'lon topilmadi", "ru": "\u041e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e", "en": "Listing not found"},
+    "not_found_desc": {
+        "uz": "Bu e'lon topilmadi yoki muddati tugagan",
+        "ru": "\u042d\u0442\u043e \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e \u0438\u043b\u0438 \u0441\u0440\u043e\u043a \u0435\u0433\u043e \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u0438\u0441\u0442\u0451\u043a",
+        "en": "This listing was not found or has expired",
+    },
+    "not_found_body": {
+        "uz": "Bu e'lon topilmadi yoki muddati tugagan.",
+        "ru": "\u042d\u0442\u043e \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e \u0438\u043b\u0438 \u0441\u0440\u043e\u043a \u0435\u0433\u043e \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u0438\u0441\u0442\u0451\u043a.",
+        "en": "This listing was not found or has expired.",
+    },
+    "back_home_btn": {"uz": "Bosh sahifaga qaytish", "ru": "\u0412\u0435\u0440\u043d\u0443\u0442\u044c\u0441\u044f \u043d\u0430 \u0433\u043b\u0430\u0432\u043d\u0443\u044e", "en": "Back to home"},
+    "no_photo": {"uz": "Rasm yo'q", "ru": "\u041d\u0435\u0442 \u0444\u043e\u0442\u043e", "en": "No photo"},
+
+    "ej_hero_title": {"uz": "Uyingizni ijaraga bering", "ru": "\u0421\u0434\u0430\u0439\u0442\u0435 \u0436\u0438\u043b\u044c\u0451 \u0432 \u0430\u0440\u0435\u043d\u0434\u0443", "en": "Rent out your home"},
+    "ej_hero_sub": {
+        "uz": "Formani to'ldiring \u2014 e'loningiz tekshirilgach, avtomatik ravishda Telegram kanalimizda va shu saytda e'lon qilinadi. Ro'yxatdan o'tish shart emas.",
+        "ru": "\u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0444\u043e\u0440\u043c\u0443 \u2014 \u043f\u043e\u0441\u043b\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438 \u043f\u043e\u044f\u0432\u0438\u0442\u0441\u044f \u0432 \u043d\u0430\u0448\u0435\u043c Telegram-\u043a\u0430\u043d\u0430\u043b\u0435 \u0438 \u043d\u0430 \u0441\u0430\u0439\u0442\u0435. \u0420\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u044f \u043d\u0435 \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f.",
+        "en": "Fill out the form \u2014 once reviewed, your listing automatically appears in our Telegram channel and on this site. No registration needed.",
+    },
+    "ej_badge": {
+        "uz": "Har bir e'lon qo'lda tekshiriladi \u2014 firibgarlarga joy yo'q",
+        "ru": "\u041a\u0430\u0436\u0434\u043e\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442\u0441\u044f \u0432\u0440\u0443\u0447\u043d\u0443\u044e \u2014 \u043c\u043e\u0448\u0435\u043d\u043d\u0438\u043a\u0430\u043c \u0437\u0434\u0435\u0441\u044c \u043d\u0435 \u043c\u0435\u0441\u0442\u043e",
+        "en": "Every listing is manually reviewed \u2014 no room for scammers",
+    },
+    "ej_section_house": {"uz": "Uy haqida", "ru": "\u041e \u0436\u0438\u043b\u044c\u0435", "en": "About the property"},
+    "ej_manzil_label": {"uz": "Manzil (tuman, mahalla)", "ru": "\u0410\u0434\u0440\u0435\u0441 (\u0440\u0430\u0439\u043e\u043d, \u043c\u0430\u0445\u0430\u043b\u043b\u044f)", "en": "Address (district, neighborhood)"},
+    "ej_manzil_ph": {"uz": "Masalan: Yunusobod, 12-kvartal", "ru": "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u042e\u043d\u0443\u0441\u0430\u0431\u0430\u0434, 12-\u0439 \u043a\u0432\u0430\u0440\u0442\u0430\u043b", "en": "e.g. Yunusobod, block 12"},
+    "ej_moljal_label": {"uz": "Mo'ljal", "ru": "\u041e\u0440\u0438\u0435\u043d\u0442\u0438\u0440", "en": "Landmark"},
+    "ej_moljal_ph": {"uz": "Masalan: Metro bekatiga yaqin, Korzinka yonida", "ru": "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u0440\u044f\u0434\u043e\u043c \u0441 \u043c\u0435\u0442\u0440\u043e, \u0432\u043e\u0437\u043b\u0435 Korzinka", "en": "e.g. near the metro, next to Korzinka"},
+    "ej_xona_label": {"uz": "Nechta xonali?", "ru": "\u0421\u043a\u043e\u043b\u044c\u043a\u043e \u043a\u043e\u043c\u043d\u0430\u0442?", "en": "Number of rooms"},
+    "ej_xona_ph": {"uz": "Masalan: 2 xona, studio", "ru": "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: 2 \u043a\u043e\u043c\u043d\u0430\u0442\u044b, \u0441\u0442\u0443\u0434\u0438\u044f", "en": "e.g. 2 rooms, studio"},
+    "ej_kimlarga_label": {"uz": "Kimlarga beriladi?", "ru": "\u041a\u043e\u043c\u0443 \u0441\u0434\u0430\u0451\u0442\u0441\u044f?", "en": "Who is it for?"},
+    "ej_kimlarga_ph": {"uz": "Masalan: oilaga, talabalarga", "ru": "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u0441\u0435\u043c\u044c\u0435, \u0441\u0442\u0443\u0434\u0435\u043d\u0442\u0430\u043c", "en": "e.g. families, students"},
+    "ej_qulaylik_label": {"uz": "Sharoitlari", "ru": "\u0423\u0441\u043b\u043e\u0432\u0438\u044f", "en": "Amenities"},
+    "ej_qulaylik_ph": {
+        "uz": "Masalan: ta'mirlangan, mebel bilan, isitish tizimi bor...",
+        "ru": "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u0441 \u0440\u0435\u043c\u043e\u043d\u0442\u043e\u043c, \u0441 \u043c\u0435\u0431\u0435\u043b\u044c\u044e, \u0435\u0441\u0442\u044c \u043e\u0442\u043e\u043f\u043b\u0435\u043d\u0438\u0435...",
+        "en": "e.g. renovated, furnished, has heating...",
+    },
+    "ej_narx_label": {"uz": "Narxi", "ru": "\u0426\u0435\u043d\u0430", "en": "Price"},
+    "ej_narx_ph": {"uz": "Masalan: 150$, 1.2 mln, kelishiladi", "ru": "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: 150$, 1.2 \u043c\u043b\u043d, \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u043d\u0430\u044f", "en": "e.g. $150, negotiable"},
+    "ej_section_contact": {"uz": "Aloqa", "ru": "\u041a\u043e\u043d\u0442\u0430\u043a\u0442\u044b", "en": "Contact"},
+    "ej_fullname_label": {"uz": "Ismingiz", "ru": "\u0412\u0430\u0448\u0435 \u0438\u043c\u044f", "en": "Your name"},
+    "ej_fullname_ph": {"uz": "Ixtiyoriy", "ru": "\u041d\u0435\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e", "en": "Optional"},
+    "ej_phone_label": {"uz": "Telefon raqami", "ru": "\u041d\u043e\u043c\u0435\u0440 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430", "en": "Phone number"},
+    "ej_phone_hint": {
+        "uz": "Bu raqam e'londa ko'rsatiladi \u2014 ijarachilar shu orqali siz bilan bog'lanadi.",
+        "ru": "\u042d\u0442\u043e\u0442 \u043d\u043e\u043c\u0435\u0440 \u0431\u0443\u0434\u0435\u0442 \u0432\u0438\u0434\u0435\u043d \u0432 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0438 \u2014 \u0430\u0440\u0435\u043d\u0434\u0430\u0442\u043e\u0440\u044b \u0441\u0432\u044f\u0436\u0443\u0442\u0441\u044f \u0441 \u0432\u0430\u043c\u0438 \u043f\u043e \u043d\u0435\u043c\u0443.",
+        "en": "This number will be shown in the listing \u2014 renters will contact you on it.",
+    },
+    "ej_section_location": {"uz": "Joylashuv (ixtiyoriy)", "ru": "\u0420\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435 (\u043d\u0435\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e)", "en": "Location (optional)"},
+    "ej_loc_toggle": {"uz": "Xaritada aniq nuqtani belgilash", "ru": "\u0423\u043a\u0430\u0437\u0430\u0442\u044c \u0442\u043e\u0447\u043a\u0443 \u043d\u0430 \u043a\u0430\u0440\u0442\u0435", "en": "Pin the exact spot on the map"},
+    "ej_section_photos": {"uz": "Rasmlar", "ru": "\u0424\u043e\u0442\u043e\u0433\u0440\u0430\u0444\u0438\u0438", "en": "Photos"},
+    "ej_photo_drop_title": {"uz": "Rasmlarni shu yerga bosing yoki tashlang", "ru": "\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u0438\u043b\u0438 \u043f\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u0444\u043e\u0442\u043e \u0441\u044e\u0434\u0430", "en": "Click or drop photos here"},
+    "ej_photo_drop_sub": {"uz": "1 dan 10 tagacha, har biri 10MB gacha", "ru": "\u041e\u0442 1 \u0434\u043e 10 \u0444\u043e\u0442\u043e, \u043a\u0430\u0436\u0434\u043e\u0435 \u0434\u043e 10\u041c\u0411", "en": "1 to 10 photos, up to 10MB each"},
+    "ej_section_type": {"uz": "E'lon turi", "ru": "\u0422\u0438\u043f \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", "en": "Listing type"},
+    "ej_type_free_title": {"uz": "Bepul", "ru": "\u0411\u0435\u0441\u043f\u043b\u0430\u0442\u043d\u043e", "en": "Free"},
+    "ej_type_free_desc": {
+        "uz": "Kanalga bir marta joylanadi, navbat asosida ko'rib chiqiladi.",
+        "ru": "\u041f\u0443\u0431\u043b\u0438\u043a\u0443\u0435\u0442\u0441\u044f \u0432 \u043a\u0430\u043d\u0430\u043b\u0435 \u043e\u0434\u0438\u043d \u0440\u0430\u0437, \u0440\u0430\u0441\u0441\u043c\u0430\u0442\u0440\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u0432 \u043f\u043e\u0440\u044f\u0434\u043a\u0435 \u043e\u0447\u0435\u0440\u0435\u0434\u0438.",
+        "en": "Posted to the channel once, reviewed in queue order.",
+    },
+    "ej_type_paid_title": {"uz": "Pullik \u2014 {price} so'm", "ru": "\u041f\u043b\u0430\u0442\u043d\u043e \u2014 {price} \u0441\u0443\u043c", "en": "Paid \u2014 {price} UZS"},
+    "ej_type_paid_desc": {
+        "uz": "Uyingiz topshirilguncha (kamida 7 kun) doim TOP'da \u2014 tezroq va ko'proq ko'rinadi.",
+        "ru": "\u0412\u0430\u0448\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u0432 \u0422\u041e\u041f\u0435, \u043f\u043e\u043a\u0430 \u0436\u0438\u043b\u044c\u0451 \u043d\u0435 \u0441\u0434\u0430\u043d\u043e (\u043c\u0438\u043d\u0438\u043c\u0443\u043c 7 \u0434\u043d\u0435\u0439) \u2014 \u0431\u044b\u0441\u0442\u0440\u0435\u0435 \u0438 \u0431\u043e\u043b\u044c\u0448\u0435 \u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u043e\u0432.",
+        "en": "Stays TOP-pinned until your place is rented (at least 7 days) \u2014 faster, more visibility.",
+    },
+    "ej_pay_card_label": {"uz": "TO'LOV KARTASI", "ru": "\u041a\u0410\u0420\u0422\u0410 \u0414\u041b\u042f \u041e\u041f\u041b\u0410\u0422\u042b", "en": "PAYMENT CARD"},
+    "ej_pay_copy": {"uz": "Nusxalash", "ru": "\u0421\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c", "en": "Copy"},
+    "ej_pay_hint": {
+        "uz": "Yuqoridagi kartaga {price} so'm o'tkazing, so'ng chek skrinshotini yuklang.",
+        "ru": "\u041f\u0435\u0440\u0435\u0432\u0435\u0434\u0438\u0442\u0435 {price} \u0441\u0443\u043c \u043d\u0430 \u043a\u0430\u0440\u0442\u0443 \u0432\u044b\u0448\u0435, \u0437\u0430\u0442\u0435\u043c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0441\u043a\u0440\u0438\u043d\u0448\u043e\u0442 \u0447\u0435\u043a\u0430.",
+        "en": "Transfer {price} UZS to the card above, then upload a screenshot of the receipt.",
+    },
+    "ej_receipt_title": {"uz": "To'lov chekini yuklash", "ru": "\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0447\u0435\u043a \u043e\u0431 \u043e\u043f\u043b\u0430\u0442\u0435", "en": "Upload payment receipt"},
+    "ej_receipt_sub": {"uz": "Skrinshot yoki fotosurat", "ru": "\u0421\u043a\u0440\u0438\u043d\u0448\u043e\u0442 \u0438\u043b\u0438 \u0444\u043e\u0442\u043e", "en": "Screenshot or photo"},
+    "ej_submit_btn": {"uz": "E'lonni yuborish", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "Submit listing"},
+    "ej_submit_note": {
+        "uz": "Yuborish orqali siz e'lon ma'lumotlarining to'g'riligini tasdiqlaysiz.",
+        "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u043b\u044f\u044f \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435, \u0432\u044b \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u0435\u0442\u0435 \u0434\u043e\u0441\u0442\u043e\u0432\u0435\u0440\u043d\u043e\u0441\u0442\u044c \u0443\u043a\u0430\u0437\u0430\u043d\u043d\u044b\u0445 \u0434\u0430\u043d\u043d\u044b\u0445.",
+        "en": "By submitting, you confirm the listing details are accurate.",
+    },
+    "ej_success_title": {"uz": "E'loningiz qabul qilindi!", "ru": "\u0412\u0430\u0448\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u0438\u043d\u044f\u0442\u043e!", "en": "Your listing was received!"},
+    "ej_success_text": {
+        "uz": "Tez orada administrator tekshirib, tasdiqlaydi \u2014 shundan so'ng Telegram kanalimizda va saytda chiqadi. E'lon raqami: #{id}",
+        "ru": "\u0412 \u0431\u043b\u0438\u0436\u0430\u0439\u0448\u0435\u0435 \u0432\u0440\u0435\u043c\u044f \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440 \u043f\u0440\u043e\u0432\u0435\u0440\u0438\u0442 \u0438 \u043e\u0434\u043e\u0431\u0440\u0438\u0442 \u0435\u0433\u043e \u2014 \u043f\u043e\u0441\u043b\u0435 \u044d\u0442\u043e\u0433\u043e \u043e\u043d\u043e \u043f\u043e\u044f\u0432\u0438\u0442\u0441\u044f \u0432 \u043d\u0430\u0448\u0435\u043c Telegram-\u043a\u0430\u043d\u0430\u043b\u0435 \u0438 \u043d\u0430 \u0441\u0430\u0439\u0442\u0435. \u041d\u043e\u043c\u0435\u0440 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f: #{id}",
+        "en": "An administrator will review and approve it shortly \u2014 then it will appear in our Telegram channel and on the site. Listing number: #{id}",
+    },
+    "ej_err_no_photo": {"uz": "Kamida 1 ta uy rasmini yuklang.", "ru": "\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0445\u043e\u0442\u044f \u0431\u044b 1 \u0444\u043e\u0442\u043e \u0436\u0438\u043b\u044c\u044f.", "en": "Upload at least 1 photo of the property."},
+    "ej_err_no_receipt": {
+        "uz": "Pullik e'lon uchun to'lov chekining skrinshotini yuklang.",
+        "ru": "\u0414\u043b\u044f \u043f\u043b\u0430\u0442\u043d\u043e\u0433\u043e \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0441\u043a\u0440\u0438\u043d\u0448\u043e\u0442 \u0447\u0435\u043a\u0430 \u043e\u0431 \u043e\u043f\u043b\u0430\u0442\u0435.",
+        "en": "Upload a payment receipt screenshot for a paid listing.",
+    },
+    "ej_submitting": {"uz": "Yuborilmoqda...", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u043a\u0430...", "en": "Submitting..."},
+    "ej_err_generic": {"uz": "Xatolik yuz berdi. Qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Something went wrong. Please try again."},
+    "ej_err_network": {"uz": "Internet aloqasida muammo. Qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0431\u043b\u0435\u043c\u0430 \u0441 \u0438\u043d\u0442\u0435\u0440\u043d\u0435\u0442-\u0441\u043e\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435\u043c. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Network problem. Please try again."},
+
+    "sr_hero_title": {"uz": "Uyingizni bizga ishoning", "ru": "\u0414\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0441\u0432\u043e\u0451 \u0436\u0438\u043b\u044c\u0451 \u043d\u0430\u043c", "en": "Trust us with your property"},
+    "sr_hero_sub": {
+        "uz": "Ijarachi qidirish, shartnoma va oylik to'lovlar bilan bosh og'rig'ini unuting \u2014 biz hammasini boshqaramiz, sizga esa har oy kafolatlangan ijara puli keladi.",
+        "ru": "\u0417\u0430\u0431\u0443\u0434\u044c\u0442\u0435 \u043e \u043f\u043e\u0438\u0441\u043a\u0435 \u0430\u0440\u0435\u043d\u0434\u0430\u0442\u043e\u0440\u043e\u0432, \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u0430\u0445 \u0438 \u0435\u0436\u0435\u043c\u0435\u0441\u044f\u0447\u043d\u044b\u0445 \u043f\u043b\u0430\u0442\u0435\u0436\u0430\u0445 \u2014 \u043c\u044b \u0431\u0435\u0440\u0451\u043c \u0432\u0441\u0451 \u043d\u0430 \u0441\u0435\u0431\u044f, \u0430 \u0432\u044b \u043a\u0430\u0436\u0434\u044b\u0439 \u043c\u0435\u0441\u044f\u0446 \u043f\u043e\u043b\u0443\u0447\u0430\u0435\u0442\u0435 \u0433\u0430\u0440\u0430\u043d\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u0443\u044e \u0430\u0440\u0435\u043d\u0434\u043d\u0443\u044e \u043f\u043b\u0430\u0442\u0443.",
+        "en": "Forget the hassle of finding tenants, contracts, and monthly payments \u2014 we handle everything, and you receive guaranteed rent every month.",
+    },
+    "sr1_title": {"uz": "Ijarachi biz tomondan", "ru": "\u0410\u0440\u0435\u043d\u0434\u0430\u0442\u043e\u0440\u043e\u0432 \u0438\u0449\u0435\u043c \u043c\u044b", "en": "We find the tenants"},
+    "sr1_desc": {"uz": "Sizga ijarachi izlashning hojati yo'q - buni to'liq biz bajaramiz", "ru": "\u0412\u0430\u043c \u043d\u0435 \u043d\u0443\u0436\u043d\u043e \u0438\u0441\u043a\u0430\u0442\u044c \u0430\u0440\u0435\u043d\u0434\u0430\u0442\u043e\u0440\u043e\u0432 \u2014 \u043c\u044b \u0434\u0435\u043b\u0430\u0435\u043c \u044d\u0442\u043e \u043f\u043e\u043b\u043d\u043e\u0441\u0442\u044c\u044e \u0441\u0430\u043c\u0438", "en": "You don't need to search for tenants \u2014 we handle it entirely"},
+    "sr2_title": {"uz": "Kafolatlangan to'lov", "ru": "\u0413\u0430\u0440\u0430\u043d\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u0430\u044f \u043e\u043f\u043b\u0430\u0442\u0430", "en": "Guaranteed payment"},
+    "sr2_desc": {"uz": "Uy bo'sh tursa ham, kelishilgan summa har oy sizga to'lanadi", "ru": "\u0414\u0430\u0436\u0435 \u0435\u0441\u043b\u0438 \u0436\u0438\u043b\u044c\u0451 \u043f\u0443\u0441\u0442\u0443\u0435\u0442, \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u043d\u0430\u044f \u0441\u0443\u043c\u043c\u0430 \u0432\u044b\u043f\u043b\u0430\u0447\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u043a\u0430\u0436\u0434\u044b\u0439 \u043c\u0435\u0441\u044f\u0446", "en": "Even if the property is vacant, the agreed amount is paid every month"},
+    "sr3_title": {"uz": "Rasmiy shartnoma", "ru": "\u041e\u0444\u0438\u0446\u0438\u0430\u043b\u044c\u043d\u044b\u0439 \u0434\u043e\u0433\u043e\u0432\u043e\u0440", "en": "Official contract"},
+    "sr3_desc": {"uz": "Barcha jarayon yozma shartnoma asosida, qonuniy tartibda amalga oshiriladi", "ru": "\u0412\u0435\u0441\u044c \u043f\u0440\u043e\u0446\u0435\u0441\u0441 \u043e\u0444\u043e\u0440\u043c\u043b\u044f\u0435\u0442\u0441\u044f \u043f\u0438\u0441\u044c\u043c\u0435\u043d\u043d\u044b\u043c \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u043e\u043c \u0432 \u0437\u0430\u043a\u043e\u043d\u043d\u043e\u043c \u043f\u043e\u0440\u044f\u0434\u043a\u0435", "en": "The whole process is governed by a written, legally sound contract"},
+    "sr4_title": {"uz": "Uy holatini nazorat", "ru": "\u041a\u043e\u043d\u0442\u0440\u043e\u043b\u044c \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u044f \u0436\u0438\u043b\u044c\u044f", "en": "Property condition monitoring"},
+    "sr4_desc": {"uz": "Uyingiz muntazam tekshiriladi, muammolar tezkor hal qilinadi", "ru": "\u0412\u0430\u0448\u0435 \u0436\u0438\u043b\u044c\u0451 \u0440\u0435\u0433\u0443\u043b\u044f\u0440\u043d\u043e \u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442\u0441\u044f, \u043f\u0440\u043e\u0431\u043b\u0435\u043c\u044b \u0440\u0435\u0448\u0430\u044e\u0442\u0441\u044f \u043e\u043f\u0435\u0440\u0430\u0442\u0438\u0432\u043d\u043e", "en": "Your property is checked regularly, and issues are resolved promptly"},
+    "sr_form_title": {"uz": "Ariza qoldiring", "ru": "\u041e\u0441\u0442\u0430\u0432\u044c\u0442\u0435 \u0437\u0430\u044f\u0432\u043a\u0443", "en": "Leave a request"},
+    "sr_form_sub": {"uz": "Mutaxassisimiz 24 soat ichida siz bilan bog'lanadi", "ru": "\u041d\u0430\u0448 \u0441\u043f\u0435\u0446\u0438\u0430\u043b\u0438\u0441\u0442 \u0441\u0432\u044f\u0436\u0435\u0442\u0441\u044f \u0441 \u0432\u0430\u043c\u0438 \u0432 \u0442\u0435\u0447\u0435\u043d\u0438\u0435 24 \u0447\u0430\u0441\u043e\u0432", "en": "Our specialist will contact you within 24 hours"},
+    "sr_name_ph": {"uz": "Ismingiz", "ru": "\u0412\u0430\u0448\u0435 \u0438\u043c\u044f", "en": "Your name"},
+    "sr_phone_ph": {"uz": "Telefon raqamingiz (+998...)", "ru": "\u0412\u0430\u0448 \u043d\u043e\u043c\u0435\u0440 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430 (+998...)", "en": "Your phone number (+998...)"},
+    "sr_manzil_ph": {"uz": "Uy manzili (tuman, mahalla)", "ru": "\u0410\u0434\u0440\u0435\u0441 \u0436\u0438\u043b\u044c\u044f (\u0440\u0430\u0439\u043e\u043d, \u043c\u0430\u0445\u0430\u043b\u043b\u044f)", "en": "Property address (district, neighborhood)"},
+    "sr_xona_ph": {"uz": "Xonalar soni", "ru": "\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u043a\u043e\u043c\u043d\u0430\u0442", "en": "Number of rooms"},
+    "sr_narx_ph": {"uz": "Kutilayotgan oylik narx ($ yoki so'm)", "ru": "\u041e\u0436\u0438\u0434\u0430\u0435\u043c\u0430\u044f \u0435\u0436\u0435\u043c\u0435\u0441\u044f\u0447\u043d\u0430\u044f \u0446\u0435\u043d\u0430 ($ \u0438\u043b\u0438 \u0441\u0443\u043c)", "en": "Expected monthly price ($ or UZS)"},
+    "sr_submit_btn": {"uz": "Arizani yuborish", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u044f\u0432\u043a\u0443", "en": "Submit request"},
+    "sr_success_title": {"uz": "Arizangiz qabul qilindi!", "ru": "\u0412\u0430\u0448\u0430 \u0437\u0430\u044f\u0432\u043a\u0430 \u043f\u0440\u0438\u043d\u044f\u0442\u0430!", "en": "Your request was received!"},
+    "sr_success_sub": {"uz": "Tez orada siz bilan bog'lanamiz.", "ru": "\u041c\u044b \u0441\u043a\u043e\u0440\u043e \u0441\u0432\u044f\u0436\u0435\u043c\u0441\u044f \u0441 \u0432\u0430\u043c\u0438.", "en": "We'll be in touch shortly."},
+    "sr_error": {"uz": "Xatolik yuz berdi, qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Something went wrong, please try again."},
+}
+
+
+def get_lang(request: Request) -> str:
+    lang = request.query_params.get("lang") or request.cookies.get("lang") or DEFAULT_LANG
+    return lang if lang in SUPPORTED_LANGS else DEFAULT_LANG
+
+
+def t(lang: str, key: str, **kwargs) -> str:
+    entry = TRANSLATIONS.get(key)
+    if not entry:
+        return key
+    text = entry.get(lang) or entry.get(DEFAULT_LANG) or key
+    return text.format(**kwargs) if kwargs else text
+
+
+def lang_switcher_html(current_path: str, lang: str) -> str:
+    links = []
+    for code in SUPPORTED_LANGS:
+        cls = "lang-pill active" if code == lang else "lang-pill"
+        next_url = f"/set-lang/{code}?next={urllib.parse.quote(current_path)}"
+        links.append(f'<a href="{next_url}" class="{cls}">{code.upper()}</a>')
+    return f'<div class="lang-switcher">{"".join(links)}</div>'
+
+
+@app.get("/set-lang/{lang}")
+def set_lang(lang: str, next: str = "/"):
+    if lang not in SUPPORTED_LANGS:
+        lang = DEFAULT_LANG
+    if not next.startswith("/"):
+        next = "/"
+    resp = RedirectResponse(url=next, status_code=307)
+    resp.set_cookie("lang", lang, max_age=31536000, path="/", samesite="lax")
+    return resp
+
+
+def render_head(title: str, description: str, canonical_path: str, og_image: str = "", lang: str = DEFAULT_LANG) -> str:
     canonical = f"{SITE_URL}{canonical_path}" if SITE_URL else canonical_path
     if not og_image and SITE_URL:
         og_image = f"{SITE_URL}/logo.png"
+    alt_links = "".join(
+        f'<link rel="alternate" hreflang="{code}" href="{canonical}{"&" if "?" in canonical else "?"}lang={code}">'
+        for code in SUPPORTED_LANGS
+    )
     return f"""<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{title}</title>
 <meta name="description" content="{description}">
 <link rel="canonical" href="{canonical}">
+{alt_links}
 <meta property="og:type" content="website">
 <meta property="og:title" content="{title}">
 <meta property="og:description" content="{description}">
 <meta property="og:image" content="{og_image}">
 <meta property="og:url" content="{canonical}">
+<meta property="og:locale" content="{lang}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#0E9F76">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -818,32 +1073,35 @@ def render_head(title: str, description: str, canonical_path: str, og_image: str
 <style>{SITE_CSS}</style>"""
 
 
-def render_header() -> str:
+def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
     bot_link = f"https://t.me/{BOT_USERNAME}" if BOT_USERNAME else "#"
     channel_link = f"https://t.me/{CHANNEL_USERNAME}" if CHANNEL_USERNAME else "#"
     logo = "/logo.png"
+    switcher = lang_switcher_html(current_path, lang)
     return f"""<header class="site-header">
   <div class="header-inner">
     <a href="/" class="brand"><img src="{logo}" alt="{SITE_NAME}"> {BRAND_SHORT}</a>
     <nav class="main-nav">
-      <a href="/" class="nav-link">Bosh sahifa</a>
-      <a href="/subarenda" class="nav-link">Subarenda</a>
-      <a href="/xarita" class="nav-link nav-icon-link" title="Xarita">{icon('map', 18)}</a>
-      <a href="{bot_link}" class="nav-link nav-icon-link" target="_blank" title="Telegram bot">{icon('phone', 16)}</a>
-      <a href="{channel_link}" class="nav-link nav-icon-link" target="_blank" title="Telegram kanal">{icon('send', 17)}</a>
+      <a href="/" class="nav-link">{t(lang,'nav_home')}</a>
+      <a href="/subarenda" class="nav-link">{t(lang,'nav_subarenda')}</a>
+      <a href="/xarita" class="nav-link nav-icon-link" title="{t(lang,'nav_map_title')}">{icon('map', 18)}</a>
+      <a href="{bot_link}" class="nav-link nav-icon-link" target="_blank" title="{t(lang,'nav_bot_title')}">{icon('phone', 16)}</a>
+      <a href="{channel_link}" class="nav-link nav-icon-link" target="_blank" title="{t(lang,'nav_channel_title')}">{icon('send', 17)}</a>
       <a href="{INSTAGRAM_URL}" class="nav-link nav-icon-link" target="_blank" title="Instagram">{icon('instagram', 18)}</a>
-      <a href="/elon-joylash" class="btn-cta">{icon('sparkle', 14)} Bepul e'lon joylash</a>
+      {switcher}
+      <a href="/elon-joylash" class="btn-cta">{icon('sparkle', 14)} {t(lang,'nav_post_cta')}</a>
     </nav>
     <button class="mobile-menu-btn" onclick="toggleMobileMenu()" aria-label="Menyu">{icon('menu', 20)}</button>
   </div>
   <div class="mobile-menu" id="mobileMenu">
-    <a href="/">{icon('home', 17)} Bosh sahifa</a>
-    <a href="/elon-joylash">{icon('sparkle', 17)} E'lon joylash</a>
-    <a href="/xarita">{icon('map', 17)} Xarita</a>
-    <a href="/subarenda">{icon('coin', 17)} Subarenda</a>
-    <a href="{channel_link}" target="_blank">{icon('send', 17)} Telegram kanal</a>
+    <a href="/">{icon('home', 17)} {t(lang,'nav_home')}</a>
+    <a href="/elon-joylash">{icon('sparkle', 17)} {t(lang,'mobile_post')}</a>
+    <a href="/xarita">{icon('map', 17)} {t(lang,'nav_map_title')}</a>
+    <a href="/subarenda">{icon('coin', 17)} {t(lang,'nav_subarenda')}</a>
+    <a href="{channel_link}" target="_blank">{icon('send', 17)} {t(lang,'nav_channel_title')}</a>
     <a href="{INSTAGRAM_URL}" target="_blank">{icon('instagram', 17)} Instagram</a>
-    <a href="{bot_link}" target="_blank">{icon('phone', 17)} Botni ochish</a>
+    <a href="{bot_link}" target="_blank">{icon('phone', 17)} {t(lang,'nav_bot_title')}</a>
+    {switcher}
   </div>
 </header>
 <script>
@@ -865,7 +1123,7 @@ window.addEventListener('pageshow', function(event) {{
 </script>"""
 
 
-def render_footer() -> str:
+def render_footer(lang: str = DEFAULT_LANG) -> str:
     bot_link = f"https://t.me/{BOT_USERNAME}" if BOT_USERNAME else "#"
     channel_link = f"https://t.me/{CHANNEL_USERNAME}" if CHANNEL_USERNAME else "#"
     year = datetime.now().year
@@ -875,19 +1133,19 @@ def render_footer() -> str:
     <div class="footer-inner">
       <div>
         <div class="footer-brand"><img src="{logo}" alt="{SITE_NAME}"> {BRAND_SHORT}</div>
-        <div style="font-size:13px;max-width:320px;color:var(--muted);">Maklersiz, to'g'ridan-to'g'ri uy egasi bilan bog'lanish platformasi.</div>
+        <div style="font-size:13px;max-width:320px;color:var(--muted);">{t(lang,'footer_tagline')}</div>
       </div>
       <div class="footer-links">
-        <a href="/">Bosh sahifa</a>
-        <a href="/elon-joylash">E'lon joylash</a>
-        <a href="/xarita">Xarita</a>
-        <a href="/subarenda">Subarenda</a>
-        <a href="{channel_link}" target="_blank">Telegram kanal</a>
-        <a href="{bot_link}" target="_blank">Telegram bot</a>
+        <a href="/">{t(lang,'nav_home')}</a>
+        <a href="/elon-joylash">{t(lang,'mobile_post')}</a>
+        <a href="/xarita">{t(lang,'nav_map_title')}</a>
+        <a href="/subarenda">{t(lang,'nav_subarenda')}</a>
+        <a href="{channel_link}" target="_blank">{t(lang,'nav_channel_title')}</a>
+        <a href="{bot_link}" target="_blank">{t(lang,'nav_bot_title')}</a>
         <a href="{INSTAGRAM_URL}" target="_blank">Instagram</a>
       </div>
     </div>
-    <div class="footer-bottom">&copy; {year} {SITE_NAME}. Barcha huquqlar himoyalangan.</div>
+    <div class="footer-bottom">&copy; {year} {SITE_NAME}. {t(lang,'footer_rights')}</div>
   </div>
 </footer>"""
 
@@ -902,6 +1160,7 @@ CATEGORY_LABELS = {
     "subarenda": ("\U0001F3E2 Subarenda", "cat-subarenda"),
     "premium": ("\U0001F48E Premium", "cat-premium"),
 }
+
 
 
 def render_listing_card(l: dict) -> str:
@@ -981,7 +1240,8 @@ def esc_html(s) -> str:
 # ============================= BOSH SAHIFA =============================
 
 @app.get("/", response_class=HTMLResponse)
-def homepage(hudud: str = Query(""), xona: str = Query(""), page: int = Query(1, ge=1)):
+def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), page: int = Query(1, ge=1)):
+    lang = get_lang(request)
     listings, total = get_site_listings(hudud=hudud, xona=xona, page=page)
     stats = site_stats_summary()
     total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
@@ -996,13 +1256,13 @@ def homepage(hudud: str = Query(""), xona: str = Query(""), page: int = Query(1,
     else:
         cards_html = f"""<div class="empty-state" style="grid-column:1/-1;">
             <div class="icon">{icon('search', 40)}</div>
-            <div>Hech qanday e'lon topilmadi. Boshqa filtrni sinab ko'ring.</div>
+            <div>{t(lang,'empty_listings')}</div>
         </div>"""
 
     pag_html = ""
     if total_pages > 1:
         def page_url(p):
-            return f"?page={p}" + (f"&hudud={hudud}" if hudud else "") + (f"&xona={xona}" if xona else "")
+            return f"?page={p}" + (f"&hudud={hudud}" if hudud else "") + (f"&xona={xona}" if xona else "") + (f"&lang={lang}" if lang != DEFAULT_LANG else "")
 
         WINDOW = 5
         start_p = max(1, min(page - WINDOW // 2, total_pages - WINDOW + 1))
@@ -1025,36 +1285,37 @@ def homepage(hudud: str = Query(""), xona: str = Query(""), page: int = Query(1,
     description = f"Toshkentda maklersiz uy va kvartira ijarasi. Hozirda {stats['active']} ta faol e'lon. To'g'ridan-to'g'ri uy egasi bilan bog'laning, komissiyasiz."
 
     html = f"""<!DOCTYPE html>
-<html lang="uz">
+<html lang="{lang}">
 <head>
-{render_head(title, description, "/")}
+{render_head(title, description, "/", lang=lang)}
 </head>
 <body>
-{render_header()}
+{render_header(lang, "/")}
 
 <section class="hero">
   <div class="wrap">
-    <h1>Maklersiz uy ijarasi Toshkentda</h1>
-    <p class="sub">To'g'ridan-to'g'ri uy egasi bilan bog'laning — hech qanday makler haqqi to'lamang</p>
+    <h1>{t(lang,'hero_title')}</h1>
+    <p class="sub">{t(lang,'hero_sub')}</p>
     <form class="search-pill" method="get" action="/">
+      <input type="hidden" name="lang" value="{lang}">
       <div class="seg">
-        <label>HUDUD</label>
+        <label>{t(lang,'search_district_label')}</label>
         <select name="hudud">
-          <option value="">Barcha hududlar</option>
+          <option value="">{t(lang,'search_all_districts')}</option>
           {district_options}
         </select>
       </div>
       <div class="seg">
-        <label>XONALAR SONI</label>
+        <label>{t(lang,'search_rooms_label')}</label>
         <select name="xona">
-          <option value="">Farqi yo'q</option>
-          <option value="1" {"selected" if xona=="1" else ""}>1 xona</option>
-          <option value="2" {"selected" if xona=="2" else ""}>2 xona</option>
-          <option value="3" {"selected" if xona=="3" else ""}>3 xona</option>
-          <option value="4" {"selected" if xona=="4" else ""}>4+ xona</option>
+          <option value="">{t(lang,'search_rooms_any')}</option>
+          <option value="1" {"selected" if xona=="1" else ""}>1</option>
+          <option value="2" {"selected" if xona=="2" else ""}>2</option>
+          <option value="3" {"selected" if xona=="3" else ""}>3</option>
+          <option value="4" {"selected" if xona=="4" else ""}>4+</option>
         </select>
       </div>
-      <button type="submit">{icon('search', 16)} Qidirish</button>
+      <button type="submit">{icon('search', 16)} {t(lang,'search_btn')}</button>
     </form>
   </div>
 </section>
@@ -1062,17 +1323,17 @@ def homepage(hudud: str = Query(""), xona: str = Query(""), page: int = Query(1,
 <div class="stats-strip">
   <div class="wrap">
     <div class="inner">
-      <div class="stat-item"><div class="num">{stats['active']}+</div><div class="lbl">Faol e'lon</div></div>
-      <div class="stat-item"><div class="num">{stats['users']}+</div><div class="lbl">Foydalanuvchi</div></div>
-      <div class="stat-item"><div class="num">100%</div><div class="lbl">Maklersiz</div></div>
+      <div class="stat-item"><div class="num">{stats['active']}+</div><div class="lbl">{t(lang,'stat_active')}</div></div>
+      <div class="stat-item"><div class="num">{stats['users']}+</div><div class="lbl">{t(lang,'stat_users')}</div></div>
+      <div class="stat-item"><div class="num">100%</div><div class="lbl">{t(lang,'stat_nofee')}</div></div>
     </div>
   </div>
 </div>
 
 <main class="wrap">
   <div class="section-head">
-    <h2>{"Qidiruv natijalari" if (hudud or xona) else "So'nggi e'lonlar"}</h2>
-    <span class="count">{total} ta e'lon topildi</span>
+    <h2>{t(lang,'section_search_results') if (hudud or xona) else t(lang,'section_latest')}</h2>
+    <span class="count">{t(lang,'section_count_suffix', n=total)}</span>
   </div>
   <div class="listing-grid">
     {cards_html}
@@ -1082,17 +1343,17 @@ def homepage(hudud: str = Query(""), xona: str = Query(""), page: int = Query(1,
 
 <section class="why-section">
   <div class="wrap">
-    <div class="section-head"><h2>Nega bizni tanlashadi</h2></div>
+    <div class="section-head"><h2>{t(lang,'why_title')}</h2></div>
     <div class="why-grid">
-      <div class="why-item"><div class="icon">{icon('coin', 26)}</div><h3>Maklersiz</h3><p>Hech qanday komissiya yoki vositachi haqqi yo'q</p></div>
-      <div class="why-item"><div class="icon">{icon('shield', 26)}</div><h3>Tekshirilgan</h3><p>Har bir e'lon moderatsiyadan o'tadi, firibgarlar bloklanadi</p></div>
-      <div class="why-item"><div class="icon">{icon('bolt', 26)}</div><h3>Tezkor</h3><p>Bot orqali bir necha soniyada uy egasi bilan bog'laning</p></div>
-      <div class="why-item"><div class="icon">{icon('map', 26)}</div><h3>Xaritada</h3><p>Uylarni interaktiv xaritada joylashuvi bo'yicha toping</p></div>
+      <div class="why-item"><div class="icon">{icon('coin', 26)}</div><h3>{t(lang,'why1_title')}</h3><p>{t(lang,'why1_desc')}</p></div>
+      <div class="why-item"><div class="icon">{icon('shield', 26)}</div><h3>{t(lang,'why2_title')}</h3><p>{t(lang,'why2_desc')}</p></div>
+      <div class="why-item"><div class="icon">{icon('bolt', 26)}</div><h3>{t(lang,'why3_title')}</h3><p>{t(lang,'why3_desc')}</p></div>
+      <div class="why-item"><div class="icon">{icon('map', 26)}</div><h3>{t(lang,'why4_title')}</h3><p>{t(lang,'why4_desc')}</p></div>
     </div>
   </div>
 </section>
 
-{render_footer()}
+{render_footer(lang)}
 </body>
 </html>"""
     return HTMLResponse(html)
@@ -1101,17 +1362,18 @@ def homepage(hudud: str = Query(""), xona: str = Query(""), page: int = Query(1,
 # ============================= E'LON SAHIFASI =============================
 
 @app.get("/uy/{listing_id}", response_class=HTMLResponse)
-def listing_detail(listing_id: int):
+def listing_detail(request: Request, listing_id: int):
+    lang = get_lang(request)
     l = get_site_listing(listing_id)
     if not l:
-        not_found_head = render_head("E'lon topilmadi", "Bu e'lon topilmadi yoki muddati tugagan", f"/uy/{listing_id}")
+        not_found_head = render_head(t(lang,'not_found_title'), t(lang,'not_found_desc'), f"/uy/{listing_id}", lang=lang)
         not_found_body = (
-            f"<body>{render_header()}<main class='wrap'><div class='empty-state'>{icon('sad', 46)}"
-            f"<div style='margin-top:10px;'>Bu e'lon topilmadi yoki muddati tugagan.</div><br>"
-            f"<a href='/' class='btn-cta' style='background:#0f1b2e;'>Bosh sahifaga qaytish</a></div></main>{render_footer()}</body>"
+            f"<body>{render_header(lang, f'/uy/{listing_id}')}<main class='wrap'><div class='empty-state'>{icon('sad', 46)}"
+            f"<div style='margin-top:10px;'>{t(lang,'not_found_body')}</div><br>"
+            f"<a href='/' class='btn-cta' style='background:#0f1b2e;'>{t(lang,'back_home_btn')}</a></div></main>{render_footer(lang)}</body>"
         )
         return HTMLResponse(
-            f"<!DOCTYPE html><html><head>{not_found_head}</head>{not_found_body}</html>",
+            f"<!DOCTYPE html><html lang=\"{lang}\"><head>{not_found_head}</head>{not_found_body}</html>",
             status_code=404,
         )
 
@@ -1125,7 +1387,7 @@ def listing_detail(listing_id: int):
     xona = (l.get("xona") or "").strip()
     kimlarga = (l.get("kimlarga") or "").strip()
     qulaylik = (l.get("qulaylik") or "").strip()
-    description_text = qulaylik or (l.get("raw_text") or "").strip() or "Qo'shimcha ma'lumot berilmagan."
+    description_text = qulaylik or (l.get("raw_text") or "").strip() or t(lang,'no_desc')
 
     # ---- Svayp qilinadigan (mobil uchun tabiiy touch-swipe) rasm galereyasi + Lightbox ----
     if photo_urls:
@@ -1157,11 +1419,11 @@ def listing_detail(listing_id: int):
           {lightbox_nav}
         </div>"""
     else:
-        gallery_html = f'<div class="gallery-scroll gs-empty">{icon("camera_off", 42)}<div style="margin-top:8px;font-size:13px;">Rasm yo\'q</div></div>'
+        gallery_html = f'<div class="gallery-scroll gs-empty">{icon("camera_off", 42)}<div style="margin-top:8px;font-size:13px;">{t(lang,"no_photo")}</div></div>'
         lightbox_html = ""
 
     bot_link = f"https://t.me/{BOT_USERNAME}?start=phone_{l['id']}" if BOT_USERNAME else "#"
-    paid_badge = f'<span class="badge paid">{icon("bolt", 13)} TOP e\'lon</span>' if (l.get("price_charged") or 0) > 0 else ""
+    paid_badge = f'<span class="badge paid">{icon("bolt", 13)} {t(lang,"badge_top")}</span>' if (l.get("price_charged") or 0) > 0 else ""
     cat = l.get("category")
     cat_badge_detail = ""
     if cat and cat in CATEGORY_LABELS:
@@ -1184,15 +1446,15 @@ def listing_detail(listing_id: int):
     if related:
         related_cards = "".join(render_listing_card(r) for r in related)
         related_html = f"""<div class="related-strip">
-  <div class="section-head"><h2>O'xshash e'lonlar</h2></div>
+  <div class="section-head"><h2>{t(lang,'related_title')}</h2></div>
   <div class="listing-grid">{related_cards}</div>
 </div>"""
 
     facts_html = ""
     if xona:
-        facts_html += f'<div class="fact-box"><div class="fl">Xonalar soni</div><div class="fv">{icon("bed", 16)} {esc_html(xona)}</div></div>'
+        facts_html += f'<div class="fact-box"><div class="fl">{t(lang,"fact_rooms")}</div><div class="fv">{icon("bed", 16)} {esc_html(xona)}</div></div>'
     if kimlarga:
-        facts_html += f'<div class="fact-box"><div class="fl">Kimlarga</div><div class="fv">{icon("users", 16)} {esc_html(kimlarga)}</div></div>'
+        facts_html += f'<div class="fact-box"><div class="fl">{t(lang,"fact_for_whom")}</div><div class="fv">{icon("users", 16)} {esc_html(kimlarga)}</div></div>'
     facts_block = f'<div class="detail-facts">{facts_html}</div>' if facts_html else ""
     moljal_block = f'<div class="detail-addr">{icon("target", 15)} {esc_html(moljal)}</div>' if moljal else ""
 
@@ -1216,15 +1478,15 @@ def listing_detail(listing_id: int):
 </script>"""
 
     html = f"""<!DOCTYPE html>
-<html lang="uz">
+<html lang="{lang}">
 <head>
-{render_head(title, description, f"/uy/{listing_id}", main_photo)}
+{render_head(title, description, f"/uy/{listing_id}", main_photo, lang=lang)}
 {json_ld}
 </head>
 <body>
-{render_header()}
+{render_header(lang, f"/uy/{listing_id}")}
 <main class="wrap">
-  <div class="breadcrumb"><a href="/">Bosh sahifa</a> / {esc_html(addr)}</div>
+  <div class="breadcrumb"><a href="/">{t(lang,'breadcrumb_home')}</a> / {esc_html(addr)}</div>
 
   <div class="detail-grid">
     <div>
@@ -1236,13 +1498,13 @@ def listing_detail(listing_id: int):
       <div class="detail-badges">
         {paid_badge}
         {cat_badge_detail}
-        <span class="badge trust">{icon("check_circle", 13)} Tekshirilgan e'lon</span>
+        <span class="badge trust">{icon("check_circle", 13)} {t(lang,'badge_verified')}</span>
       </div>
 
       {facts_block}
 
       <div class="desc-block">
-        <h3>{icon("sparkle", 16)} Tavsif</h3>
+        <h3>{icon("sparkle", 16)} {t(lang,'desc_title')}</h3>
         <p>{esc_html(description_text)}</p>
       </div>
 
@@ -1252,22 +1514,22 @@ def listing_detail(listing_id: int):
     <div>
       <div class="sidebar-card">
         <div class="sidebar-price">{esc_html(l['narx'])}</div>
-        <a href="{bot_link}" class="sidebar-cta" target="_blank">{icon("phone", 16)} Telefon raqamini olish</a>
-        <div class="sidebar-note">Telegram bot orqali xavfsiz va tez</div>
+        <a href="{bot_link}" class="sidebar-cta" target="_blank">{icon("phone", 16)} {t(lang,'sidebar_cta')}</a>
+        <div class="sidebar-note">{t(lang,'sidebar_note')}</div>
         <div class="sidebar-share">
-          <button onclick="shareListing()">{icon("share", 14)} Ulashish</button>
-          <button onclick="copyLink(this)">{icon("copy", 14)} Nusxalash</button>
+          <button onclick="shareListing()">{icon("share", 14)} {t(lang,'share_btn')}</button>
+          <button onclick="copyLink(this)">{icon("copy", 14)} {t(lang,'copy_btn')}</button>
         </div>
 
         <div class="inquiry-toggle" onclick="toggleInquiry()">
-          {icon("message", 15)} <span>Uy egasiga so'rov yuborish</span>
+          {icon("message", 15)} <span>{t(lang,'inquiry_toggle')}</span>
         </div>
         <form id="inquiryForm" class="inquiry-form" onsubmit="return submitInquiry(event)">
-          <input required name="name" placeholder="Ismingiz" maxlength="100">
-          <input required name="phone" placeholder="Telefon raqamingiz" maxlength="30">
-          <textarea name="message" placeholder="Xabar (ixtiyoriy)" maxlength="500" rows="3"></textarea>
-          <button type="submit" class="inquiry-submit">{icon("send", 14)} Yuborish</button>
-          <div id="inquirySuccess" class="inquiry-success">{icon("check_circle", 15)} So'rovingiz yuborildi!</div>
+          <input required name="name" placeholder="{t(lang,'inquiry_name_ph')}" maxlength="100">
+          <input required name="phone" placeholder="{t(lang,'inquiry_phone_ph')}" maxlength="30">
+          <textarea name="message" placeholder="{t(lang,'inquiry_msg_ph')}" maxlength="500" rows="3"></textarea>
+          <button type="submit" class="inquiry-submit">{icon("send", 14)} {t(lang,'inquiry_send')}</button>
+          <div id="inquirySuccess" class="inquiry-success">{icon("check_circle", 15)} {t(lang,'inquiry_success')}</div>
         </form>
       </div>
     </div>
@@ -1295,17 +1557,17 @@ async function submitInquiry(e) {{
       form.querySelectorAll('input, textarea, button').forEach(el => el.style.display = 'none');
       document.getElementById('inquirySuccess').style.display = 'flex';
     }} else {{
-      alert("Xatolik yuz berdi, qaytadan urinib ko'ring.");
+      alert("{t(lang,'inquiry_error')}");
       btn.disabled = false;
     }}
   }} catch (err) {{
-    alert("Xatolik yuz berdi, qaytadan urinib ko'ring.");
+    alert("{t(lang,'inquiry_error')}");
     btn.disabled = false;
   }}
   return false;
 }}
 </script>
-{render_footer()}
+{render_footer(lang)}
 
 <script>
 function shareListing() {{
@@ -1313,13 +1575,13 @@ function shareListing() {{
     navigator.share({{ title: document.title, url: window.location.href }});
   }} else {{
     navigator.clipboard.writeText(window.location.href);
-    alert("Havola nusxalandi!");
+    alert("{t(lang,'link_copied')}");
   }}
 }}
 function copyLink(btn) {{
   navigator.clipboard.writeText(window.location.href);
   const original = btn.innerHTML;
-  btn.textContent = "\u2705 Nusxalandi";
+  btn.textContent = "\u2705 {t(lang,'copied_btn')}";
   setTimeout(() => btn.innerHTML = original, 1800);
 }}
 
@@ -1382,61 +1644,62 @@ document.addEventListener('keydown', (e) => {{
 # ============================= SUBARENDA =============================
 
 @app.get("/subarenda", response_class=HTMLResponse)
-def subarenda_page():
+def subarenda_page(request: Request):
+    lang = get_lang(request)
     title = f"Subarenda dasturi — {SITE_NAME}"
     description = "Uyingizni bizga uzoq muddatli ijaraga bering - biz ijarachini topamiz, boshqaramiz va sizga har oy kafolatlangan to'lovni amalga oshiramiz."
     html = f"""<!DOCTYPE html>
-<html lang="uz">
+<html lang="{lang}">
 <head>
-{render_head(title, description, "/subarenda")}
+{render_head(title, description, "/subarenda", lang=lang)}
 </head>
 <body>
-{render_header()}
+{render_header(lang, "/subarenda")}
 <section class="hero">
   <div class="wrap">
-    <h1>Uyingizni bizga ishoning</h1>
-    <p class="sub">Ijarachi qidirish, shartnoma va oylik to'lovlar bilan bosh og'rig'ini unuting — biz hammasini boshqaramiz, sizga esa har oy kafolatlangan ijara puli keladi.</p>
+    <h1>{t(lang,'sr_hero_title')}</h1>
+    <p class="sub">{t(lang,'sr_hero_sub')}</p>
   </div>
 </section>
 <main class="wrap" style="padding-top:40px;">
   <div class="why-grid" style="margin-bottom:50px;">
-    <div class="why-item"><div class="icon">{icon('users', 26)}</div><h3>Ijarachi biz tomondan</h3><p>Sizga ijarachi izlashning hojati yo'q - buni to'liq biz bajaramiz</p></div>
-    <div class="why-item"><div class="icon">{icon('coin', 26)}</div><h3>Kafolatlangan to'lov</h3><p>Uy bo'sh tursa ham, kelishilgan summa har oy sizga to'lanadi</p></div>
-    <div class="why-item"><div class="icon">{icon('shield', 26)}</div><h3>Rasmiy shartnoma</h3><p>Barcha jarayon yozma shartnoma asosida, qonuniy tartibda amalga oshiriladi</p></div>
-    <div class="why-item"><div class="icon">{icon('sparkle', 26)}</div><h3>Uy holatini nazorat</h3><p>Uyingiz muntazam tekshiriladi, muammolar tezkor hal qilinadi</p></div>
+    <div class="why-item"><div class="icon">{icon('users', 26)}</div><h3>{t(lang,'sr1_title')}</h3><p>{t(lang,'sr1_desc')}</p></div>
+    <div class="why-item"><div class="icon">{icon('coin', 26)}</div><h3>{t(lang,'sr2_title')}</h3><p>{t(lang,'sr2_desc')}</p></div>
+    <div class="why-item"><div class="icon">{icon('shield', 26)}</div><h3>{t(lang,'sr3_title')}</h3><p>{t(lang,'sr3_desc')}</p></div>
+    <div class="why-item"><div class="icon">{icon('sparkle', 26)}</div><h3>{t(lang,'sr4_title')}</h3><p>{t(lang,'sr4_desc')}</p></div>
   </div>
 
   <div style="max-width:520px;margin:0 auto;">
     <div class="sidebar-card" style="position:static;">
-      <h2 style="font-size:19px;font-weight:800;margin-bottom:6px;">Ariza qoldiring</h2>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:18px;">Mutaxassisimiz 24 soat ichida siz bilan bog'lanadi</p>
+      <h2 style="font-size:19px;font-weight:800;margin-bottom:6px;">{t(lang,'sr_form_title')}</h2>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:18px;">{t(lang,'sr_form_sub')}</p>
       <form id="subarenda-form" onsubmit="return submitSubarenda(event)">
         <div style="margin-bottom:12px;">
-          <input required name="full_name" placeholder="Ismingiz" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;">
+          <input required name="full_name" placeholder="{t(lang,'sr_name_ph')}" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;">
         </div>
         <div style="margin-bottom:12px;">
-          <input required name="phone" placeholder="Telefon raqamingiz (+998...)" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;">
+          <input required name="phone" placeholder="{t(lang,'sr_phone_ph')}" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;">
         </div>
         <div style="margin-bottom:12px;">
-          <input required name="manzil" placeholder="Uy manzili (tuman, mahalla)" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;">
+          <input required name="manzil" placeholder="{t(lang,'sr_manzil_ph')}" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;">
         </div>
         <div style="margin-bottom:12px;">
-          <input name="xona" placeholder="Xonalar soni" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;">
+          <input name="xona" placeholder="{t(lang,'sr_xona_ph')}" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;">
         </div>
         <div style="margin-bottom:18px;">
-          <input name="narx_talab" placeholder="Kutilayotgan oylik narx ($ yoki so'm)" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;">
+          <input name="narx_talab" placeholder="{t(lang,'sr_narx_ph')}" style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;">
         </div>
-        <button type="submit" class="sidebar-cta" style="width:100%;border:none;cursor:pointer;">Arizani yuborish</button>
+        <button type="submit" class="sidebar-cta" style="width:100%;border:none;cursor:pointer;">{t(lang,'sr_submit_btn')}</button>
       </form>
       <div id="subarenda-success" style="display:none;text-align:center;padding:20px 0;">
         <div style="font-size:40px;margin-bottom:10px;">✅</div>
-        <div style="font-weight:700;margin-bottom:6px;">Arizangiz qabul qilindi!</div>
-        <div style="font-size:13px;color:var(--muted);">Tez orada siz bilan bog'lanamiz.</div>
+        <div style="font-weight:700;margin-bottom:6px;">{t(lang,'sr_success_title')}</div>
+        <div style="font-size:13px;color:var(--muted);">{t(lang,'sr_success_sub')}</div>
       </div>
     </div>
   </div>
 </main>
-{render_footer()}
+{render_footer(lang)}
 <script>
 async function submitSubarenda(e) {{
   e.preventDefault();
@@ -1449,7 +1712,7 @@ async function submitSubarenda(e) {{
     form.style.display = 'none';
     document.getElementById('subarenda-success').style.display = 'block';
   }} else {{
-    alert("Xatolik yuz berdi, qaytadan urinib ko'ring.");
+    alert("{t(lang,'sr_error')}");
   }}
   return false;
 }}
@@ -1462,7 +1725,8 @@ async function submitSubarenda(e) {{
 # ============================= VEB-SAYTDAN E'LON JOYLASH SAHIFASI =============================
 
 @app.get("/elon-joylash", response_class=HTMLResponse)
-def elon_joylash_page():
+def elon_joylash_page(request: Request):
+    lang = get_lang(request)
     title = f"Bepul e'lon joylash — {SITE_NAME}"
     description = "Uyingizni ijaraga berasizmi? Veb-saytdan to'g'ridan-to'g'ri, ro'yxatdan o'tmasdan bepul e'lon joylang — avtomatik moderatsiyadan so'ng Telegram kanalimiz va saytimizda chiqadi."
     price = current_listing_price()
@@ -1470,17 +1734,17 @@ def elon_joylash_page():
     card_grouped = " ".join(re.sub(r"\D", "", card)[i:i + 4] for i in range(0, len(re.sub(r"\D", "", card)), 4)) if card else ""
 
     html = f"""<!DOCTYPE html>
-<html lang="uz">
+<html lang="{lang}">
 <head>
-{render_head(title, description, "/elon-joylash")}
+{render_head(title, description, "/elon-joylash", lang=lang)}
 </head>
 <body>
-{render_header()}
+{render_header(lang, "/elon-joylash")}
 
 <section class="form-page-hero">
   <div class="wrap">
-    <h1>{icon('sparkle', 26)} Uyingizni ijaraga bering</h1>
-    <p>Formani to'ldiring — e'loningiz tekshirilgach, avtomatik ravishda Telegram kanalimizda va shu saytda e'lon qilinadi. Ro'yxatdan o'tish shart emas.</p>
+    <h1>{icon('sparkle', 26)} {t(lang,'ej_hero_title')}</h1>
+    <p>{t(lang,'ej_hero_sub')}</p>
   </div>
 </section>
 
@@ -1488,113 +1752,113 @@ def elon_joylash_page():
   <div class="form-shell">
     <div class="form-card">
       <div id="formStep">
-        <div class="fstep-badge">{icon('shield', 13)} Har bir e'lon qo'lda tekshiriladi — firibgarlarga joy yo'q</div>
+        <div class="fstep-badge">{icon('shield', 13)} {t(lang,'ej_badge')}</div>
         <div id="formError" class="form-error-box"></div>
 
         <form id="listingForm">
-          <div class="form-section-title">{icon('home', 17)} Uy haqida</div>
+          <div class="form-section-title">{icon('home', 17)} {t(lang,'ej_section_house')}</div>
           <div class="form-group">
-            <label>Manzil (tuman, mahalla) <span class="req">*</span></label>
-            <input class="form-input" name="manzil" maxlength="250" required placeholder="Masalan: Yunusobod, 12-kvartal">
+            <label>{t(lang,'ej_manzil_label')} <span class="req">*</span></label>
+            <input class="form-input" name="manzil" maxlength="250" required placeholder="{t(lang,'ej_manzil_ph')}">
           </div>
           <div class="form-group">
-            <label>Mo'ljal <span class="req">*</span></label>
-            <input class="form-input" name="moljal" maxlength="250" required placeholder="Masalan: Metro bekatiga yaqin, Korzinka yonida">
+            <label>{t(lang,'ej_moljal_label')} <span class="req">*</span></label>
+            <input class="form-input" name="moljal" maxlength="250" required placeholder="{t(lang,'ej_moljal_ph')}">
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Nechta xonali? <span class="req">*</span></label>
-              <input class="form-input" name="xona" maxlength="60" required placeholder="Masalan: 2 xona, studio">
+              <label>{t(lang,'ej_xona_label')} <span class="req">*</span></label>
+              <input class="form-input" name="xona" maxlength="60" required placeholder="{t(lang,'ej_xona_ph')}">
             </div>
             <div class="form-group">
-              <label>Kimlarga beriladi? <span class="req">*</span></label>
-              <input class="form-input" name="kimlarga" maxlength="150" required placeholder="Masalan: oilaga, talabalarga">
+              <label>{t(lang,'ej_kimlarga_label')} <span class="req">*</span></label>
+              <input class="form-input" name="kimlarga" maxlength="150" required placeholder="{t(lang,'ej_kimlarga_ph')}">
             </div>
           </div>
           <div class="form-group">
-            <label>Sharoitlari <span class="req">*</span></label>
-            <textarea class="form-textarea" name="qulaylik" maxlength="900" required placeholder="Masalan: ta'mirlangan, mebel bilan, isitish tizimi bor..."></textarea>
+            <label>{t(lang,'ej_qulaylik_label')} <span class="req">*</span></label>
+            <textarea class="form-textarea" name="qulaylik" maxlength="900" required placeholder="{t(lang,'ej_qulaylik_ph')}"></textarea>
           </div>
           <div class="form-group">
-            <label>Narxi <span class="req">*</span></label>
-            <input class="form-input" name="narx" maxlength="200" required placeholder="Masalan: 150$, 1.2 mln, kelishiladi">
+            <label>{t(lang,'ej_narx_label')} <span class="req">*</span></label>
+            <input class="form-input" name="narx" maxlength="200" required placeholder="{t(lang,'ej_narx_ph')}">
           </div>
 
-          <div class="form-section-title">{icon('phone', 17)} Aloqa</div>
+          <div class="form-section-title">{icon('phone', 17)} {t(lang,'ej_section_contact')}</div>
           <div class="form-row">
             <div class="form-group">
-              <label>Ismingiz</label>
-              <input class="form-input" name="full_name" maxlength="100" placeholder="Ixtiyoriy">
+              <label>{t(lang,'ej_fullname_label')}</label>
+              <input class="form-input" name="full_name" maxlength="100" placeholder="{t(lang,'ej_fullname_ph')}">
             </div>
             <div class="form-group">
-              <label>Telefon raqami <span class="req">*</span></label>
+              <label>{t(lang,'ej_phone_label')} <span class="req">*</span></label>
               <input class="form-input" name="telefon" maxlength="30" required placeholder="+998 90 123 45 67">
             </div>
           </div>
-          <div class="form-hint" style="margin:-8px 0 14px;">Bu raqam e'londa ko'rsatiladi — ijarachilar shu orqali siz bilan bog'lanadi.</div>
+          <div class="form-hint" style="margin:-8px 0 14px;">{t(lang,'ej_phone_hint')}</div>
 
-          <div class="form-section-title">{icon('map', 17)} Joylashuv (ixtiyoriy)</div>
+          <div class="form-section-title">{icon('map', 17)} {t(lang,'ej_section_location')}</div>
           <div class="loc-toggle-row">
-            <div class="lt-label">{icon('target', 15)} Xaritada aniq nuqtani belgilash</div>
+            <div class="lt-label">{icon('target', 15)} {t(lang,'ej_loc_toggle')}</div>
             <label class="switch"><input type="checkbox" id="locToggle"><span class="slider"></span></label>
           </div>
           <div id="locationMap"></div>
           <input type="hidden" name="latitude" id="latInput">
           <input type="hidden" name="longitude" id="lonInput">
 
-          <div class="form-section-title">{icon('camera_off', 17)} Rasmlar <span class="req">*</span></div>
+          <div class="form-section-title">{icon('camera_off', 17)} {t(lang,'ej_section_photos')} <span class="req">*</span></div>
           <div class="photo-drop" id="photoDrop">
             <div class="ico" style="width:30px;height:30px;margin:0 auto;color:var(--muted);">{ICONS['camera_off']}</div>
-            <div class="pd-title">Rasmlarni shu yerga bosing yoki tashlang</div>
-            <div class="pd-sub">1 dan 10 tagacha, har biri 10MB gacha</div>
+            <div class="pd-title">{t(lang,'ej_photo_drop_title')}</div>
+            <div class="pd-sub">{t(lang,'ej_photo_drop_sub')}</div>
           </div>
           <input type="file" id="photoInput" accept="image/*" multiple hidden>
           <div class="photo-preview" id="photoPreview"></div>
 
-          <div class="form-section-title">{icon('coin', 17)} E'lon turi</div>
+          <div class="form-section-title">{icon('coin', 17)} {t(lang,'ej_section_type')}</div>
           <div class="type-toggle">
             <label class="type-option active" id="typeFree">
               <input type="radio" name="listing_type" value="free" checked>
-              <div class="to-title">{icon('sparkle', 14)} Bepul</div>
-              <div class="to-desc">Kanalga bir marta joylanadi, navbat asosida ko'rib chiqiladi.</div>
+              <div class="to-title">{icon('sparkle', 14)} {t(lang,'ej_type_free_title')}</div>
+              <div class="to-desc">{t(lang,'ej_type_free_desc')}</div>
             </label>
             <label class="type-option" id="typePaid">
               <input type="radio" name="listing_type" value="paid">
-              <div class="to-title">{icon('bolt', 14)} Pullik — {price:,} so'm</div>
-              <div class="to-desc">Uyingiz topshirilguncha (kamida 7 kun) doim TOP'da — tezroq va ko'proq ko'rinadi.</div>
+              <div class="to-title">{icon('bolt', 14)} {t(lang,'ej_type_paid_title', price=f'{price:,}')}</div>
+              <div class="to-desc">{t(lang,'ej_type_paid_desc')}</div>
             </label>
           </div>
 
           <div class="pay-panel" id="payPanel">
             <div class="card-box">
-              <div><div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:3px;">TO'LOV KARTASI</div><div class="cb-num" id="cardNumText">{card_grouped or "—"}</div></div>
-              <button type="button" onclick="copyCard()">{icon('copy', 12)} Nusxalash</button>
+              <div><div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:3px;">{t(lang,'ej_pay_card_label')}</div><div class="cb-num" id="cardNumText">{card_grouped or "—"}</div></div>
+              <button type="button" onclick="copyCard()">{icon('copy', 12)} {t(lang,'ej_pay_copy')}</button>
             </div>
-            <div class="form-hint" style="margin-bottom:10px;">Yuqoridagi kartaga <b>{price:,} so'm</b> o'tkazing, so'ng chek skrinshotini yuklang.</div>
+            <div class="form-hint" style="margin-bottom:10px;">{t(lang,'ej_pay_hint', price=f'<b>{price:,}</b>')}</div>
             <div class="photo-drop" id="receiptDrop" style="padding:16px;">
-              <div class="pd-title" id="receiptLabel">To'lov chekini yuklash</div>
-              <div class="pd-sub">Skrinshot yoki fotosurat</div>
+              <div class="pd-title" id="receiptLabel">{t(lang,'ej_receipt_title')}</div>
+              <div class="pd-sub">{t(lang,'ej_receipt_sub')}</div>
             </div>
             <input type="file" id="receiptInput" accept="image/*" hidden>
           </div>
 
-          <button type="submit" class="form-submit-btn" id="submitBtn">{icon('send', 16)} E'lonni yuborish</button>
-          <div class="form-hint" style="text-align:center;margin-top:10px;">Yuborish orqali siz e'lon ma'lumotlarining to'g'riligini tasdiqlaysiz.</div>
+          <button type="submit" class="form-submit-btn" id="submitBtn">{icon('send', 16)} {t(lang,'ej_submit_btn')}</button>
+          <div class="form-hint" style="text-align:center;margin-top:10px;">{t(lang,'ej_submit_note')}</div>
         </form>
       </div>
 
       <div id="formSuccess" class="form-success-screen" style="display:none;">
         <div class="fs-icon">{icon('check_circle', 34)}</div>
-        <h2>E'loningiz qabul qilindi!</h2>
-        <p id="successText">Tez orada administrator tekshirib, tasdiqlaydi — shundan so'ng Telegram kanalimizda va saytda chiqadi.</p>
-        <a href="/" class="btn-cta" style="display:inline-flex;margin-top:20px;">Bosh sahifaga qaytish</a>
+        <h2>{t(lang,'ej_success_title')}</h2>
+        <p id="successText"></p>
+        <a href="/" class="btn-cta" style="display:inline-flex;margin-top:20px;">{t(lang,'back_home_btn')}</a>
       </div>
     </div>
   </div>
 </main>
 
 <div style="height:60px;"></div>
-{render_footer()}
+{render_footer(lang)}
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -1701,21 +1965,22 @@ form.addEventListener('submit', async function(e) {{
   errorBox.classList.remove('show');
 
   if (selectedPhotos.length === 0) {{
-    errorBox.textContent = "Kamida 1 ta uy rasmini yuklang.";
+    errorBox.textContent = "{t(lang,'ej_err_no_photo')}";
     errorBox.classList.add('show');
     window.scrollTo({{ top: photoDrop.offsetTop - 100, behavior: 'smooth' }});
     return;
   }}
   const isPaid = typePaid.classList.contains('active');
   if (isPaid && !receiptFile) {{
-    errorBox.textContent = "Pullik e'lon uchun to'lov chekining skrinshotini yuklang.";
+    errorBox.textContent = "{t(lang,'ej_err_no_receipt')}";
     errorBox.classList.add('show');
     return;
   }}
 
   const submitBtn = document.getElementById('submitBtn');
+  const submitBtnHtml = submitBtn.innerHTML;
   submitBtn.disabled = true;
-  submitBtn.textContent = "Yuborilmoqda...";
+  submitBtn.textContent = "{t(lang,'ej_submitting')}";
 
   const fd = new FormData(form);
   selectedPhotos.forEach(f => fd.append('photos', f));
@@ -1727,21 +1992,20 @@ form.addEventListener('submit', async function(e) {{
     if (res.ok && data.ok) {{
       document.getElementById('formStep').style.display = 'none';
       document.getElementById('formSuccess').style.display = 'block';
-      document.getElementById('successText').textContent =
-        `Tez orada administrator tekshirib, tasdiqlaydi — shundan so'ng Telegram kanalimizda va saytda chiqadi. E'lon raqami: #${{data.listing_id}}`;
+      document.getElementById('successText').textContent = "{t(lang,'ej_success_text', id='%ID%')}".replace('%ID%', data.listing_id);
       window.scrollTo({{ top: 0, behavior: 'smooth' }});
     }} else {{
-      errorBox.textContent = data.detail || "Xatolik yuz berdi. Qaytadan urinib ko'ring.";
+      errorBox.textContent = data.detail || "{t(lang,'ej_err_generic')}";
       errorBox.classList.add('show');
       submitBtn.disabled = false;
-      submitBtn.innerHTML = '{icon("send", 16)} E\\'lonni yuborish';
+      submitBtn.innerHTML = submitBtnHtml;
       window.scrollTo({{ top: errorBox.offsetTop - 100, behavior: 'smooth' }});
     }}
   }} catch (err) {{
-    errorBox.textContent = "Internet aloqasida muammo. Qaytadan urinib ko'ring.";
+    errorBox.textContent = "{t(lang,'ej_err_network')}";
     errorBox.classList.add('show');
     submitBtn.disabled = false;
-    submitBtn.innerHTML = '{icon("send", 16)} E\\'lonni yuborish';
+    submitBtn.innerHTML = submitBtnHtml;
   }}
 }});
 </script>
@@ -2388,8 +2652,9 @@ def dashboard_page(user: str = Depends(check_auth)):
 
 
 @app.get("/xarita", response_class=HTMLResponse)
-def public_map_page():
-    return PUBLIC_MAP_HTML
+def public_map_page(request: Request):
+    lang = get_lang(request)
+    return PUBLIC_MAP_HTML.replace("__LANG__", lang)
 
 
 @app.get("/tanla-joy", response_class=HTMLResponse)
@@ -2850,7 +3115,7 @@ setInterval(loadInquiries, 30000);
 # ============================= OMMAVIY XARITA HTML (parolsiz) =============================
 
 PUBLIC_MAP_HTML = """<!DOCTYPE html>
-<html lang="uz">
+<html lang="__LANG__">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -2959,7 +3224,7 @@ PUBLIC_MAP_HTML = """<!DOCTYPE html>
 </style>
 </head>
 <body>
-<div id="loading"><div class="spinner"></div><div>Xarita yuklanmoqda...</div></div>
+<div id="loading"><div class="spinner"></div><div data-i18n="loading">Xarita yuklanmoqda...</div></div>
 
 <div id="topbar">
   <div id="topbar-left">
@@ -2971,61 +3236,87 @@ PUBLIC_MAP_HTML = """<!DOCTYPE html>
   </div>
   <button id="filter-btn" onclick="toggleFilters(true)">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
-    Filtr <span class="fcount" id="filterCount">0</span>
+    <span data-i18n="filter_btn">Filtr</span> <span class="fcount" id="filterCount">0</span>
   </button>
 </div>
 
 <div id="map"></div>
 
-<button id="locate-btn" title="Mening joylashuvim" onclick="locateMe()">
+<button id="locate-btn" data-i18n-title="locate_title" title="Mening joylashuvim" onclick="locateMe()">
   <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
 </button>
-<button id="legend-btn" title="Belgilar" onclick="toggleLegend()">\U0001F3F7\ufe0f</button>
+<button id="legend-btn" data-i18n-title="legend_title" title="Belgilar" onclick="toggleLegend()">\U0001F3F7\ufe0f</button>
 <div id="legend-box">
-  <div class="legend-row"><span class="dot" style="background:#ff5470;"></span> Egasidan (oddiy)</div>
-  <div class="legend-row"><span class="dot" style="background:#16a34a;"></span> Tasdiqlangan</div>
-  <div class="legend-row"><span class="dot" style="background:#2563eb;"></span> Subarenda</div>
-  <div class="legend-row"><span class="dot" style="background:#d97706;"></span> Premium</div>
-  <div class="legend-row" style="margin-top:6px;border-top:1px solid var(--map-line);padding-top:6px;">\u26a1 TOP \u2014 pullik e'lon</div>
+  <div class="legend-row"><span class="dot" style="background:#ff5470;"></span> <span data-i18n="cat_egadan">Egasidan (oddiy)</span></div>
+  <div class="legend-row"><span class="dot" style="background:#16a34a;"></span> <span data-i18n="cat_tasdiqlangan_plain">Tasdiqlangan</span></div>
+  <div class="legend-row"><span class="dot" style="background:#2563eb;"></span> <span data-i18n="cat_subarenda_plain">Subarenda</span></div>
+  <div class="legend-row"><span class="dot" style="background:#d97706;"></span> <span data-i18n="cat_premium_plain">Premium</span></div>
+  <div class="legend-row" style="margin-top:6px;border-top:1px solid var(--map-line);padding-top:6px;">\u26a1 <span data-i18n="legend_top">TOP \u2014 pullik e'lon</span></div>
 </div>
 
 <div id="filter-overlay" onclick="toggleFilters(false)"></div>
 <div id="filter-panel">
-  <div class="fp-head"><h2>\U0001F50D Filtr</h2><button class="fp-close" onclick="toggleFilters(false)">\u2715</button></div>
+  <div class="fp-head"><h2>\U0001F50D <span data-i18n="filter_btn">Filtr</span></h2><button class="fp-close" onclick="toggleFilters(false)">\u2715</button></div>
 
   <div class="fp-section">
-    <div class="fp-label">Xonalar soni</div>
+    <div class="fp-label" data-i18n="rooms_label">Xonalar soni</div>
     <select class="fp-select" id="fXona">
-      <option value="">Farqi yo'q</option>
-      <option value="1">1 xona</option>
-      <option value="2">2 xona</option>
-      <option value="3">3 xona</option>
-      <option value="4">4+ xona</option>
+      <option value="" data-i18n="rooms_any">Farqi yo'q</option>
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4+</option>
     </select>
   </div>
 
   <div class="fp-section">
-    <div class="fp-label">Toifa</div>
+    <div class="fp-label" data-i18n="category_label">Toifa</div>
     <div class="fp-chip-row" id="categoryChips">
-      <div class="fp-chip active" data-cat=""><span class="dot" style="background:#94a3b8;"></span> Barchasi</div>
-      <div class="fp-chip" data-cat="egadan"><span class="dot" style="background:#ff5470;"></span> Egasidan</div>
-      <div class="fp-chip" data-cat="tasdiqlangan"><span class="dot" style="background:#16a34a;"></span> Tasdiqlangan</div>
-      <div class="fp-chip" data-cat="subarenda"><span class="dot" style="background:#2563eb;"></span> Subarenda</div>
-      <div class="fp-chip" data-cat="premium"><span class="dot" style="background:#d97706;"></span> Premium</div>
+      <div class="fp-chip active" data-cat=""><span class="dot" style="background:#94a3b8;"></span> <span data-i18n="cat_all">Barchasi</span></div>
+      <div class="fp-chip" data-cat="egadan"><span class="dot" style="background:#ff5470;"></span> <span data-i18n="cat_egadan_plain">Egasidan</span></div>
+      <div class="fp-chip" data-cat="tasdiqlangan"><span class="dot" style="background:#16a34a;"></span> <span data-i18n="cat_tasdiqlangan_plain">Tasdiqlangan</span></div>
+      <div class="fp-chip" data-cat="subarenda"><span class="dot" style="background:#2563eb;"></span> <span data-i18n="cat_subarenda_plain">Subarenda</span></div>
+      <div class="fp-chip" data-cat="premium"><span class="dot" style="background:#d97706;"></span> <span data-i18n="cat_premium_plain">Premium</span></div>
     </div>
   </div>
 
   <div class="fp-section">
     <div class="fp-toggle-row">
-      <div style="font-size:13.5px;font-weight:700;">\u26a1 Faqat TOP e'lonlar</div>
+      <div style="font-size:13.5px;font-weight:700;">\u26a1 <span data-i18n="top_only">Faqat TOP e'lonlar</span></div>
       <label class="switch"><input type="checkbox" id="fTopOnly"><span class="slider"></span></label>
     </div>
   </div>
 
-  <button class="fp-apply" onclick="applyFilters()">Qo'llash</button>
+  <button class="fp-apply" onclick="applyFilters()" data-i18n="apply_btn">Qo'llash</button>
 </div>
 
 <script>
+const MAP_LANG = "__LANG__";
+const MI18N = {
+  uz: { page_title: "Ijaraga Uylar — Interaktiv xarita", loading: "Xarita yuklanmoqda...", filter_btn: "Filtr", locate_title: "Mening joylashuvim", legend_title: "Belgilar",
+        cat_egadan: "Egasidan (oddiy)", cat_egadan_plain: "Egasidan", cat_tasdiqlangan_plain: "Tasdiqlangan", cat_subarenda_plain: "Subarenda", cat_premium_plain: "Premium",
+        legend_top: "TOP \u2014 pullik e'lon", rooms_label: "Xonalar soni", rooms_any: "Farqi yo'q", category_label: "Toifa",
+        cat_all: "Barchasi", top_only: "Faqat TOP e'lonlar", apply_btn: "Qo'llash", count_suffix: "ta e'lon",
+        detail_btn: "Batafsil", channel_btn: "Kanalda", no_address: "Manzil ko'rsatilmagan", map_error: "\u26a0\ufe0f Xarita yuklanmadi. Internet aloqangizni tekshirib, sahifani qayta yuklang.",
+        locate_error: "Joylashuvni aniqlab bo'lmadi. Brauzer sozlamalarida ruxsat berilganini tekshiring." },
+  ru: { page_title: "Ijaraga Uylar \u2014 \u0418\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u0430\u044f \u043a\u0430\u0440\u0442\u0430", loading: "\u041a\u0430\u0440\u0442\u0430 \u0437\u0430\u0433\u0440\u0443\u0436\u0430\u0435\u0442\u0441\u044f...", filter_btn: "\u0424\u0438\u043b\u044c\u0442\u0440", locate_title: "\u041c\u043e\u0451 \u043c\u0435\u0441\u0442\u043e\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435", legend_title: "\u041e\u0431\u043e\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f",
+        cat_egadan: "\u041e\u0442 \u0445\u043e\u0437\u044f\u0438\u043d\u0430 (\u043e\u0431\u044b\u0447\u043d.)", cat_egadan_plain: "\u041e\u0442 \u0445\u043e\u0437\u044f\u0438\u043d\u0430", cat_tasdiqlangan_plain: "\u041f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e", cat_subarenda_plain: "\u0421\u0443\u0431\u0430\u0440\u0435\u043d\u0434\u0430", cat_premium_plain: "\u041f\u0440\u0435\u043c\u0438\u0443\u043c",
+        legend_top: "\u0422\u041e\u041f \u2014 \u043f\u043b\u0430\u0442\u043d\u043e\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", rooms_label: "\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u043a\u043e\u043c\u043d\u0430\u0442", rooms_any: "\u041d\u0435\u0432\u0430\u0436\u043d\u043e", category_label: "\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f",
+        cat_all: "\u0412\u0441\u0435", top_only: "\u0422\u043e\u043b\u044c\u043a\u043e \u0422\u041e\u041f \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", apply_btn: "\u041f\u0440\u0438\u043c\u0435\u043d\u0438\u0442\u044c", count_suffix: "\u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439",
+        detail_btn: "\u041f\u043e\u0434\u0440\u043e\u0431\u043d\u0435\u0435", channel_btn: "\u0412 \u043a\u0430\u043d\u0430\u043b\u0435", no_address: "\u0410\u0434\u0440\u0435\u0441 \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d", map_error: "\u26a0\ufe0f \u041a\u0430\u0440\u0442\u0430 \u043d\u0435 \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u043b\u0430\u0441\u044c. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0438\u043d\u0442\u0435\u0440\u043d\u0435\u0442-\u0441\u043e\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435 \u0438 \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u0443.",
+        locate_error: "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0438\u0442\u044c \u043c\u0435\u0441\u0442\u043e\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u044f \u0432 \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430\u0445 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0430." },
+  en: { page_title: "Ijaraga Uylar — Interactive Map", loading: "Loading map...", filter_btn: "Filter", locate_title: "My location", legend_title: "Legend",
+        cat_egadan: "From owner (regular)", cat_egadan_plain: "From owner", cat_tasdiqlangan_plain: "Verified", cat_subarenda_plain: "Sublease", cat_premium_plain: "Premium",
+        legend_top: "TOP \u2014 paid listing", rooms_label: "Rooms", rooms_any: "Any", category_label: "Category",
+        cat_all: "All", top_only: "TOP listings only", apply_btn: "Apply", count_suffix: "listings",
+        detail_btn: "Details", channel_btn: "On channel", no_address: "Address not provided", map_error: "\u26a0\ufe0f Map failed to load. Check your internet connection and reload the page.",
+        locate_error: "Couldn't determine your location. Check your browser's location permission." },
+};
+const ML = MI18N[MAP_LANG] || MI18N.uz;
+if (ML.page_title) document.title = ML.page_title;
+document.querySelectorAll('[data-i18n]').forEach(el => { if (ML[el.dataset.i18n]) el.textContent = ML[el.dataset.i18n]; });
+document.querySelectorAll('[data-i18n-title]').forEach(el => { if (ML[el.dataset.i18nTitle]) el.title = ML[el.dataset.i18nTitle]; });
+
 if (window.Telegram && window.Telegram.WebApp) {
   Telegram.WebApp.ready();
   Telegram.WebApp.expand();
@@ -3036,7 +3327,7 @@ function trackClick(listingId) {
 }
 
 const CATEGORY_COLORS = { egadan: '#ff5470', tasdiqlangan: '#16a34a', subarenda: '#2563eb', premium: '#d97706' };
-const CATEGORY_LABELS = { egadan: 'Egasidan', tasdiqlangan: '\u2705 Tasdiqlangan', subarenda: '\U0001F3E2 Subarenda', premium: '\U0001F48E Premium' };
+const CATEGORY_LABELS = { egadan: ML.cat_egadan_plain || 'Egasidan', tasdiqlangan: '\u2705 ' + ML.cat_tasdiqlangan_plain, subarenda: '\U0001F3E2 ' + ML.cat_subarenda_plain, premium: '\U0001F48E ' + ML.cat_premium_plain };
 
 let map, cluster, allListings = [], userMarker = null;
 
@@ -3069,11 +3360,11 @@ function makeMarker(l) {
     ? `<img class="pcard-photo" src="${l.photo}" loading="lazy">`
     : `<div class="pcard-photo-empty">\U0001F3E0</div>`;
   const badges = `<div class="pcard-badges">${l.is_paid ? '<span class="pcard-badge" style="background:#fff2e0;color:#c2650b;">\u26a1 TOP</span>' : ''}${CATEGORY_LABELS[cat] ? `<span class="pcard-badge" style="background:#eef2f7;color:#334155;">${CATEGORY_LABELS[cat]}</span>` : ''}</div>`;
-  const detailBtn = `<a href="${l.detail_link}" target="_blank" class="pcard-btn-primary">Batafsil</a>`;
-  const chanBtn = l.post_link ? `<a href="${l.post_link}" target="_blank" class="pcard-btn-secondary" onclick="trackClick(${l.id})">Kanalda</a>` : '';
+  const detailBtn = `<a href="${l.detail_link}" target="_blank" class="pcard-btn-primary">${ML.detail_btn}</a>`;
+  const chanBtn = l.post_link ? `<a href="${l.post_link}" target="_blank" class="pcard-btn-secondary" onclick="trackClick(${l.id})">${ML.channel_btn}</a>` : '';
   marker.bindPopup(
     `${photoHtml}<div class="pcard-body">${badges}` +
-    `<div class="pcard-title">${l.manzil || l.moljal || 'Manzil ko\\'rsatilmagan'}</div>` +
+    `<div class="pcard-title">${l.manzil || l.moljal || ML.no_address}</div>` +
     `<div class="pcard-meta">\U0001F6CF ${l.xona || '-'} \u00b7 \U0001F465 ${(l.kimlarga||'').slice(0,20) || '-'}</div>` +
     `<div class="pcard-price">${l.narx || ''}</div>` +
     `<div class="pcard-actions">${detailBtn}${chanBtn}</div></div>`
@@ -3084,7 +3375,7 @@ function makeMarker(l) {
 function renderMarkers(listings) {
   cluster.clearLayers();
   listings.forEach(l => cluster.addLayer(makeMarker(l)));
-  document.getElementById('count-badge').textContent = listings.length + " ta e'lon";
+  document.getElementById('count-badge').textContent = listings.length + " " + ML.count_suffix;
 }
 
 function applyFilters() {
@@ -3115,7 +3406,7 @@ function locateMe() {
     if (userMarker) map.removeLayer(userMarker);
     userMarker = L.circleMarker([latitude, longitude], { radius: 8, fillColor: '#4285F4', color: '#fff', weight: 3, fillOpacity: 1 }).addTo(map);
     map.setView([latitude, longitude], 14);
-  }, () => alert("Joylashuvni aniqlab bo'lmadi. Brauzer sozlamalarida ruxsat berilganini tekshiring."));
+  }, () => alert(ML.locate_error));
 }
 
 async function init() {
@@ -3142,7 +3433,7 @@ async function init() {
 
     document.getElementById('loading').style.display = 'none';
   } catch (err) {
-    document.getElementById('loading').innerHTML = "⚠️ Xarita yuklanmadi. Internet aloqangizni tekshirib, sahifani qayta yuklang.";
+    document.getElementById('loading').innerHTML = ML.map_error;
   }
 }
 
