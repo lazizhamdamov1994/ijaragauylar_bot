@@ -867,6 +867,36 @@ SITE_CSS = """
   }
   .sidebar-cta:hover { background: var(--brand-dark); }
   .sidebar-note { font-size: 12.5px; color: var(--muted); text-align: center; }
+
+  .phone-lock { display: none; margin: 16px 0 4px; }
+  .phone-lock.open { display: block; animation: phoneLockIn .25s ease; }
+  @keyframes phoneLockIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  .phone-lock-text { font-size: 13px; color: var(--ink-soft); text-align: center; margin-bottom: 14px; line-height: 1.5; }
+  .credit-card {
+    background: linear-gradient(135deg, #1B2436 0%, #101826 60%, #2A2117 100%);
+    border-radius: 16px; padding: 18px 20px; color: #fff; box-shadow: var(--shadow-lg);
+    position: relative; overflow: hidden;
+  }
+  .credit-card::after {
+    content: ""; position: absolute; top: -40%; right: -20%; width: 180px; height: 180px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(214,150,11,0.28) 0%, transparent 70%);
+  }
+  .credit-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; position: relative; z-index: 1; }
+  .credit-card-chip { width: 34px; height: 24px; border-radius: 5px; background: linear-gradient(135deg, #E8C766, #B8912E); display: block; }
+  .credit-card-brand { font-size: 10.5px; font-weight: 800; letter-spacing: 1.2px; color: #C9CDD8; }
+  .credit-card-number {
+    font-family: 'Courier New', monospace; font-size: 18px; font-weight: 700; letter-spacing: 2.5px;
+    margin-bottom: 20px; position: relative; z-index: 1;
+  }
+  .credit-card-bottom { display: flex; align-items: flex-end; justify-content: space-between; position: relative; z-index: 1; }
+  .credit-card-label { font-size: 9px; font-weight: 700; letter-spacing: .8px; color: #8890A0; text-transform: uppercase; margin-bottom: 3px; }
+  .credit-card-holder { font-size: 13px; font-weight: 700; letter-spacing: .4px; }
+  .credit-card-amount { font-size: 15px; font-weight: 800; color: var(--gold); }
+  .paywall-cta {
+    display: block; text-align: center; margin-top: 14px; padding: 13px; border-radius: var(--radius-pill);
+    background: var(--brand); color: #fff; font-weight: 700; font-size: 14px; transition: background .15s;
+  }
+  .paywall-cta:hover { background: var(--brand-dark); }
   .sidebar-share { display: flex; gap: 8px; margin-top: 18px; }
   .sidebar-share button {
     flex: 1; padding: 11px; border-radius: var(--radius); border: 1px solid var(--line); background: #fff;
@@ -1276,6 +1306,14 @@ TRANSLATIONS = {
         "en": "Only users with an active Limit can see the owner's phone number.",
     },
     "sidebar_note_via_bot": {"uz": "Yoki bot orqali ko'ring", "ru": "\u0418\u043b\u0438 \u043f\u043e\u0441\u043c\u043e\u0442\u0440\u0438\u0442\u0435 \u0447\u0435\u0440\u0435\u0437 \u0431\u043e\u0442\u0430", "en": "Or view via the bot"},
+    "sidebar_cta_view_phone": {"uz": "Uy egasi raqamini ko'rish", "ru": "\u041f\u043e\u0441\u043c\u043e\u0442\u0440\u0435\u0442\u044c \u043d\u043e\u043c\u0435\u0440 \u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0430", "en": "View owner's phone number"},
+    "paywall_no_limit_msg": {
+        "uz": "Kechirasiz, uy egasi raqamini ko'rish uchun sizda Limit mavjud emas. Uy egalari raqamlarini ko'rish uchun mana bu kartaga {price} to'lov qiling:",
+        "ru": "\u0418\u0437\u0432\u0438\u043d\u0438\u0442\u0435, \u0443 \u0432\u0430\u0441 \u043d\u0435\u0442 \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0433\u043e \u041b\u0438\u043c\u0438\u0442\u0430 \u0434\u043b\u044f \u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u0430 \u043d\u043e\u043c\u0435\u0440\u0430 \u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0430. \u0427\u0442\u043e\u0431\u044b \u0432\u0438\u0434\u0435\u0442\u044c \u043d\u043e\u043c\u0435\u0440\u0430 \u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0435\u0432, \u043f\u0435\u0440\u0435\u0432\u0435\u0434\u0438\u0442\u0435 {price} \u043d\u0430 \u044d\u0442\u0443 \u043a\u0430\u0440\u0442\u0443:",
+        "en": "Sorry, you don't have an active Limit to view the owner's phone number. To see owners' phone numbers, pay {price} to this card:",
+    },
+    "card_brand": {"uz": "TO'LOV KARTASI", "ru": "\u041f\u041b\u0410\u0422\u0401\u0416\u041d\u0410\u042f \u041a\u0410\u0420\u0422\u0410", "en": "PAYMENT CARD"},
+    "card_holder_label": {"uz": "Karta egasi", "ru": "\u0414\u0435\u0440\u0436\u0430\u0442\u0435\u043b\u044c \u043a\u0430\u0440\u0442\u044b", "en": "Card holder"},
 
     # ---- SEO: sahifa sarlavhalari va tavsiflari (har bir til uchun alohida) ----
     "seo_home_title": {
@@ -1795,15 +1833,37 @@ def listing_detail(request: Request, listing_id: int):
     has_limit = False
     if tg_user:
         has_limit, _limit_expire = is_web_subscribed(tg_user["uid"])
+
     if has_limit:
         phone_cta_html = f'<a href="tel:{esc_html(l["telefon"])}" class="sidebar-cta">{icon("phone", 16)} {esc_html(l["telefon"])}</a>'
         sidebar_note_html = f'<div class="sidebar-note">{t(lang,"sidebar_note_limit_active")}</div>'
-    elif tg_user:
-        phone_cta_html = f'<a href="/kabinet/limit?listing_id={l["id"]}" class="sidebar-cta">{icon("bolt", 16)} {t(lang,"sidebar_cta_buy_limit")}</a>'
-        sidebar_note_html = f'<div class="sidebar-note">{t(lang,"sidebar_note_web_limit")} <a href="{bot_link}" target="_blank">{t(lang,"sidebar_note_via_bot")}</a></div>'
     else:
-        phone_cta_html = f'<a href="/login?next=/uy/{l["id"]}" class="sidebar-cta">{icon("phone", 16)} {t(lang,"sidebar_cta_login")}</a>'
-        sidebar_note_html = f'<div class="sidebar-note">{t(lang,"sidebar_note_web_limit")} <a href="{bot_link}" target="_blank">{t(lang,"sidebar_note_via_bot")}</a></div>'
+        # Limiti yo'q (kirgan yoki kirmagan, farqi yo'q) - tugma har doim
+        # oddiy "Uy egasi raqamini ko'rish" deb turadi, bosilgandagina
+        # to'lov taklifi (kartasi bilan) sahifadan chiqmasdan ochiladi.
+        buy_next = f"/kabinet/limit?listing_id={l['id']}"
+        buy_link = buy_next if tg_user else f"/login?next={urllib.parse.quote(buy_next, safe='')}"
+        raw_card = current_card_number()
+        card_digits = re.sub(r"\D", "", raw_card)
+        card_grouped = " ".join(card_digits[i:i + 4] for i in range(0, len(card_digits), 4)) if card_digits else ""
+        price = current_subscription_price()
+        phone_cta_html = (
+            f'<button type="button" class="sidebar-cta" style="width:100%;border:none;cursor:pointer;" '
+            f'onclick="document.getElementById(\'phoneLock\').classList.add(\'open\');this.style.display=\'none\';">'
+            f'{icon("phone", 16)} {t(lang,"sidebar_cta_view_phone")}</button>'
+            f'<div id="phoneLock" class="phone-lock">'
+            f'<p class="phone-lock-text">{t(lang,"paywall_no_limit_msg", price=f"{price:,} " + t(lang,"sum"))}</p>'
+            f'<div class="credit-card">'
+            f'<div class="credit-card-top"><span class="credit-card-chip"></span><span class="credit-card-brand">{t(lang,"card_brand")}</span></div>'
+            f'<div class="credit-card-number">{esc_html(card_grouped) or "—"}</div>'
+            f'<div class="credit-card-bottom">'
+            f'<div><div class="credit-card-label">{t(lang,"card_holder_label")}</div><div class="credit-card-holder">{esc_html(CARD_HOLDER) or SITE_NAME}</div></div>'
+            f'<div class="credit-card-amount">{price:,} {t(lang,"sum")}</div>'
+            f'</div></div>'
+            f'<a href="{buy_link}" class="paywall-cta">{t(lang,"kb_buy_limit")} →</a>'
+            f'</div>'
+        )
+        sidebar_note_html = ""
 
     paid_badge = f'<span class="badge paid">{icon("bolt", 13)} {t(lang,"badge_top")}</span>' if (l.get("price_charged") or 0) > 0 else ""
     cat = l.get("category")
