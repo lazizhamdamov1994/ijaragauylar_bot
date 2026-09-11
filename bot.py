@@ -993,6 +993,8 @@ def channel_keyboard(listing_id: int, bot_username: str, latitude: float = None,
     rows = [
         [InlineKeyboardButton("\U0001F4DE Uy egasi raqami", url=call_link)],
     ]
+    if DASHBOARD_URL and DASHBOARD_URL.startswith("https://"):
+        rows.append([InlineKeyboardButton("\U0001F310 Saytda batafsil ko'rish", url=f"{DASHBOARD_URL}/uy/{listing_id}")])
     if latitude and longitude:
         map_link = f"https://www.google.com/maps/search/?api=1&query={latitude},{longitude}"
         rows.append([InlineKeyboardButton("\U0001F5FA Lokatsiya", url=map_link),

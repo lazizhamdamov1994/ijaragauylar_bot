@@ -17,7 +17,9 @@ Ishga tushirish:
     uvicorn dashboard:app --host 0.0.0.0 --port 8001
 """
 import asyncio
+import base64
 import hashlib
+import hmac
 import logging
 import os
 import re
@@ -56,6 +58,14 @@ CARD_NUMBER = os.getenv("CARD_NUMBER", "")
 CARD_HOLDER = os.getenv("CARD_HOLDER", "")
 MAX_WEB_LISTING_PHOTOS = 10
 MAX_WEB_SUBMISSIONS_PER_IP_PER_DAY = 3
+
+# Telegram orqali kirish (shaxsiy kabinet) uchun - sessiya cookie'sini
+# imzolash kaliti. Alohida .env o'zgaruvchisi shart emas: BOT_TOKEN allaqachon
+# sir sifatida saqlanadi, shundan chiqarilgan xesh yetarlicha bashorat
+# qilib bo'lmaydigan kalit beradi. Xohlasa, SESSION_SECRET orqali qayta yozish mumkin.
+SESSION_SECRET = os.getenv("SESSION_SECRET") or hashlib.sha256((BOT_TOKEN + ":session-v1").encode()).hexdigest()
+SESSION_COOKIE = "tg_session"
+SESSION_MAX_AGE = 90 * 24 * 3600
 
 app = FastAPI(title=SITE_NAME, docs_url=None, redoc_url=None, openapi_url=None)
 security = HTTPBasic()
@@ -117,6 +127,109 @@ def db():
 
 def now_str():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def safe_parse_dt(s):
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return None
+
+
+# ============================= TELEGRAM ORQALI KIRISH (shaxsiy kabinet) =============================
+#
+# Telegram Login Widget (https://core.telegram.org/widgets/login) botning
+# domeniga (@BotFather -> /setdomain) bog'lanadi. Foydalanuvchi vidjetda
+# "Log in with Telegram" bosgach, Telegram uni id/ism/username/auth_date va
+# shu ma'lumotlarning BOT_TOKEN bilan hisoblangan HMAC-SHA256 xeshi (hash)
+# bilan birga /auth/telegram-callback ga qaytaradi - biz shu xeshni QAYTA
+# hisoblab, mos kelishini tekshiramiz (soxtalashtirib bo'lmaydi, chunki
+# BOT_TOKEN faqat bizda va Telegram serverida bor). Shundan keyingina
+# o'zimiz imzolagan xavfsiz cookie o'rnatiladi - parol/sessiya bazasi shart emas.
+
+def verify_telegram_auth(params: dict) -> bool:
+    if not BOT_TOKEN:
+        return False
+    check_hash = params.get("hash")
+    if not check_hash:
+        return False
+    data = {k: v for k, v in params.items() if k not in ("hash", "next")}
+    data_check_string = "\n".join(f"{k}={data[k]}" for k in sorted(data.keys()))
+    secret_key = hashlib.sha256(BOT_TOKEN.encode()).digest()
+    computed = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(computed, check_hash):
+        return False
+    try:
+        auth_date = int(data.get("auth_date", 0))
+    except (TypeError, ValueError):
+        return False
+    if time.time() - auth_date > 86400:
+        return False
+    return True
+
+
+def create_session_token(uid: int, first_name: str, username: str) -> str:
+    payload = {"uid": uid, "fn": first_name or "", "un": username or "", "iat": int(time.time())}
+    raw = _json.dumps(payload, separators=(",", ":")).encode()
+    b64 = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+    sig = hmac.new(SESSION_SECRET.encode(), b64.encode(), hashlib.sha256).hexdigest()
+    return f"{b64}.{sig}"
+
+
+def verify_session_token(token: str):
+    try:
+        b64, sig = token.rsplit(".", 1)
+        expected = hmac.new(SESSION_SECRET.encode(), b64.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected):
+            return None
+        pad = "=" * (-len(b64) % 4)
+        payload = _json.loads(base64.urlsafe_b64decode(b64 + pad))
+        if time.time() - payload.get("iat", 0) > SESSION_MAX_AGE:
+            return None
+        return payload
+    except Exception:
+        return None
+
+
+def get_current_tg_user(request: Request):
+    token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        return None
+    return verify_session_token(token)
+
+
+def is_web_subscribed(uid: int):
+    """bot.py'dagi is_subscribed() bilan bir xil - 'subscriptions' jadvali
+    ikkalasi uchun ham umumiy, shuning uchun bot orqali sotib olingan Limit
+    saytda ham, aksincha ham darhol ko'rinadi."""
+    conn = db()
+    row = conn.execute(
+        "SELECT expire_at FROM subscriptions WHERE user_id = ? AND status = 'approved' ORDER BY expire_at DESC LIMIT 1",
+        (uid,),
+    ).fetchone()
+    conn.close()
+    if not row or not row["expire_at"]:
+        return False, None
+    expire = safe_parse_dt(row["expire_at"])
+    if expire is None:
+        return False, None
+    return expire > datetime.now(), row["expire_at"]
+
+
+def current_subscription_price() -> int:
+    try:
+        return int(get_setting("subscription_price", os.getenv("SUBSCRIPTION_PRICE", "20000")))
+    except (TypeError, ValueError):
+        return 20000
+
+
+def current_subscription_days() -> int:
+    try:
+        return int(get_setting("subscription_days", os.getenv("SUBSCRIPTION_DAYS", "30")))
+    except (TypeError, ValueError):
+        return 30
 
 
 def init_tracking_tables():
@@ -790,6 +903,32 @@ SITE_CSS = """
   #detail-map { height: 270px; border-radius: var(--radius-lg); margin-top: 22px; }
   .related-strip { margin-top: 56px; }
 
+  /* ============ SHAXSIY KABINET (/kabinet, /login) ============ */
+  .kb-card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 22px; box-shadow: var(--shadow-sm); margin-bottom: 18px; }
+  .kb-card-title { font-size: 15px; font-weight: 800; margin-bottom: 14px; }
+  .kb-limit-active { display: flex; align-items: center; gap: 8px; color: #1A7A3C; font-weight: 700; font-size: 14.5px; background: #EAF7EE; border-radius: var(--radius); padding: 12px 14px; }
+  .kb-table-wrap { overflow-x: auto; }
+  .kb-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .kb-table th { text-align: left; color: var(--muted); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .3px; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .kb-table td { padding: 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .kb-table td a { color: var(--brand); font-weight: 700; }
+  .kb-status { display: inline-block; padding: 3px 10px; border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 700; }
+  .kb-status.st-pending { background: var(--gold-light); color: var(--gold); }
+  .kb-status.st-approved { background: #EAF7EE; color: #1A7A3C; }
+  .kb-status.st-rejected { background: var(--brand-light); color: var(--brand-dark); }
+  .kb-status.st-expired { background: var(--bg-soft); color: var(--muted); }
+  .kb-empty { color: var(--muted); font-size: 13.5px; }
+  .kb-pay-box { background: var(--bg-soft); border-radius: var(--radius); padding: 18px; text-align: center; margin-bottom: 18px; }
+  .kb-pay-price { font-size: 22px; font-weight: 800; }
+  .kb-pay-price span { font-size: 13px; font-weight: 600; color: var(--muted); }
+  .kb-pay-card { margin-top: 10px; font-size: 15px; font-weight: 700; letter-spacing: .5px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .kb-pay-hint { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+  .kb-file-label { display: flex; align-items: center; gap: 8px; border: 1.5px dashed var(--line); border-radius: var(--radius); padding: 14px; font-size: 13.5px; font-weight: 600; cursor: pointer; color: var(--ink-soft); }
+  .kb-file-label:hover { border-color: var(--brand); }
+  .kb-file-label input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .kb-limit-success { display: none; align-items: center; gap: 6px; color: #1A7A3C; font-size: 13.5px; font-weight: 700; justify-content: center; padding: 10px 0; }
+  .kb-limit-error { display: none; color: var(--brand-dark); font-size: 13px; font-weight: 600; text-align: center; margin-top: 8px; }
+
   /* ============ E'LON JOYLASH FORMASI (/elon-joylash) ============ */
   .form-page-hero { background: linear-gradient(180deg, var(--brand-light) 0%, #fff 100%); padding: 40px 20px 60px; text-align: center; }
   .form-page-hero h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.6px; margin-bottom: 8px; }
@@ -1084,6 +1223,97 @@ TRANSLATIONS = {
     "sr_success_title": {"uz": "Arizangiz qabul qilindi!", "ru": "\u0412\u0430\u0448\u0430 \u0437\u0430\u044f\u0432\u043a\u0430 \u043f\u0440\u0438\u043d\u044f\u0442\u0430!", "en": "Your request was received!"},
     "sr_success_sub": {"uz": "Tez orada siz bilan bog'lanamiz.", "ru": "\u041c\u044b \u0441\u043a\u043e\u0440\u043e \u0441\u0432\u044f\u0436\u0435\u043c\u0441\u044f \u0441 \u0432\u0430\u043c\u0438.", "en": "We'll be in touch shortly."},
     "sr_error": {"uz": "Xatolik yuz berdi, qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Something went wrong, please try again."},
+
+    # ---- Telegram orqali kirish / shaxsiy kabinet ----
+    "nav_kabinet_title": {"uz": "Shaxsiy kabinet", "ru": "\u041b\u0438\u0447\u043d\u044b\u0439 \u043a\u0430\u0431\u0438\u043d\u0435\u0442", "en": "My account"},
+    "login_title": {"uz": "Telegram orqali kirish", "ru": "\u0412\u0445\u043e\u0434 \u0447\u0435\u0440\u0435\u0437 Telegram", "en": "Log in with Telegram"},
+    "login_desc": {
+        "uz": "Shaxsiy kabinetingizga kirish va Limit sotib olish uchun Telegram akkountingiz orqali tasdiqlang.",
+        "ru": "\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435 \u0447\u0435\u0440\u0435\u0437 \u0441\u0432\u043e\u0439 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 Telegram, \u0447\u0442\u043e\u0431\u044b \u0432\u043e\u0439\u0442\u0438 \u0432 \u043b\u0438\u0447\u043d\u044b\u0439 \u043a\u0430\u0431\u0438\u043d\u0435\u0442 \u0438 \u043a\u0443\u043f\u0438\u0442\u044c \u041b\u0438\u043c\u0438\u0442.",
+        "en": "Confirm with your Telegram account to access your dashboard and buy a Limit.",
+    },
+    "kabinet_title": {"uz": "Shaxsiy kabinet", "ru": "\u041b\u0438\u0447\u043d\u044b\u0439 \u043a\u0430\u0431\u0438\u043d\u0435\u0442", "en": "My account"},
+    "kb_limit_title": {"uz": "Limit holati", "ru": "\u0421\u0442\u0430\u0442\u0443\u0441 \u041b\u0438\u043c\u0438\u0442\u0430", "en": "Limit status"},
+    "kb_limit_active": {
+        "uz": "\u2705 Limit {date} sanagacha faol",
+        "ru": "\u2705 \u041b\u0438\u043c\u0438\u0442 \u0430\u043a\u0442\u0438\u0432\u0435\u043d \u0434\u043e {date}",
+        "en": "\u2705 Limit active until {date}",
+    },
+    "kb_buy_limit": {"uz": "Limit sotib olish", "ru": "\u041a\u0443\u043f\u0438\u0442\u044c \u041b\u0438\u043c\u0438\u0442", "en": "Buy a Limit"},
+    "kb_my_listings": {"uz": "Mening e'lonlarim", "ru": "\u041c\u043e\u0438 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", "en": "My listings"},
+    "kb_no_listings": {"uz": "Siz hali botda e'lon joylamagansiz.", "ru": "\u0412\u044b \u0435\u0449\u0451 \u043d\u0435 \u0440\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u043b\u0438 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u0447\u0435\u0440\u0435\u0437 \u0431\u043e\u0442\u0430.", "en": "You haven't posted a listing via the bot yet."},
+    "kb_col_addr": {"uz": "Manzil", "ru": "\u0410\u0434\u0440\u0435\u0441", "en": "Address"},
+    "kb_col_price": {"uz": "Narxi", "ru": "\u0426\u0435\u043d\u0430", "en": "Price"},
+    "kb_col_status": {"uz": "Holati", "ru": "\u0421\u0442\u0430\u0442\u0443\u0441", "en": "Status"},
+    "kb_col_date": {"uz": "Sana", "ru": "\u0414\u0430\u0442\u0430", "en": "Date"},
+    "status_pending": {"uz": "Ko'rib chiqilmoqda", "ru": "\u041d\u0430 \u0440\u0430\u0441\u0441\u043c\u043e\u0442\u0440\u0435\u043d\u0438\u0438", "en": "Under review"},
+    "status_approved": {"uz": "Faol", "ru": "\u0410\u043a\u0442\u0438\u0432\u043d\u043e", "en": "Active"},
+    "status_rejected": {"uz": "Rad etilgan", "ru": "\u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u043e", "en": "Rejected"},
+    "status_expired": {"uz": "Topshirilgan", "ru": "\u0421\u0434\u0430\u043d\u043e", "en": "Rented out"},
+    "kb_logout": {"uz": "Chiqish", "ru": "\u0412\u044b\u0439\u0442\u0438", "en": "Log out"},
+    "kb_back": {"uz": "\u2190 Kabinetga qaytish", "ru": "\u2190 \u041d\u0430\u0437\u0430\u0434 \u0432 \u043a\u0430\u0431\u0438\u043d\u0435\u0442", "en": "\u2190 Back to my account"},
+    "kb_pay_hint": {
+        "uz": "To'lovni shu kartaga o'tkazing, so'ng chek rasmini yuklang. Admin tekshirib, tasdiqlagach Limitingiz avtomatik faollashadi.",
+        "ru": "\u041f\u0435\u0440\u0435\u0432\u0435\u0434\u0438\u0442\u0435 \u043e\u043f\u043b\u0430\u0442\u0443 \u043d\u0430 \u044d\u0442\u0443 \u043a\u0430\u0440\u0442\u0443, \u0437\u0430\u0442\u0435\u043c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0441\u043a\u0440\u0438\u043d\u0448\u043e\u0442 \u0447\u0435\u043a\u0430. \u041f\u043e\u0441\u043b\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u0430\u0434\u043c\u0438\u043d\u043e\u043c \u041b\u0438\u043c\u0438\u0442 \u0430\u043a\u0442\u0438\u0432\u0438\u0440\u0443\u0435\u0442\u0441\u044f \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438.",
+        "en": "Transfer payment to this card, then upload a screenshot of the receipt. Your Limit activates automatically once an admin approves it.",
+    },
+    "kb_upload_receipt": {"uz": "To'lov chekini yuklash", "ru": "\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0447\u0435\u043a \u043e\u043f\u043b\u0430\u0442\u044b", "en": "Upload payment receipt"},
+    "kb_submit_receipt": {"uz": "Yuborish", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c", "en": "Submit"},
+    "kb_receipt_sent": {
+        "uz": "Chekingiz qabul qilindi! Admin tekshirgach, Telegram botingizga xabar keladi va Limit faollashadi.",
+        "ru": "\u0427\u0435\u043a \u043f\u0440\u0438\u043d\u044f\u0442! \u041f\u043e\u0441\u043b\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u0430\u0434\u043c\u0438\u043d\u043e\u043c \u0432\u0430\u043c \u043f\u0440\u0438\u0434\u0451\u0442 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u0432 Telegram-\u0431\u043e\u0442, \u0438 \u041b\u0438\u043c\u0438\u0442 \u0431\u0443\u0434\u0435\u0442 \u0430\u043a\u0442\u0438\u0432\u0438\u0440\u043e\u0432\u0430\u043d.",
+        "en": "Your receipt was received! You'll get a Telegram message once an admin approves it, and your Limit will activate.",
+    },
+    "kb_error": {"uz": "Xatolik yuz berdi, qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Something went wrong, please try again."},
+    "sum": {"uz": "so'm", "ru": "\u0441\u0443\u043c", "en": "UZS"},
+    "days": {"uz": "kun", "ru": "\u0434\u043d\u0435\u0439", "en": "days"},
+    "sidebar_cta_login": {"uz": "Telegram orqali kirib ko'rish", "ru": "\u0412\u043e\u0439\u0442\u0438 \u0447\u0435\u0440\u0435\u0437 Telegram, \u0447\u0442\u043e\u0431\u044b \u043f\u043e\u0441\u043c\u043e\u0442\u0440\u0435\u0442\u044c", "en": "Log in with Telegram to view"},
+    "sidebar_cta_buy_limit": {"uz": "Limit sotib olib ko'rish", "ru": "\u041a\u0443\u043f\u0438\u0442\u044c \u041b\u0438\u043c\u0438\u0442, \u0447\u0442\u043e\u0431\u044b \u043f\u043e\u0441\u043c\u043e\u0442\u0440\u0435\u0442\u044c", "en": "Buy a Limit to view"},
+    "sidebar_note_limit_active": {"uz": "Limitingiz faol \u2014 raqamga bemalol qo'ng'iroq qiling", "ru": "\u0412\u0430\u0448 \u041b\u0438\u043c\u0438\u0442 \u0430\u043a\u0442\u0438\u0432\u0435\u043d \u2014 \u0437\u0432\u043e\u043d\u0438\u0442\u0435 \u043f\u043e \u043d\u043e\u043c\u0435\u0440\u0443", "en": "Your Limit is active \u2014 feel free to call"},
+    "sidebar_note_web_limit": {
+        "uz": "Uy egasi raqamini faqat faol Limitga ega foydalanuvchilar ko'radi.",
+        "ru": "\u041d\u043e\u043c\u0435\u0440 \u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0430 \u0432\u0438\u0434\u044f\u0442 \u0442\u043e\u043b\u044c\u043a\u043e \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0438 \u0441 \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u043c \u041b\u0438\u043c\u0438\u0442\u043e\u043c.",
+        "en": "Only users with an active Limit can see the owner's phone number.",
+    },
+    "sidebar_note_via_bot": {"uz": "Yoki bot orqali ko'ring", "ru": "\u0418\u043b\u0438 \u043f\u043e\u0441\u043c\u043e\u0442\u0440\u0438\u0442\u0435 \u0447\u0435\u0440\u0435\u0437 \u0431\u043e\u0442\u0430", "en": "Or view via the bot"},
+
+    # ---- SEO: sahifa sarlavhalari va tavsiflari (har bir til uchun alohida) ----
+    "seo_home_title": {
+        "uz": "Ijaraga uy, kvartira \u2014 Toshkentda maklersiz ijara | Ijaraga Uylar Maklersiz",
+        "ru": "\u0410\u0440\u0435\u043d\u0434\u0430 \u043a\u0432\u0430\u0440\u0442\u0438\u0440\u044b \u0438 \u0434\u043e\u043c\u0430 \u0432 \u0422\u0430\u0448\u043a\u0435\u043d\u0442\u0435 \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432 | Ijaraga Uylar Maklersiz",
+        "en": "Apartments & Houses for Rent in Tashkent \u2014 No Agent Fees | Ijaraga Uylar Maklersiz",
+    },
+    "seo_home_desc": {
+        "uz": "Toshkentda ijaraga uy va kvartira \u2014 maklersiz, to'g'ridan-to'g'ri uy egasidan. Hozirda {active} ta faol e'lon: kunlik, uzoq muddatli, dacha va mehmonxona uchun xonalar.",
+        "ru": "\u0410\u0440\u0435\u043d\u0434\u0430 \u043a\u0432\u0430\u0440\u0442\u0438\u0440 \u0438 \u0434\u043e\u043c\u043e\u0432 \u0432 \u0422\u0430\u0448\u043a\u0435\u043d\u0442\u0435 \u043d\u0430\u043f\u0440\u044f\u043c\u0443\u044e \u043e\u0442 \u0441\u043e\u0431\u0441\u0442\u0432\u0435\u043d\u043d\u0438\u043a\u0430, \u0431\u0435\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438. \u0421\u0435\u0439\u0447\u0430\u0441 {active} \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439: \u043f\u043e\u0441\u0443\u0442\u043e\u0447\u043d\u043e, \u0434\u043e\u043b\u0433\u043e\u0441\u0440\u043e\u0447\u043d\u043e, \u0434\u0430\u0447\u0438 \u0438 \u0433\u043e\u0441\u0442\u0435\u0432\u044b\u0435 \u043a\u043e\u043c\u043d\u0430\u0442\u044b.",
+        "en": "Rent apartments and houses in Tashkent directly from the owner \u2014 zero agent commission. {active} active listings now: daily, long-term, cottages and guest rooms.",
+    },
+    "seo_listing_title": {"uz": "{addr} \u2014 ijaraga, {price} | Ijaraga Uylar", "ru": "{addr} \u2014 \u0430\u0440\u0435\u043d\u0434\u0430, {price} | Ijaraga Uylar", "en": "{addr} \u2014 for rent, {price} | Ijaraga Uylar"},
+    "seo_listing_desc": {
+        "uz": "{xona}. Narxi: {price}. Toshkentda maklersiz ijara \u2014 to'g'ridan-to'g'ri uy egasi bilan bog'laning, komissiya yo'q.",
+        "ru": "{xona}. \u0426\u0435\u043d\u0430: {price}. \u0410\u0440\u0435\u043d\u0434\u0430 \u0432 \u0422\u0430\u0448\u043a\u0435\u043d\u0442\u0435 \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432 \u2014 \u0441\u0432\u044f\u0436\u0438\u0442\u0435\u0441\u044c \u043d\u0430\u043f\u0440\u044f\u043c\u0443\u044e \u0441 \u0441\u043e\u0431\u0441\u0442\u0432\u0435\u043d\u043d\u0438\u043a\u043e\u043c, \u0431\u0435\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438.",
+        "en": "{xona}. Price: {price}. Commission-free rental in Tashkent \u2014 connect directly with the owner, no agent fees.",
+    },
+    "seo_subarenda_title": {
+        "uz": "Subarenda \u2014 uyingizni ishonchli boshqaruvga bering | Ijaraga Uylar",
+        "ru": "\u0421\u0443\u0431\u0430\u0440\u0435\u043d\u0434\u0430 \u2014 \u0434\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0432\u0430\u0448\u0435\u0439 \u043d\u0435\u0434\u0432\u0438\u0436\u0438\u043c\u043e\u0441\u0442\u044c\u044e | Ijaraga Uylar",
+        "en": "Sublease Program \u2014 Trusted Property Management | Ijaraga Uylar",
+    },
+    "seo_subarenda_desc": {
+        "uz": "Uyingizni bizga uzoq muddatli ijaraga bering \u2014 biz ijarachini topamiz, boshqaramiz va har oy kafolatlangan to'lovni amalga oshiramiz.",
+        "ru": "\u0421\u0434\u0430\u0439\u0442\u0435 \u043d\u0435\u0434\u0432\u0438\u0436\u0438\u043c\u043e\u0441\u0442\u044c \u043d\u0430\u043c \u0432 \u0434\u043e\u043b\u0433\u043e\u0441\u0440\u043e\u0447\u043d\u0443\u044e \u0441\u0443\u0431\u0430\u0440\u0435\u043d\u0434\u0443 \u2014 \u043c\u044b \u043d\u0430\u0439\u0434\u0451\u043c \u0430\u0440\u0435\u043d\u0434\u0430\u0442\u043e\u0440\u0430, \u0432\u043e\u0437\u044c\u043c\u0451\u043c \u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u043d\u0430 \u0441\u0435\u0431\u044f \u0438 \u043e\u0431\u0435\u0441\u043f\u0435\u0447\u0438\u043c \u0433\u0430\u0440\u0430\u043d\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u0443\u044e \u0435\u0436\u0435\u043c\u0435\u0441\u044f\u0447\u043d\u0443\u044e \u043e\u043f\u043b\u0430\u0442\u0443.",
+        "en": "Lease your property to us long-term \u2014 we find the tenant, manage everything, and pay you a guaranteed monthly amount.",
+    },
+    "seo_post_title": {
+        "uz": "E'lon joylash \u2014 uyingizni bepul reklama qiling | Ijaraga Uylar",
+        "ru": "\u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043e\u0431 \u0430\u0440\u0435\u043d\u0434\u0435 | Ijaraga Uylar",
+        "en": "Post a Rental Listing | Ijaraga Uylar",
+    },
+    "seo_post_desc": {
+        "uz": "Uyingizni ijaraga berasizmi? Veb-saytdan to'g'ridan-to'g'ri, ro'yxatdan o'tmasdan e'lon joylang. Moderatsiyadan so'ng Telegram kanalimiz va saytimizda chiqadi.",
+        "ru": "\u0421\u0434\u0430\u0451\u0442\u0435 \u0436\u0438\u043b\u044c\u0451 \u0432 \u0430\u0440\u0435\u043d\u0434\u0443? \u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u044f\u043c\u043e \u043d\u0430 \u0441\u0430\u0439\u0442\u0435, \u0431\u0435\u0437 \u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u0438. \u041f\u043e\u0441\u043b\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u043e\u043d\u043e \u043f\u043e\u044f\u0432\u0438\u0442\u0441\u044f \u0432 \u043d\u0430\u0448\u0435\u043c Telegram-\u043a\u0430\u043d\u0430\u043b\u0435 \u0438 \u043d\u0430 \u0441\u0430\u0439\u0442\u0435.",
+        "en": "Renting out your place? Post your listing directly on the site, no account needed. After moderation it appears on our Telegram channel and website.",
+    },
 }
 
 
@@ -1120,7 +1350,11 @@ def set_lang(lang: str, next: str = "/"):
     return resp
 
 
-def render_head(title: str, description: str, canonical_path: str, og_image: str = "", lang: str = DEFAULT_LANG) -> str:
+GOOGLE_SITE_VERIFICATION = os.getenv("GOOGLE_SITE_VERIFICATION", "")
+YANDEX_VERIFICATION = os.getenv("YANDEX_VERIFICATION", "")
+
+
+def render_head(title: str, description: str, canonical_path: str, og_image: str = "", lang: str = DEFAULT_LANG, noindex: bool = False) -> str:
     canonical = f"{SITE_URL}{canonical_path}" if SITE_URL else canonical_path
     if not og_image and SITE_URL:
         og_image = f"{SITE_URL}/logo.png"
@@ -1128,13 +1362,25 @@ def render_head(title: str, description: str, canonical_path: str, og_image: str
         f'<link rel="alternate" hreflang="{code}" href="{canonical}{"&" if "?" in canonical else "?"}lang={code}">'
         for code in SUPPORTED_LANGS
     )
+    # x-default: Google'ga qaysi tilga to'g'ri kelmagan qidiruvchilar uchun
+    # standart (o'zbek) versiyani ko'rsatishni bildiradi.
+    alt_links += f'<link rel="alternate" hreflang="x-default" href="{canonical}">'
+    robots_content = "noindex,nofollow" if noindex else "index,follow"
+    verification_tags = ""
+    if GOOGLE_SITE_VERIFICATION:
+        verification_tags += f'<meta name="google-site-verification" content="{GOOGLE_SITE_VERIFICATION}">'
+    if YANDEX_VERIFICATION:
+        verification_tags += f'<meta name="yandex-verification" content="{YANDEX_VERIFICATION}">'
     return f"""<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{title}</title>
 <meta name="description" content="{description}">
+<meta name="robots" content="{robots_content}">
 <link rel="canonical" href="{canonical}">
 {alt_links}
+{verification_tags}
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="{SITE_NAME}">
 <meta property="og:title" content="{title}">
 <meta property="og:description" content="{description}">
 <meta property="og:image" content="{og_image}">
@@ -1162,6 +1408,7 @@ def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
       <a href="{bot_link}" class="nav-link nav-icon-link" target="_blank" title="{t(lang,'nav_bot_title')}">{icon('phone', 16)}</a>
       <a href="{channel_link}" class="nav-link nav-icon-link" target="_blank" title="{t(lang,'nav_channel_title')}">{icon('send', 17)}</a>
       <a href="{INSTAGRAM_URL}" class="nav-link nav-icon-link" target="_blank" title="Instagram">{icon('instagram', 18)}</a>
+      <a href="/kabinet" class="nav-link nav-icon-link" title="{t(lang,'nav_kabinet_title')}">{icon('user', 18)}</a>
       {switcher}
       <a href="/elon-joylash" class="btn-cta">{icon('sparkle', 14)} {t(lang,'nav_post_cta')}</a>
     </nav>
@@ -1172,6 +1419,7 @@ def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
     <a href="/elon-joylash">{icon('sparkle', 17)} {t(lang,'mobile_post')}</a>
     <a href="/xarita">{icon('map', 17)} {t(lang,'nav_map_title')}</a>
     <a href="/subarenda">{icon('coin', 17)} {t(lang,'nav_subarenda')}</a>
+    <a href="/kabinet">{icon('user', 17)} {t(lang,'nav_kabinet_title')}</a>
     <a href="{channel_link}" target="_blank">{icon('send', 17)} {t(lang,'nav_channel_title')}</a>
     <a href="{INSTAGRAM_URL}" target="_blank">{icon('instagram', 17)} Instagram</a>
     <a href="{bot_link}" target="_blank">{icon('phone', 17)} {t(lang,'nav_bot_title')}</a>
@@ -1310,6 +1558,7 @@ ICONS = {
     "instagram": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="0.6" fill="currentColor" stroke="none"/></svg>',
     "menu": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>',
     "message": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.2 0-2.3-.2-3.4-.7L3 21l1.7-4.6A8.5 8.5 0 1 1 21 11.5Z"/></svg>',
+    "user": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.9 3.6-7 8-7s8 3.1 8 7"/></svg>',
 }
 
 
@@ -1386,13 +1635,25 @@ def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), pa
             links.append(f'<a href="{page_url(page+1)}" class="pg-arrow">{icon("chevron_right", 15)}</a>')
         pag_html = f'<div class="pagination">{"".join(links)}</div>'
 
-    title = f"{SITE_NAME} — Toshkentda uy, kvartira ijarasi (maklersiz)"
-    description = f"Toshkentda maklersiz uy va kvartira ijarasi. Hozirda {stats['active']} ta faol e'lon. To'g'ridan-to'g'ri uy egasi bilan bog'laning, komissiyasiz."
+    title = t(lang, "seo_home_title")
+    description = t(lang, "seo_home_desc", active=stats['active'])
+    same_as = [u for u in (f"https://t.me/{CHANNEL_USERNAME}" if CHANNEL_USERNAME else "", INSTAGRAM_URL) if u]
+    org_data = {
+        "@context": "https://schema.org",
+        "@type": "RealEstateAgent",
+        "name": SITE_NAME,
+        "url": SITE_URL or "",
+        "logo": f"{SITE_URL}/logo.png" if SITE_URL else "",
+        "areaServed": {"@type": "City", "name": "Toshkent"},
+        "sameAs": same_as,
+    }
+    org_json_ld = f'<script type="application/ld+json">{_json.dumps(org_data, ensure_ascii=False)}</script>'
 
     html = f"""<!DOCTYPE html>
 <html lang="{lang}">
 <head>
 {render_head(title, description, "/", lang=lang)}
+{org_json_ld}
 </head>
 <body>
 {render_header(lang, "/")}
@@ -1529,6 +1790,21 @@ def listing_detail(request: Request, listing_id: int):
         lightbox_html = ""
 
     bot_link = f"https://t.me/{BOT_USERNAME}?start=phone_{l['id']}" if BOT_USERNAME else "#"
+
+    tg_user = get_current_tg_user(request)
+    has_limit = False
+    if tg_user:
+        has_limit, _limit_expire = is_web_subscribed(tg_user["uid"])
+    if has_limit:
+        phone_cta_html = f'<a href="tel:{esc_html(l["telefon"])}" class="sidebar-cta">{icon("phone", 16)} {esc_html(l["telefon"])}</a>'
+        sidebar_note_html = f'<div class="sidebar-note">{t(lang,"sidebar_note_limit_active")}</div>'
+    elif tg_user:
+        phone_cta_html = f'<a href="/kabinet/limit?listing_id={l["id"]}" class="sidebar-cta">{icon("bolt", 16)} {t(lang,"sidebar_cta_buy_limit")}</a>'
+        sidebar_note_html = f'<div class="sidebar-note">{t(lang,"sidebar_note_web_limit")} <a href="{bot_link}" target="_blank">{t(lang,"sidebar_note_via_bot")}</a></div>'
+    else:
+        phone_cta_html = f'<a href="/login?next=/uy/{l["id"]}" class="sidebar-cta">{icon("phone", 16)} {t(lang,"sidebar_cta_login")}</a>'
+        sidebar_note_html = f'<div class="sidebar-note">{t(lang,"sidebar_note_web_limit")} <a href="{bot_link}" target="_blank">{t(lang,"sidebar_note_via_bot")}</a></div>'
+
     paid_badge = f'<span class="badge paid">{icon("bolt", 13)} {t(lang,"badge_top")}</span>' if (l.get("price_charged") or 0) > 0 else ""
     cat = l.get("category")
     cat_badge_detail = ""
@@ -1575,21 +1851,28 @@ def listing_detail(request: Request, listing_id: int):
     facts_block = f'<div class="detail-facts">{facts_html}</div>' if facts_html else ""
     moljal_block = f'<div class="detail-addr">{icon("target", 15)} {esc_html(moljal)}</div>' if moljal else ""
 
-    title = f"{esc_html(addr)} \u2014 {esc_html(l['narx'])} | Ijaraga Uylar"
-    description = f"{esc_html(xona or 'Ijaraga uy')}. Narxi: {esc_html(l['narx'])}. Maklersiz, to'g'ridan-to'g'ri uy egasi bilan bog'laning."
+    xona_fallback = {"uz": "Ijaraga uy", "ru": "Аренда жилья", "en": "Rental property"}.get(lang, "Ijaraga uy")
+    title = t(lang, "seo_listing_title", addr=esc_html(addr), price=esc_html(l['narx']))
+    description = t(lang, "seo_listing_desc", xona=esc_html(xona) or xona_fallback, price=esc_html(l['narx']))
 
+    # MUHIM: bu yerda ijara narxi erkin matn ("2 mln so'm", "$400" va h.k.),
+    # aniq raqam va valyuta emas - shuning uchun schema.org "Product/Offer"
+    # (Google buni real narx deb kutadi va Search Console'da xatolik chiqaradi)
+    # o'rniga real ko'chmas mulk mazmunini to'g'ri ifodalaydigan
+    # "RealEstateListing" ishlatiladi - soxta narx/valyuta ma'lumoti yo'q.
     json_ld = f"""<script type="application/ld+json">
 {{
   "@context": "https://schema.org",
-  "@type": "Product",
+  "@type": "RealEstateListing",
   "name": {_json.dumps(addr)},
   "description": {_json.dumps(description_text[:300])},
+  "url": {_json.dumps(f"{SITE_URL}/uy/{listing_id}")},
   "image": {_json.dumps(photo_urls[0] if photo_urls else '')},
-  "offers": {{
-    "@type": "Offer",
-    "availability": "https://schema.org/InStock",
-    "priceCurrency": "USD",
-    "price": "0"
+  "address": {{
+    "@type": "PostalAddress",
+    "streetAddress": {_json.dumps(addr)},
+    "addressLocality": "Toshkent",
+    "addressCountry": "UZ"
   }}
 }}
 </script>"""
@@ -1633,8 +1916,8 @@ def listing_detail(request: Request, listing_id: int):
     <div>
       <div class="sidebar-card">
         <div class="sidebar-price">{esc_html(l['narx'])}</div>
-        <a href="{bot_link}" class="sidebar-cta" target="_blank">{icon("phone", 16)} {t(lang,'sidebar_cta')}</a>
-        <div class="sidebar-note">{t(lang,'sidebar_note')}</div>
+        {phone_cta_html}
+        {sidebar_note_html}
         <div class="sidebar-share">
           <button onclick="shareListing()">{icon("share", 14)} {t(lang,'share_btn')}</button>
           <button onclick="copyLink(this)">{icon("copy", 14)} {t(lang,'copy_btn')}</button>
@@ -1765,8 +2048,8 @@ document.addEventListener('keydown', (e) => {{
 @app.get("/subarenda", response_class=HTMLResponse)
 def subarenda_page(request: Request):
     lang = get_lang(request)
-    title = f"Subarenda dasturi — {SITE_NAME}"
-    description = "Uyingizni bizga uzoq muddatli ijaraga bering - biz ijarachini topamiz, boshqaramiz va sizga har oy kafolatlangan to'lovni amalga oshiramiz."
+    title = t(lang, "seo_subarenda_title")
+    description = t(lang, "seo_subarenda_desc")
     html = f"""<!DOCTYPE html>
 <html lang="{lang}">
 <head>
@@ -1846,8 +2129,8 @@ async function submitSubarenda(e) {{
 @app.get("/elon-joylash", response_class=HTMLResponse)
 def elon_joylash_page(request: Request):
     lang = get_lang(request)
-    title = f"E'lon joylash — {SITE_NAME}"
-    description = "Uyingizni ijaraga berasizmi? Veb-saytdan to'g'ridan-to'g'ri, ro'yxatdan o'tmasdan e'lon joylang — bepul yoki TOP tarifni o'zingiz tanlaysiz. Moderatsiyadan so'ng Telegram kanalimiz va saytimizda chiqadi."
+    title = t(lang, "seo_post_title")
+    description = t(lang, "seo_post_desc")
     price = current_listing_price()
     card = current_card_number()
     card_grouped = " ".join(re.sub(r"\D", "", card)[i:i + 4] for i in range(0, len(re.sub(r"\D", "", card)), 4)) if card else ""
@@ -2495,6 +2778,270 @@ async def submit_listing_inquiry(request: Request):
     return {"ok": True}
 
 
+# ============================= TELEGRAM ORQALI KIRISH / SHAXSIY KABINET =============================
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request, next: str = Query("/kabinet")):
+    lang = get_lang(request)
+    if not BOT_USERNAME or not SITE_URL:
+        raise HTTPException(status_code=503, detail="Tizim vaqtincha sozlanmoqda.")
+    if not next.startswith("/") or next.startswith("//"):
+        next = "/kabinet"
+    auth_url = f"{SITE_URL}/auth/telegram-callback?next={urllib.parse.quote(next, safe='')}"
+    head = render_head(t(lang, "login_title"), t(lang, "login_desc"), "/login", lang=lang, noindex=True)
+    body = f"""<body>
+{render_header(lang, "/login")}
+<main class="wrap" style="max-width:420px;padding-top:60px;padding-bottom:90px;text-align:center;">
+  <h1 style="font-family:var(--font-display);font-size:26px;margin-bottom:10px;">{t(lang,'login_title')}</h1>
+  <p style="color:var(--muted);font-size:14px;margin-bottom:28px;">{t(lang,'login_desc')}</p>
+  <div style="display:flex;justify-content:center;">
+    <script async src="https://telegram.org/js/telegram-widget.js?22"
+      data-telegram-login="{BOT_USERNAME}" data-size="large" data-radius="12"
+      data-auth-url="{auth_url}" data-request-access="write"></script>
+  </div>
+</main>
+{render_footer(lang)}
+</body>"""
+    return HTMLResponse(f'<!DOCTYPE html><html lang="{lang}"><head>{head}</head>{body}</html>')
+
+
+@app.get("/auth/telegram-callback")
+async def telegram_auth_callback(request: Request):
+    params = dict(request.query_params)
+    next_url = params.get("next") or "/kabinet"
+    if not next_url.startswith("/") or next_url.startswith("//"):
+        next_url = "/kabinet"
+    if not verify_telegram_auth(params):
+        raise HTTPException(status_code=403, detail="Telegram orqali tasdiqlash muvaffaqiyatsiz tugadi. Qaytadan urinib ko'ring.")
+    try:
+        uid = int(params["id"])
+    except (KeyError, ValueError):
+        raise HTTPException(status_code=400, detail="Noto'g'ri ma'lumot.")
+    token = create_session_token(uid, params.get("first_name", ""), params.get("username", ""))
+    resp = RedirectResponse(next_url, status_code=302)
+    resp.set_cookie(SESSION_COOKIE, token, max_age=SESSION_MAX_AGE, httponly=True, secure=True, samesite="lax")
+    return resp
+
+
+@app.get("/logout")
+def logout(next: str = Query("/")):
+    if not next.startswith("/") or next.startswith("//"):
+        next = "/"
+    resp = RedirectResponse(next, status_code=302)
+    resp.delete_cookie(SESSION_COOKIE)
+    return resp
+
+
+@app.get("/kabinet", response_class=HTMLResponse)
+def kabinet_page(request: Request):
+    lang = get_lang(request)
+    tg_user = get_current_tg_user(request)
+    if not tg_user:
+        return RedirectResponse("/login?next=/kabinet", status_code=302)
+    uid = tg_user["uid"]
+    active, expire = is_web_subscribed(uid)
+
+    conn = db()
+    rows = conn.execute(
+        "SELECT id, manzil, narx, status, expired, created_at FROM listings WHERE user_id = ? ORDER BY created_at DESC LIMIT 30",
+        (uid,),
+    ).fetchall()
+    conn.close()
+
+    status_map = {
+        "pending": (t(lang, "status_pending"), "st-pending"),
+        "approved": (t(lang, "status_approved"), "st-approved"),
+        "rejected": (t(lang, "status_rejected"), "st-rejected"),
+    }
+    rows_html = ""
+    for r in rows:
+        addr = esc_html(r["manzil"] or "—")
+        label, cls = status_map.get(r["status"], (r["status"], ""))
+        if r["expired"]:
+            label, cls = t(lang, "status_expired"), "st-expired"
+        addr_cell = f'<a href="/uy/{r["id"]}">{addr}</a>' if r["status"] == "approved" else addr
+        rows_html += (
+            f'<tr><td>{addr_cell}</td><td>{esc_html(r["narx"] or "")}</td>'
+            f'<td><span class="kb-status {cls}">{label}</span></td><td>{(r["created_at"] or "")[:10]}</td></tr>'
+        )
+    listings_html = (
+        f'<div class="kb-table-wrap"><table class="kb-table"><thead><tr>'
+        f'<th>{t(lang,"kb_col_addr")}</th><th>{t(lang,"kb_col_price")}</th>'
+        f'<th>{t(lang,"kb_col_status")}</th><th>{t(lang,"kb_col_date")}</th></tr></thead>'
+        f'<tbody>{rows_html}</tbody></table></div>'
+        if rows else f'<div class="kb-empty">{t(lang,"kb_no_listings")}</div>'
+    )
+    if active:
+        limit_html = f'<div class="kb-limit-active">{icon("check_circle",16)} {t(lang,"kb_limit_active", date=expire[:10])}</div>'
+    else:
+        limit_html = f'<a href="/kabinet/limit" class="btn-cta">{icon("bolt",14)} {t(lang,"kb_buy_limit")}</a>'
+
+    display_name = esc_html(tg_user.get("fn") or "")
+    username_line = f' · @{esc_html(tg_user["un"])}' if tg_user.get("un") else ""
+
+    head = render_head(t(lang, "kabinet_title"), t(lang, "kabinet_title"), "/kabinet", lang=lang, noindex=True)
+    body = f"""<body>
+{render_header(lang, "/kabinet")}
+<main class="wrap" style="padding-top:32px;padding-bottom:80px;max-width:760px;">
+  <h1 style="font-family:var(--font-display);font-size:24px;margin-bottom:4px;">{t(lang,'kabinet_title')}</h1>
+  <p style="color:var(--muted);font-size:14px;margin-bottom:22px;">{display_name}{username_line}</p>
+  <div class="kb-card">
+    <div class="kb-card-title">{t(lang,'kb_limit_title')}</div>
+    {limit_html}
+  </div>
+  <div class="kb-card">
+    <div class="kb-card-title">{t(lang,'kb_my_listings')}</div>
+    {listings_html}
+  </div>
+  <a href="/logout?next=/" style="font-size:13px;color:var(--muted);">{t(lang,'kb_logout')}</a>
+</main>
+{render_footer(lang)}
+</body>"""
+    return HTMLResponse(f'<!DOCTYPE html><html lang="{lang}"><head>{head}</head>{body}</html>')
+
+
+@app.get("/kabinet/limit", response_class=HTMLResponse)
+def kabinet_limit_page(request: Request, listing_id: str = Query("")):
+    lang = get_lang(request)
+    tg_user = get_current_tg_user(request)
+    if not tg_user:
+        next_path = f"/kabinet/limit?listing_id={listing_id}" if listing_id else "/kabinet/limit"
+        return RedirectResponse(f"/login?next={urllib.parse.quote(next_path, safe='')}", status_code=302)
+    active, expire = is_web_subscribed(tg_user["uid"])
+    price = current_subscription_price()
+    days = current_subscription_days()
+    card = current_card_number()
+
+    if active:
+        body_inner = (
+            f'<div class="kb-limit-active">{icon("check_circle",16)} {t(lang,"kb_limit_active", date=expire[:10])}</div>'
+            f'<a href="/kabinet" class="btn-cta" style="margin-top:16px;">{t(lang,"kb_back")}</a>'
+        )
+    else:
+        listing_field = f'<input type="hidden" name="listing_id" value="{esc_html(listing_id)}">' if listing_id else ""
+        holder_line = f" — {esc_html(CARD_HOLDER)}" if CARD_HOLDER else ""
+        body_inner = f"""
+    <div class="kb-pay-box">
+      <div class="kb-pay-price">{price:,} {t(lang,'sum')} <span>/ {days} {t(lang,'days')}</span></div>
+      <div class="kb-pay-card">{icon('coin',15)} {esc_html(card)}{holder_line}</div>
+      <p class="kb-pay-hint">{t(lang,'kb_pay_hint')}</p>
+    </div>
+    <form id="limitForm" onsubmit="return submitLimit(event)">
+      {listing_field}
+      <label class="kb-file-label">
+        {icon('camera_off',15)} <span id="fileLabelText">{t(lang,'kb_upload_receipt')}</span>
+        <input type="file" name="receipt" accept="image/*" required
+          onchange="document.getElementById('fileLabelText').textContent=this.files[0]?this.files[0].name:''">
+      </label>
+      <button type="submit" class="btn-cta" style="width:100%;justify-content:center;margin-top:14px;border:none;cursor:pointer;">{t(lang,'kb_submit_receipt')}</button>
+      <div id="limitSuccess" class="kb-limit-success">{icon('check_circle',15)} {t(lang,'kb_receipt_sent')}</div>
+      <div id="limitError" class="kb-limit-error"></div>
+    </form>
+    <script>
+    async function submitLimit(e) {{
+      e.preventDefault();
+      const form = e.target;
+      const btn = form.querySelector('button[type=submit]');
+      btn.disabled = true;
+      const errEl = document.getElementById('limitError');
+      errEl.style.display = 'none';
+      try {{
+        const res = await fetch('/api/kabinet/buy-limit', {{ method: 'POST', body: new FormData(form) }});
+        const data = await res.json().catch(() => ({{}}));
+        if (res.ok) {{
+          form.style.display = 'none';
+          document.getElementById('limitSuccess').style.display = 'flex';
+        }} else {{
+          errEl.textContent = data.detail || "{t(lang,'kb_error')}";
+          errEl.style.display = 'block';
+          btn.disabled = false;
+        }}
+      }} catch (err) {{
+        errEl.textContent = "{t(lang,'kb_error')}";
+        errEl.style.display = 'block';
+        btn.disabled = false;
+      }}
+      return false;
+    }}
+    </script>"""
+
+    head = render_head(t(lang, "kb_buy_limit"), t(lang, "kb_buy_limit"), "/kabinet/limit", lang=lang, noindex=True)
+    body = f"""<body>
+{render_header(lang, "/kabinet/limit")}
+<main class="wrap" style="max-width:440px;padding-top:32px;padding-bottom:80px;">
+  <h1 style="font-family:var(--font-display);font-size:22px;margin-bottom:18px;">{t(lang,'kb_buy_limit')}</h1>
+  {body_inner}
+</main>
+{render_footer(lang)}
+</body>"""
+    return HTMLResponse(f'<!DOCTYPE html><html lang="{lang}"><head>{head}</head>{body}</html>')
+
+
+@app.post("/api/kabinet/buy-limit")
+async def buy_limit(request: Request, receipt: UploadFile = File(...), listing_id: str = Form("")):
+    tg_user = get_current_tg_user(request)
+    if not tg_user:
+        raise HTTPException(status_code=401, detail="Iltimos, avval Telegram orqali kiring.")
+    uid = tg_user["uid"]
+    if not receipt or not receipt.filename:
+        raise HTTPException(status_code=400, detail="Chek rasmini yuklang.")
+    content = await receipt.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Chek rasmi 10MB dan oshmasligi kerak.")
+    if not ADMIN_IDS or not BOT_TOKEN:
+        raise HTTPException(status_code=503, detail="Tizim vaqtincha sozlanmoqda.")
+
+    try:
+        r_ids = await telegram_upload_photos(ADMIN_IDS[0], [content], ["chek.jpg"])
+    except Exception:
+        logger.exception("Kabinet: chek yuklashda xatolik")
+        raise HTTPException(status_code=502, detail="Chekni yuklab bo'lmadi. Qaytadan urinib ko'ring.")
+    if not r_ids:
+        raise HTTPException(status_code=502, detail="Chekni yuklab bo'lmadi.")
+    receipt_file_id = r_ids[0]
+
+    target_listing_id = int(listing_id) if listing_id and listing_id.isdigit() else None
+    price = current_subscription_price()
+
+    conn = db()
+    cur = conn.execute(
+        "INSERT INTO subscriptions (user_id, receipt_photo, months, price_charged, target_listing_id, status, created_at) "
+        "VALUES (?, ?, 1, ?, ?, 'pending', ?)",
+        (uid, receipt_file_id, price, target_listing_id, now_str()),
+    )
+    conn.commit()
+    sub_id = cur.lastrowid
+    conn.close()
+
+    fn = esc_html(tg_user.get("fn") or "")
+    un = f" (@{esc_html(tg_user['un'])})" if tg_user.get("un") else ""
+    caption = (
+        f"\U0001F4B3 <b>Yangi obuna so'rovi (veb-saytdan)</b> #{sub_id}\n\n"
+        f"\U0001F464 {fn}{un}\n"
+        f"\U0001F194 user_id: {uid}\n"
+        f"\U0001F4B0 Summasi: {price:,} so'm"
+    )
+    keyboard = {"inline_keyboard": [
+        [
+            {"text": "✅ Tasdiqlash", "callback_data": f"admin_approve_sub_{sub_id}"},
+            {"text": "❌ Rad etish", "callback_data": f"admin_reject_sub_{sub_id}"},
+        ],
+        [{"text": "\U0001F464 Profilga o'tish", "url": f"tg://user?id={uid}"}],
+    ]}
+    async with httpx.AsyncClient(timeout=20) as client:
+        for admin_id in ADMIN_IDS:
+            try:
+                await client.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
+                    json={"chat_id": admin_id, "photo": receipt_file_id, "caption": caption,
+                          "parse_mode": "HTML", "reply_markup": keyboard},
+                )
+            except Exception:
+                logger.exception("Obuna so'rovi haqida adminga (%s) xabar yuborib bo'lmadi", admin_id)
+
+    return {"ok": True}
+
+
 @app.get("/api/listing-inquiries")
 def get_listing_inquiries(user: str = Depends(check_auth)):
     conn = db()
@@ -2556,24 +3103,50 @@ def update_subarenda_request(req_id: int, status: str = Query(...), user: str = 
     return {"ok": True}
 
 
+def _sitemap_alt_links(base: str, path: str) -> str:
+    """Har bir URL uchun uz/ru/en muqobil versiyalarini ko'rsatadi - Google
+    va Yandex mos tildagi qidiruvchiga to'g'ri variantni ko'rsatishi uchun."""
+    return "".join(
+        f'<xhtml:link rel="alternate" hreflang="{code}" href="{base}{path}?lang={code}"/>'
+        for code in SUPPORTED_LANGS
+    )
+
+
 @app.get("/sitemap.xml")
 def sitemap():
     conn = db()
     rows = conn.execute("SELECT id, created_at FROM listings WHERE status='approved' AND COALESCE(expired,0)=0").fetchall()
     conn.close()
     base = SITE_URL or ""
-    urls = [f"<url><loc>{base}/</loc><changefreq>hourly</changefreq><priority>1.0</priority></url>"]
+    urls = [
+        f"<url><loc>{base}/</loc>{_sitemap_alt_links(base, '/')}<changefreq>hourly</changefreq><priority>1.0</priority></url>",
+        f"<url><loc>{base}/xarita</loc>{_sitemap_alt_links(base, '/xarita')}<changefreq>daily</changefreq><priority>0.7</priority></url>",
+        f"<url><loc>{base}/elon-joylash</loc>{_sitemap_alt_links(base, '/elon-joylash')}<changefreq>weekly</changefreq><priority>0.6</priority></url>",
+        f"<url><loc>{base}/subarenda</loc>{_sitemap_alt_links(base, '/subarenda')}<changefreq>weekly</changefreq><priority>0.6</priority></url>",
+    ]
     for r in rows:
         lastmod = (r["created_at"] or "")[:10]
-        urls.append(f"<url><loc>{base}/uy/{r['id']}</loc><lastmod>{lastmod}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>")
-    xml = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + "\n".join(urls) + "\n</urlset>"
+        listing_path = f"/uy/{r['id']}"
+        urls.append(
+            f"<url><loc>{base}{listing_path}</loc>{_sitemap_alt_links(base, listing_path)}"
+            f"<lastmod>{lastmod}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>"
+        )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n'
+        + "\n".join(urls) + "\n</urlset>"
+    )
     return Response(content=xml, media_type="application/xml")
 
 
 @app.get("/robots.txt")
 def robots():
     base = SITE_URL or ""
-    content = f"User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\nSitemap: {base}/sitemap.xml\n"
+    content = (
+        f"User-agent: *\nAllow: /\n"
+        f"Disallow: /admin\nDisallow: /api/\nDisallow: /login\nDisallow: /kabinet\nDisallow: /auth/\n"
+        f"Sitemap: {base}/sitemap.xml\n"
+    )
     return PlainTextResponse(content)
 
 
