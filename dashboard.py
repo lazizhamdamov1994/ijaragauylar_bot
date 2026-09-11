@@ -16,6 +16,7 @@ Sahifalar:
 Ishga tushirish:
     uvicorn dashboard:app --host 0.0.0.0 --port 8001
 """
+import asyncio
 import hashlib
 import logging
 import os
@@ -373,6 +374,50 @@ import hashlib
 
 PHOTO_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "photo_cache")
 os.makedirs(PHOTO_CACHE_DIR, exist_ok=True)
+PHOTO_CACHE_MAX_MB = int(os.getenv("PHOTO_CACHE_MAX_MB", "3072"))
+PHOTO_CACHE_CLEANUP_INTERVAL_SEC = 6 * 3600
+
+
+def cleanup_photo_cache():
+    """photo_cache/ papkasi hajmini PHOTO_CACHE_MAX_MB ichida ushlab turadi -
+    diskda joy tugab qolmasligi uchun eng kam ko'rilgan (LRU) rasmlarni o'chiradi."""
+    try:
+        entries = []
+        total = 0
+        with os.scandir(PHOTO_CACHE_DIR) as it:
+            for entry in it:
+                if not entry.is_file():
+                    continue
+                st = entry.stat()
+                entries.append((entry.path, st.st_atime, st.st_size))
+                total += st.st_size
+        limit = PHOTO_CACHE_MAX_MB * 1024 * 1024
+        if total <= limit:
+            return
+        entries.sort(key=lambda e: e[1])
+        for path, _atime, size in entries:
+            if total <= limit:
+                break
+            try:
+                os.remove(path)
+                total -= size
+            except OSError:
+                pass
+        logger.info(f"photo_cache tozalandi, yangi hajm: {total / 1024 / 1024:.1f}MB")
+    except Exception:
+        logger.exception("photo_cache tozalashda xatolik")
+
+
+async def periodic_photo_cache_cleanup():
+    while True:
+        await asyncio.sleep(PHOTO_CACHE_CLEANUP_INTERVAL_SEC)
+        await asyncio.to_thread(cleanup_photo_cache)
+
+
+@app.on_event("startup")
+async def _start_photo_cache_cleanup():
+    await asyncio.to_thread(cleanup_photo_cache)
+    asyncio.create_task(periodic_photo_cache_cleanup())
 
 
 @app.get("/photo/{file_id}")
