@@ -140,6 +140,8 @@ def init_tracking_tables():
     existing_cols = [r["name"] for r in conn.execute("PRAGMA table_info(listings)").fetchall()]
     if existing_cols and "source" not in existing_cols:
         conn.execute("ALTER TABLE listings ADD COLUMN source TEXT DEFAULT 'bot'")
+    if existing_cols and "rental_type" not in existing_cols:
+        conn.execute("ALTER TABLE listings ADD COLUMN rental_type TEXT DEFAULT 'uzoq_muddat'")
     conn.commit()
     conn.close()
 
@@ -265,7 +267,7 @@ def _parse_photos(row_dict):
     return row_dict
 
 
-def get_site_listings(hudud: str = "", xona: str = "", page: int = 1):
+def get_site_listings(hudud: str = "", xona: str = "", page: int = 1, rental_type: str = ""):
     conn = db()
     query = "SELECT * FROM listings WHERE status='approved' AND COALESCE(expired,0)=0"
     params = []
@@ -275,6 +277,9 @@ def get_site_listings(hudud: str = "", xona: str = "", page: int = 1):
     if xona:
         query += " AND xona LIKE ?"
         params.append(f"%{xona}%")
+    if rental_type and rental_type in RENTAL_TYPE_LABELS:
+        query += " AND COALESCE(rental_type,'uzoq_muddat') = ?"
+        params.append(rental_type)
     # Pullik ("TOP") e'lonlar — egasi "topshirildi" deb belgilamaguncha —
     # ro'yxat boshida turadi (botdagi kanalga qayta-joylash mantig'i bilan bir xil).
     query += " ORDER BY (CASE WHEN COALESCE(price_charged,0) > 0 THEN 0 ELSE 1 END) ASC, created_at DESC"
@@ -300,7 +305,7 @@ def get_site_listing(listing_id: int):
 def get_related_listings(listing_id: int, hudud_hint: str, limit: int = 3):
     conn = db()
     rows = conn.execute(
-        """SELECT id, manzil, moljal, xona, narx, photos, price_charged FROM listings
+        """SELECT id, manzil, moljal, xona, narx, photos, price_charged, rental_type, kimlarga, is_quick FROM listings
            WHERE status='approved' AND COALESCE(expired,0)=0 AND id != ?
            AND (manzil LIKE ? OR moljal LIKE ?)
            ORDER BY (CASE WHEN COALESCE(price_charged,0) > 0 THEN 0 ELSE 1 END) ASC, created_at DESC LIMIT ?""",
@@ -413,7 +418,7 @@ async def get_photo(file_id: str):
 SITE_CSS = """
   :root {
     /* Premium mulk-brend palitrasi: chuqur zumrad (ishonch/o'sish) + issiq oltin (premium/TOP urg'u) */
-    --brand: #0E9F76; --brand-dark: #0A7A5C; --brand-light: #E7F7F1;
+    --brand: #FF3B5C; --brand-dark: #E01E45; --brand-light: #FFEBEF;
     --gold: #D6960B; --gold-light: #FDF3DE;
     --ink: #101826; --ink-soft: #47526B; --muted: #6B7690; --line: #E7EAF0;
     --bg: #ffffff; --bg-soft: #F6F8FA;
@@ -485,7 +490,10 @@ SITE_CSS = """
   .lang-pill { padding: 6px 10px; border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 800; color: var(--muted); letter-spacing: .3px; }
   .lang-pill.active { background: #fff; color: var(--ink); box-shadow: var(--shadow-sm); }
   .lang-pill:hover:not(.active) { color: var(--ink); }
-  .mobile-menu .lang-switcher { margin: 10px 6px 2px; }
+  /* Mobil menyuda - to'liq kenglikka cho'zilgan, teng bo'laklangan, barmoq bilan bosish uchun qulay */
+  .mobile-menu .lang-switcher { margin: 14px 6px 4px; padding: 4px; background: var(--bg-soft); }
+  .mobile-menu .lang-pill { flex: 1; text-align: center; padding: 11px 8px; font-size: 13px; }
+  .mobile-lang-label { padding: 0 6px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-top: 4px; }
   @media (max-width: 640px) {
     .header-inner { padding: 12px 16px; }
     .brand { font-size: 15px; }
@@ -527,6 +535,16 @@ SITE_CSS = """
     .search-pill button { grid-column: 1 / -1; padding: 13px; border-radius: var(--radius); justify-content: center; margin-top: 4px; }
   }
 
+  /* ============ IJARA TURI TABLARI (kunlik/uzoq muddat/dacha/mehmonxona) ============ */
+  .rt-tabs { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+  .rt-tab {
+    padding: 8px 16px; border-radius: var(--radius-pill); background: #fff; font-size: 12.5px; font-weight: 700;
+    color: var(--ink-soft); box-shadow: var(--shadow-sm); border: 1px solid transparent; white-space: nowrap;
+  }
+  .rt-tab:hover { border-color: var(--line); }
+  .rt-tab.active { background: var(--ink); color: #fff; }
+  @media (max-width: 640px) { .rt-tabs { gap: 6px; margin-top: 14px; } .rt-tab { padding: 7px 12px; font-size: 12px; } }
+
   /* ============ STATS STRIP ============ */
   .stats-strip { margin-top: -56px; position: relative; z-index: 10; }
   .stats-strip .inner {
@@ -552,7 +570,7 @@ SITE_CSS = """
   .lc-photo { position: relative; aspect-ratio: 1/1; background: var(--bg-soft); overflow: hidden; border-radius: var(--radius); margin-bottom: 10px; }
   .listing-card:hover .lc-photo img { transform: scale(1.06); }
   .lc-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .35s ease; }
-  .lc-photo .lc-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 44px; background: linear-gradient(135deg,#E7F7F1,#F3FBF8); }
+  .lc-photo .lc-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 44px; background: linear-gradient(135deg,#FFEBEF,#FFF6F2); }
   .lc-badge {
     position: absolute; top: 10px; left: 10px; background: #fff; color: var(--ink);
     padding: 4px 11px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 700; box-shadow: var(--shadow-sm);
@@ -563,6 +581,11 @@ SITE_CSS = """
   .cat-verified { background: #E7F6EC; color: #1A7A3C; }
   .cat-subarenda { background: #EAF1FE; color: #1D4ED8; }
   .cat-premium { background: #FDF3E3; color: #B8860B; }
+  .rt-kunlik { background: #FDF3E3; color: #B8860B; }
+  .rt-uzoq { background: #EAF1FE; color: #1D4ED8; }
+  .rt-dacha { background: #E7F6EC; color: #1A7A3C; }
+  .rt-mehmon { background: #F3E8FE; color: #7E22CE; }
+  .badge-quick { background: #FFF3CD; color: #92600B; }
   .lc-body { padding: 0 2px; }
   .lc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
   .lc-title { font-size: 14.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
@@ -819,7 +842,7 @@ TRANSLATIONS = {
     "nav_map_title": {"uz": "Xarita", "ru": "\u041a\u0430\u0440\u0442\u0430", "en": "Map"},
     "nav_bot_title": {"uz": "Telegram bot", "ru": "Telegram-\u0431\u043e\u0442", "en": "Telegram bot"},
     "nav_channel_title": {"uz": "Telegram kanal", "ru": "Telegram-\u043a\u0430\u043d\u0430\u043b", "en": "Telegram channel"},
-    "nav_post_cta": {"uz": "Bepul e'lon joylash", "ru": "\u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u0431\u0435\u0441\u043f\u043b\u0430\u0442\u043d\u043e", "en": "Post for free"},
+    "nav_post_cta": {"uz": "E'lon joylash", "ru": "\u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "Post a listing"},
     "mobile_post": {"uz": "E'lon joylash", "ru": "\u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "Post a listing"},
     "footer_tagline": {
         "uz": "Maklersiz, to'g'ridan-to'g'ri uy egasi bilan bog'lanish platformasi.",
@@ -846,6 +869,11 @@ TRANSLATIONS = {
     "stat_active": {"uz": "Faol e'lon", "ru": "\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439", "en": "Active listings"},
     "stat_users": {"uz": "Foydalanuvchi", "ru": "\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0435\u0439", "en": "Users"},
     "stat_nofee": {"uz": "Maklersiz", "ru": "\u0411\u0435\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438", "en": "Commission-free"},
+    "rt_all": {"uz": "Barchasi", "ru": "\u0412\u0441\u0435", "en": "All"},
+    "rt_uzoq_muddat": {"uz": "\U0001F3E0 Uzoq muddat", "ru": "\U0001F3E0 \u0414\u043e\u043b\u0433\u043e\u0441\u0440\u043e\u0447\u043d\u043e", "en": "\U0001F3E0 Long-term"},
+    "rt_kunlik": {"uz": "\U0001F4C5 Kunlik", "ru": "\U0001F4C5 \u041f\u043e\u0441\u0443\u0442\u043e\u0447\u043d\u043e", "en": "\U0001F4C5 Daily"},
+    "rt_dacha": {"uz": "\U0001F333 Dacha", "ru": "\U0001F333 \u0414\u0430\u0447\u0430", "en": "\U0001F333 Cottage"},
+    "rt_mehmonxona": {"uz": "\U0001F6CF Mehmonxona", "ru": "\U0001F6CF \u0413\u043e\u0441\u0442\u0435\u0432\u044b\u0435 \u043a\u043e\u043c\u043d\u0430\u0442\u044b", "en": "\U0001F6CF Guest rooms"},
     "section_search_results": {"uz": "Qidiruv natijalari", "ru": "\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043f\u043e\u0438\u0441\u043a\u0430", "en": "Search results"},
     "section_latest": {"uz": "So'nggi e'lonlar", "ru": "\u041f\u043e\u0441\u043b\u0435\u0434\u043d\u0438\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", "en": "Latest listings"},
     "section_count_suffix": {"uz": "{n} ta e'lon topildi", "ru": "\u041d\u0430\u0439\u0434\u0435\u043d\u043e \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439: {n}", "en": "{n} listings found"},
@@ -910,6 +938,7 @@ TRANSLATIONS = {
         "ru": "\u041a\u0430\u0436\u0434\u043e\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442\u0441\u044f \u0432\u0440\u0443\u0447\u043d\u0443\u044e \u2014 \u043c\u043e\u0448\u0435\u043d\u043d\u0438\u043a\u0430\u043c \u0437\u0434\u0435\u0441\u044c \u043d\u0435 \u043c\u0435\u0441\u0442\u043e",
         "en": "Every listing is manually reviewed \u2014 no room for scammers",
     },
+    "ej_section_rental_type": {"uz": "Ijara turi", "ru": "\u0422\u0438\u043f \u0430\u0440\u0435\u043d\u0434\u044b", "en": "Rental type"},
     "ej_section_house": {"uz": "Uy haqida", "ru": "\u041e \u0436\u0438\u043b\u044c\u0435", "en": "About the property"},
     "ej_manzil_label": {"uz": "Manzil (tuman, mahalla)", "ru": "\u0410\u0434\u0440\u0435\u0441 (\u0440\u0430\u0439\u043e\u043d, \u043c\u0430\u0445\u0430\u043b\u043b\u044f)", "en": "Address (district, neighborhood)"},
     "ej_manzil_ph": {"uz": "Masalan: Yunusobod, 12-kvartal", "ru": "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u042e\u043d\u0443\u0441\u0430\u0431\u0430\u0434, 12-\u0439 \u043a\u0432\u0430\u0440\u0442\u0430\u043b", "en": "e.g. Yunusobod, block 12"},
@@ -1067,7 +1096,7 @@ def render_head(title: str, description: str, canonical_path: str, og_image: str
 <meta property="og:url" content="{canonical}">
 <meta property="og:locale" content="{lang}">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#0E9F76">
+<meta name="theme-color" content="#FF3B5C">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
 <style>{SITE_CSS}</style>"""
@@ -1101,6 +1130,7 @@ def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
     <a href="{channel_link}" target="_blank">{icon('send', 17)} {t(lang,'nav_channel_title')}</a>
     <a href="{INSTAGRAM_URL}" target="_blank">{icon('instagram', 17)} Instagram</a>
     <a href="{bot_link}" target="_blank">{icon('phone', 17)} {t(lang,'nav_bot_title')}</a>
+    <div class="mobile-lang-label">UZ / RU / EN</div>
     {switcher}
   </div>
 </header>
@@ -1161,6 +1191,13 @@ CATEGORY_LABELS = {
     "premium": ("\U0001F48E Premium", "cat-premium"),
 }
 
+RENTAL_TYPE_LABELS = {
+    "kunlik": ("\U0001F4C5 Kunlik", "rt-kunlik"),
+    "uzoq_muddat": ("\U0001F3E0 Uzoq muddat", "rt-uzoq"),
+    "dacha": ("\U0001F333 Dacha", "rt-dacha"),
+    "mehmonxona": ("\U0001F6CF Mehmonxona", "rt-mehmon"),
+}
+
 
 
 def render_listing_card(l: dict) -> str:
@@ -1176,6 +1213,11 @@ def render_listing_card(l: dict) -> str:
     xona = (l.get("xona") or "").strip()
     kimlarga = (l.get("kimlarga") or "").strip()
     meta_parts = []
+    if l.get("is_quick"):
+        meta_parts.append('⚡ Tezkor e\'lon')
+    rtype = l.get("rental_type")
+    if rtype and rtype != "uzoq_muddat" and rtype in RENTAL_TYPE_LABELS:
+        meta_parts.append(esc_html(RENTAL_TYPE_LABELS[rtype][0]))
     if xona:
         meta_parts.append(f'{icon("bed", 14)} {esc_html(xona)}')
     if kimlarga:
@@ -1240,15 +1282,32 @@ def esc_html(s) -> str:
 # ============================= BOSH SAHIFA =============================
 
 @app.get("/", response_class=HTMLResponse)
-def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), page: int = Query(1, ge=1)):
+def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), page: int = Query(1, ge=1), rental_type: str = Query("")):
     lang = get_lang(request)
-    listings, total = get_site_listings(hudud=hudud, xona=xona, page=page)
+    listings, total = get_site_listings(hudud=hudud, xona=xona, page=page, rental_type=rental_type)
     stats = site_stats_summary()
     total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
 
     district_options = "".join(
         f'<option value="{d}" {"selected" if d.lower() == hudud.lower() else ""}>{d}</option>'
         for d in TASHKENT_DISTRICTS
+    )
+
+    def rt_url(rt):
+        parts = []
+        if hudud:
+            parts.append(f"hudud={urllib.parse.quote(hudud)}")
+        if xona:
+            parts.append(f"xona={xona}")
+        if rt:
+            parts.append(f"rental_type={rt}")
+        if lang != DEFAULT_LANG:
+            parts.append(f"lang={lang}")
+        return "/?" + "&".join(parts) if parts else "/"
+
+    rt_tabs_html = "".join(
+        f'<a href="{rt_url(key)}" class="rt-tab{" active" if rental_type == key else ""}">{t(lang, tkey)}</a>'
+        for key, tkey in [("", "rt_all"), ("uzoq_muddat", "rt_uzoq_muddat"), ("kunlik", "rt_kunlik"), ("dacha", "rt_dacha"), ("mehmonxona", "rt_mehmonxona")]
     )
 
     if listings:
@@ -1262,7 +1321,8 @@ def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), pa
     pag_html = ""
     if total_pages > 1:
         def page_url(p):
-            return f"?page={p}" + (f"&hudud={hudud}" if hudud else "") + (f"&xona={xona}" if xona else "") + (f"&lang={lang}" if lang != DEFAULT_LANG else "")
+            return (f"?page={p}" + (f"&hudud={hudud}" if hudud else "") + (f"&xona={xona}" if xona else "")
+                    + (f"&rental_type={rental_type}" if rental_type else "") + (f"&lang={lang}" if lang != DEFAULT_LANG else ""))
 
         WINDOW = 5
         start_p = max(1, min(page - WINDOW // 2, total_pages - WINDOW + 1))
@@ -1317,6 +1377,7 @@ def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), pa
       </div>
       <button type="submit">{icon('search', 16)} {t(lang,'search_btn')}</button>
     </form>
+    <div class="rt-tabs">{rt_tabs_html}</div>
   </div>
 </section>
 
@@ -1429,16 +1490,27 @@ def listing_detail(request: Request, listing_id: int):
     if cat and cat in CATEGORY_LABELS:
         label, css_cls = CATEGORY_LABELS[cat]
         cat_badge_detail = f'<span class="badge {css_cls}">{label}</span>'
+    rtype = l.get("rental_type")
+    rt_badge_detail = ""
+    if rtype and rtype in RENTAL_TYPE_LABELS:
+        rt_label, rt_css_cls = RENTAL_TYPE_LABELS[rtype]
+        rt_badge_detail = f'<span class="badge {rt_css_cls}">{rt_label}</span>'
+    quick_badge_detail = '<span class="badge badge-quick">⚡ Tezkor e\'lon</span>' if is_quick else ""
 
     map_html = ""
     if l.get("latitude") and l.get("longitude"):
         map_html = f"""<div id="detail-map"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-  const dmap = L.map('detail-map', {{ zoomControl: false }}).setView([{l['latitude']}, {l['longitude']}], 15);
-  L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{ attribution: '&copy; OpenStreetMap' }}).addTo(dmap);
-  L.circleMarker([{l['latitude']}, {l['longitude']}], {{ radius: 10, fillColor: '#0E9F76', color: '#fff', weight: 2, fillOpacity: 0.9 }}).addTo(dmap);
+  try {{
+    const dmap = L.map('detail-map', {{ zoomControl: false }}).setView([{l['latitude']}, {l['longitude']}], 15);
+    L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{ attribution: '&copy; OpenStreetMap' }}).addTo(dmap);
+    L.circleMarker([{l['latitude']}, {l['longitude']}], {{ radius: 10, fillColor: '#FF3B5C', color: '#fff', weight: 2, fillOpacity: 0.9 }}).addTo(dmap);
+  }} catch (err) {{
+    const el = document.getElementById('detail-map');
+    if (el) el.outerHTML = '<div style="height:270px;border-radius:20px;margin-top:22px;background:var(--bg-soft);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;">Xarita yuklanmadi</div>';
+  }}
 </script>"""
 
     related = get_related_listings(l["id"], l.get("manzil") or addr)
@@ -1498,6 +1570,8 @@ def listing_detail(request: Request, listing_id: int):
       <div class="detail-badges">
         {paid_badge}
         {cat_badge_detail}
+        {rt_badge_detail}
+        {quick_badge_detail}
         <span class="badge trust">{icon("check_circle", 13)} {t(lang,'badge_verified')}</span>
       </div>
 
@@ -1661,7 +1735,7 @@ def subarenda_page(request: Request):
     <p class="sub">{t(lang,'sr_hero_sub')}</p>
   </div>
 </section>
-<main class="wrap" style="padding-top:40px;">
+<main class="wrap" style="padding-top:40px;padding-bottom:80px;">
   <div class="why-grid" style="margin-bottom:50px;">
     <div class="why-item"><div class="icon">{icon('users', 26)}</div><h3>{t(lang,'sr1_title')}</h3><p>{t(lang,'sr1_desc')}</p></div>
     <div class="why-item"><div class="icon">{icon('coin', 26)}</div><h3>{t(lang,'sr2_title')}</h3><p>{t(lang,'sr2_desc')}</p></div>
@@ -1670,7 +1744,7 @@ def subarenda_page(request: Request):
   </div>
 
   <div style="max-width:520px;margin:0 auto;">
-    <div class="sidebar-card" style="position:static;">
+    <div class="sidebar-card" style="position:static;margin-bottom:0;">
       <h2 style="font-size:19px;font-weight:800;margin-bottom:6px;">{t(lang,'sr_form_title')}</h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:18px;">{t(lang,'sr_form_sub')}</p>
       <form id="subarenda-form" onsubmit="return submitSubarenda(event)">
@@ -1727,8 +1801,8 @@ async function submitSubarenda(e) {{
 @app.get("/elon-joylash", response_class=HTMLResponse)
 def elon_joylash_page(request: Request):
     lang = get_lang(request)
-    title = f"Bepul e'lon joylash — {SITE_NAME}"
-    description = "Uyingizni ijaraga berasizmi? Veb-saytdan to'g'ridan-to'g'ri, ro'yxatdan o'tmasdan bepul e'lon joylang — avtomatik moderatsiyadan so'ng Telegram kanalimiz va saytimizda chiqadi."
+    title = f"E'lon joylash — {SITE_NAME}"
+    description = "Uyingizni ijaraga berasizmi? Veb-saytdan to'g'ridan-to'g'ri, ro'yxatdan o'tmasdan e'lon joylang — bepul yoki TOP tarifni o'zingiz tanlaysiz. Moderatsiyadan so'ng Telegram kanalimiz va saytimizda chiqadi."
     price = current_listing_price()
     card = current_card_number()
     card_grouped = " ".join(re.sub(r"\D", "", card)[i:i + 4] for i in range(0, len(re.sub(r"\D", "", card)), 4)) if card else ""
@@ -1756,6 +1830,14 @@ def elon_joylash_page(request: Request):
         <div id="formError" class="form-error-box"></div>
 
         <form id="listingForm">
+          <div class="form-section-title">{icon('coin', 17)} {t(lang,'ej_section_rental_type')}</div>
+          <div class="type-toggle" id="rentalTypeToggle">
+            <label class="type-option active" data-rt="uzoq_muddat"><input type="radio" name="rental_type" value="uzoq_muddat" checked><div class="to-title">{t(lang,'rt_uzoq_muddat')}</div></label>
+            <label class="type-option" data-rt="kunlik"><input type="radio" name="rental_type" value="kunlik"><div class="to-title">{t(lang,'rt_kunlik')}</div></label>
+            <label class="type-option" data-rt="dacha"><input type="radio" name="rental_type" value="dacha"><div class="to-title">{t(lang,'rt_dacha')}</div></label>
+            <label class="type-option" data-rt="mehmonxona"><input type="radio" name="rental_type" value="mehmonxona"><div class="to-title">{t(lang,'rt_mehmonxona')}</div></label>
+          </div>
+
           <div class="form-section-title">{icon('home', 17)} {t(lang,'ej_section_house')}</div>
           <div class="form-group">
             <label>{t(lang,'ej_manzil_label')} <span class="req">*</span></label>
@@ -1909,6 +1991,13 @@ receiptInput.addEventListener('change', () => {{
   }}
 }});
 
+// ---- Ijara turi tanlash ----
+document.querySelectorAll('#rentalTypeToggle .type-option').forEach(opt => {{
+  opt.addEventListener('click', () => {{
+    document.querySelectorAll('#rentalTypeToggle .type-option').forEach(o => o.classList.toggle('active', o === opt));
+  }});
+}});
+
 // ---- Bepul / Pullik tanlash ----
 const typeFree = document.getElementById('typeFree');
 const typePaid = document.getElementById('typePaid');
@@ -2014,17 +2103,17 @@ form.addEventListener('submit', async function(e) {{
     return HTMLResponse(html)
 
 
-async def notify_telegram(chat_id: int, text: str):
+async def notify_telegram(chat_id: int, text: str, reply_markup: dict = None):
     """Bot API orqali to'g'ridan-to'g'ri Telegram xabar yuboradi (BOT_TOKEN
     orqali) - dashboarddan botga alohida ulanishsiz."""
     if not BOT_TOKEN or not chat_id:
         return
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            await client.post(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
-            )
+            await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json=payload)
     except Exception:
         pass
 
@@ -2139,8 +2228,11 @@ async def telegram_upload_photos(chat_id: int, contents: list, filenames: list) 
 
 def _web_listing_caption(d: dict) -> str:
     today = datetime.now().strftime("%d.%m.%Y")
+    rt = d.get("rental_type")
+    rt_line = f"{RENTAL_TYPE_LABELS[rt][0]}\n" if rt and rt in RENTAL_TYPE_LABELS and rt != "uzoq_muddat" else ""
     return (
-        f"\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>\n\n"
+        f"\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>\n"
+        f"{rt_line}\n"
         f"\U0001F4CD <b>Manzil:</b> {esc_html(d['manzil'])}\n"
         f"\U0001F3AF <b>Mo'ljal:</b> {esc_html(d['moljal'])}\n"
         f"\U0001F465 <b>Kimlarga:</b> {esc_html(d['kimlarga'])}\n"
@@ -2202,6 +2294,7 @@ async def submit_web_listing(
     qulaylik: str = Form(...),
     narx: str = Form(...),
     listing_type: str = Form("free"),
+    rental_type: str = Form("uzoq_muddat"),
     latitude: str = Form(""),
     longitude: str = Form(""),
     photos: list[UploadFile] = File(...),
@@ -2218,6 +2311,8 @@ async def submit_web_listing(
     kimlarga, xona = clip(kimlarga, 150), clip(xona, 60)
     qulaylik, narx = clip(qulaylik, 900), clip(narx, 200)
     full_name = clip(full_name, 100) or "Veb-sayt orqali"
+    if rental_type not in RENTAL_TYPE_LABELS:
+        rental_type = "uzoq_muddat"
     if not all([manzil, moljal, kimlarga, xona, qulaylik, narx]):
         raise HTTPException(status_code=400, detail="Iltimos, barcha majburiy maydonlarni to'ldiring.")
 
@@ -2282,10 +2377,10 @@ async def submit_web_listing(
         """INSERT INTO listings
             (user_id, username, full_name, sender_phone, manzil, moljal, kimlarga, xona,
              qulaylik, narx, telefon, photos, payment_receipt, price_charged, status, created_at,
-             latitude, longitude, category, source)
-           VALUES (0, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, 'egadan', 'web')""",
+             latitude, longitude, category, source, rental_type)
+           VALUES (0, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, 'egadan', 'web', ?)""",
         (full_name, phone, manzil, moljal, kimlarga, xona, qulaylik, narx, phone,
-         _json.dumps(file_ids), receipt_file_id, price_charged, now_str(), lat, lon),
+         _json.dumps(file_ids), receipt_file_id, price_charged, now_str(), lat, lon, rental_type),
     )
     conn.commit()
     listing_id = cur.lastrowid
@@ -2293,7 +2388,7 @@ async def submit_web_listing(
     record_web_submission(ip)
 
     d = {"manzil": manzil, "moljal": moljal, "kimlarga": kimlarga, "xona": xona,
-         "qulaylik": qulaylik, "narx": narx, "full_name": full_name, "telefon": phone}
+         "qulaylik": qulaylik, "narx": narx, "full_name": full_name, "telefon": phone, "rental_type": rental_type}
     try:
         await notify_admins_new_web_listing(listing_id, d, file_ids, receipt_file_id, price_charged)
     except Exception:
@@ -2313,7 +2408,7 @@ async def submit_listing_inquiry(request: Request):
         raise HTTPException(status_code=400, detail="Majburiy maydonlar to'ldirilmagan")
 
     conn = db()
-    row = conn.execute("SELECT user_id, manzil, raw_text FROM listings WHERE id = ?", (listing_id,)).fetchone()
+    row = conn.execute("SELECT user_id, manzil, raw_text, channel_msg_id FROM listings WHERE id = ?", (listing_id,)).fetchone()
     owner_id = row["user_id"] if row else None
     addr = (row["manzil"] if row and row["manzil"] else extract_district(row["raw_text"] if row else "")) if row else "e'lon"
     conn.execute(
@@ -2330,12 +2425,27 @@ async def submit_listing_inquiry(request: Request):
         f"\U0001F4DE Telefon: {esc_html(phone)}\n"
         + (f"\U0001F4AC Xabar: {esc_html(message)}\n" if message else "")
     )
+    channel_msg_id = row["channel_msg_id"] if row else None
+    reply_markup = None
+    if channel_msg_id and CHANNEL_USERNAME:
+        reply_markup = {"inline_keyboard": [[
+            {"text": "\U0001F4E2 Kanaldagi e'lonni ko'rish", "url": f"https://t.me/{CHANNEL_USERNAME}/{channel_msg_id}"}
+        ]]}
+
+    # MUHIM: e'lon egasi ba'zan o'zi ham admin/moderator bo'lishi mumkin (ADMIN_IDS
+    # ichida) - shu holatda "egasiga" va "har bir adminga" alohida yuborilsa, u
+    # bir xil xabarni IKKI MARTA olardi. Shuning uchun qabul qiluvchilar ro'yxatini
+    # (owner + barcha adminlar) avval bitta TO'PLAMga (set) yig'amiz - bu takroriy
+    # ID'larni avtomatik olib tashlaydi - va har biriga FAQAT BIR MARTA yuboramiz.
+    recipients = set()
     if owner_id:
-        await notify_telegram(owner_id, notify_text)
+        recipients.add(owner_id)
     for admin_id_str in (os.getenv("ADMIN_IDS", "") or "").split(","):
         admin_id_str = admin_id_str.strip()
         if admin_id_str.isdigit():
-            await notify_telegram(int(admin_id_str), notify_text)
+            recipients.add(int(admin_id_str))
+    for uid in recipients:
+        await notify_telegram(uid, notify_text, reply_markup=reply_markup)
 
     return {"ok": True}
 
@@ -2598,6 +2708,39 @@ def api_stats(user: str = Depends(check_auth)):
 
     pending_subarenda = conn.execute("SELECT COUNT(*) c FROM subarenda_requests WHERE status='yangi'").fetchone()["c"]
 
+    # ---- Chuqurroq tahlil: ijara turi, tuman va toifa bo'yicha taqsimot (faol e'lonlar) ----
+    rt_rows = conn.execute(
+        "SELECT COALESCE(rental_type,'uzoq_muddat') rt, COUNT(*) c FROM listings "
+        "WHERE status='approved' AND COALESCE(expired,0)=0 GROUP BY rt ORDER BY c DESC"
+    ).fetchall()
+    rt_label_map = {"uzoq_muddat": "\U0001F3E0 Uzoq muddat", "kunlik": "\U0001F4C5 Kunlik", "dacha": "\U0001F333 Dacha", "mehmonxona": "\U0001F6CF Mehmonxona"}
+    rental_type_breakdown = [{"label": rt_label_map.get(r["rt"], r["rt"]), "c": r["c"]} for r in rt_rows]
+
+    cat_rows = conn.execute(
+        "SELECT COALESCE(category,'egadan') cat, COUNT(*) c FROM listings "
+        "WHERE status='approved' AND COALESCE(expired,0)=0 GROUP BY cat ORDER BY c DESC"
+    ).fetchall()
+    cat_label_map = {"egadan": "Egasidan", "tasdiqlangan": "✅ Tasdiqlangan", "subarenda": "\U0001F3E2 Subarenda", "premium": "\U0001F48E Premium"}
+    category_breakdown = [{"label": cat_label_map.get(r["cat"], r["cat"]), "c": r["c"]} for r in cat_rows]
+
+    active_rows = conn.execute(
+        "SELECT manzil FROM listings WHERE status='approved' AND COALESCE(expired,0)=0 AND manzil IS NOT NULL AND manzil != ''"
+    ).fetchall()
+    district_counts = {}
+    for r in active_rows:
+        low = (r["manzil"] or "").lower()
+        for d in TASHKENT_DISTRICTS:
+            if d.lower() in low:
+                district_counts[d] = district_counts.get(d, 0) + 1
+                break
+    district_breakdown = [{"label": k, "c": v} for k, v in sorted(district_counts.items(), key=lambda x: -x[1])[:8]]
+
+    web_vs_bot = conn.execute(
+        "SELECT COALESCE(source,'bot') src, COUNT(*) c FROM listings "
+        "WHERE created_at >= ? GROUP BY src", (month_ago,)
+    ).fetchall()
+    source_breakdown = {r["src"]: r["c"] for r in web_vs_bot}
+
     conn.close()
 
     return {
@@ -2619,6 +2762,10 @@ def api_stats(user: str = Depends(check_auth)):
         "daily_subs": daily_subs,
         "monthly_revenue": monthly_revenue,
         "pending_subarenda": pending_subarenda,
+        "rental_type_breakdown": rental_type_breakdown,
+        "category_breakdown": category_breakdown,
+        "district_breakdown": district_breakdown,
+        "source_breakdown": {"bot": source_breakdown.get("bot", 0), "web": source_breakdown.get("web", 0)},
         "map_stats": {
             "total_views": total_map_views,
             "views_month": map_views_month,
@@ -2642,6 +2789,36 @@ def pct_change(old, new):
     if not old:
         return None if not new else 100.0
     return round(((new - old) / old) * 100, 1)
+
+
+@app.get("/api/moderator-stats")
+def api_moderator_stats(user: str = Depends(check_auth)):
+    """Admin uchun - HAR BIR moderator qancha e'lon joylagani, nechtasi
+    tasdiqlangani/rad etilgani. Bot ichida moderator faqat O'ZINING
+    natijasini ko'radi - bu yerda esa admin BARCHASINI bir joyda ko'radi."""
+    conn = db()
+    mods = conn.execute(
+        """SELECT m.user_id, m.added_at, u.username, u.full_name
+           FROM moderators m LEFT JOIN users u ON u.user_id = m.user_id
+           ORDER BY m.added_at DESC"""
+    ).fetchall()
+    result = []
+    for m in mods:
+        uid = m["user_id"]
+        total = conn.execute("SELECT COUNT(*) c FROM listings WHERE user_id = ?", (uid,)).fetchone()["c"]
+        approved = conn.execute("SELECT COUNT(*) c FROM listings WHERE user_id = ? AND status='approved'", (uid,)).fetchone()["c"]
+        rejected = conn.execute("SELECT COUNT(*) c FROM listings WHERE user_id = ? AND status='rejected'", (uid,)).fetchone()["c"]
+        last = conn.execute("SELECT created_at FROM listings WHERE user_id = ? ORDER BY created_at DESC LIMIT 1", (uid,)).fetchone()
+        result.append({
+            "user_id": uid,
+            "username": m["username"],
+            "full_name": m["full_name"] or f"ID:{uid}",
+            "added_at": m["added_at"],
+            "total": total, "approved": approved, "rejected": rejected,
+            "last_activity": last["created_at"] if last else None,
+        })
+    conn.close()
+    return result
 
 
 # ============================= SAHIFALAR =============================
@@ -2678,7 +2855,7 @@ ADMIN_HTML = """<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --brand: #0E9F76; --brand-dark: #0A7A5C; --brand-light: #E7F7F1;
+    --brand: #FF3B5C; --brand-dark: #E01E45; --brand-light: #FFEBEF;
     --ink: #101826; --ink-soft: #47526B; --muted: #6B7690; --line: #E7EAF0;
     --bg: #F6F8FA; --card: #ffffff;
     --sidebar-w: 232px;
@@ -2812,6 +2989,7 @@ ADMIN_HTML = """<!DOCTYPE html>
     <a data-tab="visitors"><span class="icon">\U0001F465</span> Tashriflar</a>
     <a data-tab="subarenda"><span class="icon">\U0001F3E2</span> Subarenda <span id="subarenda-badge"></span></a>
     <a data-tab="inquiries"><span class="icon">\U0001F4E9</span> So'rovlar <span id="inquiries-badge"></span></a>
+    <a data-tab="moderators"><span class="icon">\U0001F46E</span> Moderatorlar</a>
     <a data-tab="mapview"><span class="icon">\U0001F5FA</span> Xarita</a>
   </nav>
   <div class="side-live"><span class="pulse-dot"></span> Jonli holat</div>
@@ -2847,6 +3025,22 @@ ADMIN_HTML = """<!DOCTYPE html>
           <div style="font-size:12px;color:var(--muted);font-weight:700;margin-bottom:8px;">TOP 5 — eng ko'p qiziqish</div>
           <div class="top-list" id="top-clicked"><div class="empty-note">Ma'lumot yo'q</div></div>
         </div>
+      </div>
+      <div class="panel">
+        <h2>\U0001F3F7️ Ijara turi bo'yicha</h2>
+        <div class="panel-sub">Hozirgi faol e'lonlar</div>
+        <div id="rt-bars" class="bars-list"></div>
+      </div>
+      <div class="panel">
+        <h2>\U0001F4CD Tuman bo'yicha (TOP 8)</h2>
+        <div class="panel-sub">Hozirgi faol e'lonlar</div>
+        <div id="district-bars" class="bars-list"></div>
+      </div>
+      <div class="panel">
+        <h2>\U0001F3F7️ Toifa va manba bo'yicha</h2>
+        <div class="panel-sub">Toifa: hozirgi faol e'lonlar &middot; Manba: so'nggi 30 kun</div>
+        <div id="cat-bars" class="bars-list" style="margin-bottom:14px;"></div>
+        <div class="funnel-row" id="source-row"></div>
       </div>
     </div>
   </div>
@@ -2894,6 +3088,19 @@ ADMIN_HTML = """<!DOCTYPE html>
     <div class="page-head"><h1>\U0001F4E9 Saytdan kelgan so\'rovlar</h1></div>
     <div class="panel-sub" style="margin-bottom:16px;">Foydalanuvchilar veb-saytdan e\'lon egalariga yuborgan so\'rovlar</div>
     <div id="inquiries-list"><div class="empty-note">Yuklanmoqda...</div></div>
+  </div>
+
+  <div id="tab-moderators" class="tab-page">
+    <div class="page-head"><h1>\U0001F46E Moderatorlar nazorati</h1></div>
+    <div class="panel-sub" style="margin-bottom:16px;">Har bir moderator qancha e'lon joylagani, nechtasi tasdiqlangani/rad etilgani — bot ichida moderator faqat o'zinikini ko'radi, bu yerda siz barchasini bir joyda ko'rasiz</div>
+    <div class="panel">
+      <div class="table-scroll">
+        <table class="visit-table" id="moderators-table">
+          <thead><tr><th>Moderator</th><th>Qo'shilgan</th><th>Jami e'lon</th><th>Tasdiqlangan</th><th>Rad etilgan</th><th>So'nggi faollik</th></tr></thead>
+          <tbody><tr><td colspan="6" class="empty-note">Yuklanmoqda...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div id="tab-mapview" class="tab-page">
@@ -2967,6 +3174,19 @@ async function loadStats() {
     <div class="top-item"><div class="ti-left"><div class="ti-rank">${i+1}</div><div class="ti-name">${t.manzil || 'Nomsiz'} — ${t.narx || ''}</div></div><div class="ti-clicks">${t.clicks} bosish</div></div>
   `).join('') : `<div class="empty-note">Hali bosishlar yo'q</div>`;
 
+  document.getElementById('rt-bars').innerHTML = barsHtml(s.rental_type_breakdown, 'label', 10);
+  document.getElementById('district-bars').innerHTML = barsHtml(s.district_breakdown, 'label', 8);
+  document.getElementById('cat-bars').innerHTML = barsHtml(s.category_breakdown, 'label', 10);
+  const srcTotal = (s.source_breakdown.bot || 0) + (s.source_breakdown.web || 0);
+  const srcPct = srcTotal ? Math.round((s.source_breakdown.web / srcTotal) * 100) : 0;
+  document.getElementById('source-row').innerHTML = `
+    <div class="funnel-box"><div class="fb-val">${s.source_breakdown.bot || 0}</div><div class="fb-label">\U0001F916 Bot orqali</div></div>
+    <div class="funnel-arrow">+</div>
+    <div class="funnel-box"><div class="fb-val">${s.source_breakdown.web || 0}</div><div class="fb-label">\U0001F310 Sayt orqali</div></div>
+    <div class="funnel-arrow">=</div>
+    <div class="funnel-box"><div class="fb-val">${srcPct}%</div><div class="fb-label">Sayt ulushi</div></div>
+  `;
+
   // Tashriflar KPI
   const v = s.visit_stats;
   document.getElementById('kpi-visits').innerHTML = `
@@ -2999,7 +3219,7 @@ async function loadStats() {
   window._charts.push(new Chart(document.getElementById('revenueChart'), {
     type: 'bar',
     data: { labels: s.monthly_revenue.map(d => d.month), datasets: [
-      { label: "E'lon", data: s.monthly_revenue.map(d => d.listings), backgroundColor: '#0E9F76', borderRadius: 6 },
+      { label: "E'lon", data: s.monthly_revenue.map(d => d.listings), backgroundColor: '#FF3B5C', borderRadius: 6 },
       { label: 'Limit', data: s.monthly_revenue.map(d => d.subs), backgroundColor: '#9333EA', borderRadius: 6 }
     ]},
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: tickColor, font: { size: 11 } } } },
@@ -3019,7 +3239,7 @@ async function loadStats() {
   }));
   window._charts.push(new Chart(document.getElementById('visitsChart'), {
     type: 'line',
-    data: { labels: v.daily.map(d => d.date), datasets: [{ label: 'Tashriflar', data: v.daily.map(d => d.count), borderColor: '#0E9F76', backgroundColor: 'rgba(14,159,118,0.12)', fill: true, tension: 0.35, pointRadius: 2 }] },
+    data: { labels: v.daily.map(d => d.date), datasets: [{ label: 'Tashriflar', data: v.daily.map(d => d.count), borderColor: '#FF3B5C', backgroundColor: 'rgba(255,59,92,0.12)', fill: true, tension: 0.35, pointRadius: 2 }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
       scales: { y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, stepSize: 1 } }, x: { grid: { display: false }, ticks: { color: tickColor, maxRotation: 0, autoSkipPadding: 12 } } } }
   }));
@@ -3087,13 +3307,30 @@ async function updateInquiry(id) {
   loadInquiries();
 }
 
+async function loadModerators() {
+  const res = await fetch('/api/moderator-stats');
+  const items = await res.json();
+  const tbody = document.querySelector('#moderators-table tbody');
+  if (!items.length) { tbody.innerHTML = `<tr><td colspan="6" class="empty-note">Hali moderator qo'shilmagan</td></tr>`; return; }
+  tbody.innerHTML = items.map(m => `
+    <tr>
+      <td><b>${m.full_name}</b>${m.username ? ' &middot; @' + m.username : ''}<br><span style="color:var(--muted);font-size:11px;">ID: ${m.user_id}</span></td>
+      <td>${(m.added_at || '-').slice(0, 10)}</td>
+      <td>${m.total}</td>
+      <td style="color:#16A34A;font-weight:700;">${m.approved}</td>
+      <td style="color:#C0362C;font-weight:700;">${m.rejected}</td>
+      <td>${m.last_activity ? m.last_activity.slice(0, 16) : '—'}</td>
+    </tr>
+  `).join('');
+}
+
 async function loadMap() {
   const map = L.map('map', { tap: true }).setView([41.311081, 69.240562], 11);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 19 }).addTo(map);
   const res = await fetch('/api/listings');
   const listings = await res.json();
   listings.forEach(l => {
-    const marker = L.circleMarker([l.latitude, l.longitude], { radius: 8, fillColor: '#0E9F76', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map);
+    const marker = L.circleMarker([l.latitude, l.longitude], { radius: 8, fillColor: '#FF3B5C', color: '#fff', weight: 2, fillOpacity: 0.9 }).addTo(map);
     if (l.narx) marker.bindTooltip(l.narx, { permanent: true, direction: 'top', className: 'price-label', offset: [0, -6] });
     const postBtn = l.post_link ? `<br><a href="${l.post_link}" target="_blank" class="post-link-btn">\U0001F4E2 Kanaldagi postni ko'rish</a>` : '';
     marker.bindPopup(`<b>${l.manzil || ''}</b><br>\U0001F3AF ${l.moljal || ''}<br>\U0001F6CF ${l.xona || ''} \u2014 \U0001F4B0 ${l.narx || ''}<br>\U0001F465 ${l.kimlarga || ''}<br><small>#${l.id}</small>${postBtn}`);
@@ -3103,9 +3340,11 @@ async function loadMap() {
 loadStats();
 loadSubarenda();
 loadInquiries();
+loadModerators();
 setInterval(loadStats, 60000);
 setInterval(loadSubarenda, 30000);
 setInterval(loadInquiries, 30000);
+setInterval(loadModerators, 60000);
 </script>
 </body>
 </html>
@@ -3141,17 +3380,19 @@ PUBLIC_MAP_HTML = """<!DOCTYPE html>
   }
   #topbar h1 { font-size: 14.5px; font-weight: 700; }
   #topbar .count { font-size: 11.5px; color: var(--map-muted); font-weight: 600; }
-  #topbar-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  #home-link {
-    display: flex; align-items: center; justify-content: center; width: 32px; height: 32px;
-    border-radius: 9px; background: rgba(255,255,255,0.08); color: var(--map-ink); flex-shrink: 0;
-  }
-  #home-link svg { width: 16px; height: 16px; }
+  #topbar-left { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  #topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  #topbar-logo { width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0; object-fit: cover; }
   #filter-btn {
     display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.08); border: 1px solid var(--map-line);
     color: var(--map-ink); padding: 7px 12px; border-radius: 10px; font-size: 12.5px; font-weight: 700; cursor: pointer; flex-shrink: 0;
   }
   #filter-btn .fcount { background: var(--map-accent); color: #fff; border-radius: 20px; padding: 0 6px; font-size: 10.5px; min-width: 16px; text-align: center; }
+  #close-btn {
+    display: flex; align-items: center; justify-content: center; width: 32px; height: 32px;
+    border-radius: 9px; background: rgba(255,255,255,0.08); color: var(--map-ink); flex-shrink: 0; border: none; cursor: pointer;
+  }
+  #close-btn svg { width: 16px; height: 16px; }
 
   #map { position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; }
 
@@ -3183,14 +3424,20 @@ PUBLIC_MAP_HTML = """<!DOCTYPE html>
   .switch input:checked + .slider { background: var(--map-accent); }
   .switch input:checked + .slider::before { transform: translateX(18px); }
 
-  #locate-btn, #legend-btn {
-    position: fixed; right: 12px; z-index: 900; width: 42px; height: 42px; border-radius: 50%; border: none;
-    background: var(--map-panel); color: var(--map-ink); box-shadow: 0 2px 10px rgba(0,0,0,0.5); cursor: pointer;
-    display: flex; align-items: center; justify-content: center; border: 1px solid var(--map-line);
+  /* O'ng pastdagi tugmalar - vertikal ustun, bir-biriga aniq mos oraliqlar bilan.
+     Leaflet'ning o'z +/- zoom tugmasi chapga (bottomleft) o'tkazilgan - shu bilan
+     ular hech qachon bir-birining ustiga tushmaydi. */
+  #map-actions {
+    position: fixed; right: 12px; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 900;
+    display: flex; flex-direction: column; gap: 10px;
   }
-  #locate-btn { bottom: 90px; }
-  #legend-btn { bottom: 140px; font-size: 16px; }
-  .leaflet-control-zoom { margin-bottom: 90px !important; }
+  #locate-btn, #legend-btn {
+    width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--map-line);
+    background: var(--map-panel); color: var(--map-ink); box-shadow: 0 2px 10px rgba(0,0,0,0.5); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  #legend-btn { font-size: 16px; }
+  .leaflet-bottom.leaflet-left { margin-bottom: env(safe-area-inset-bottom); }
 
   #legend-box {
     position: fixed; left: 12px; bottom: 24px; z-index: 900; background: var(--map-panel); border: 1px solid var(--map-line);
@@ -3228,24 +3475,31 @@ PUBLIC_MAP_HTML = """<!DOCTYPE html>
 
 <div id="topbar">
   <div id="topbar-left">
-    <a href="/" id="home-link" aria-label="Bosh sahifa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-6h4v6h3a1 1 0 0 0 1-1v-9"/></svg></a>
+    <img id="topbar-logo" src="/logo.png" alt="logo" onerror="this.style.display='none'">
     <div>
-      <h1>\U0001F3E0 Ijaraga Uylar</h1>
+      <h1>Ijaraga Uylar</h1>
       <div class="count" id="count-badge"></div>
     </div>
   </div>
-  <button id="filter-btn" onclick="toggleFilters(true)">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
-    <span data-i18n="filter_btn">Filtr</span> <span class="fcount" id="filterCount">0</span>
-  </button>
+  <div id="topbar-right">
+    <button id="filter-btn" onclick="toggleFilters(true)">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+      <span data-i18n="filter_btn">Filtr</span> <span class="fcount" id="filterCount">0</span>
+    </button>
+    <button id="close-btn" onclick="closeMap()" data-i18n-title="close_title" title="Yopish" aria-label="Yopish">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+    </button>
+  </div>
 </div>
 
 <div id="map"></div>
 
-<button id="locate-btn" data-i18n-title="locate_title" title="Mening joylashuvim" onclick="locateMe()">
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
-</button>
-<button id="legend-btn" data-i18n-title="legend_title" title="Belgilar" onclick="toggleLegend()">\U0001F3F7\ufe0f</button>
+<div id="map-actions">
+  <button id="locate-btn" data-i18n-title="locate_title" title="Mening joylashuvim" onclick="locateMe()">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+  </button>
+  <button id="legend-btn" data-i18n-title="legend_title" title="Belgilar" onclick="toggleLegend()">\U0001F3F7\ufe0f</button>
+</div>
 <div id="legend-box">
   <div class="legend-row"><span class="dot" style="background:#ff5470;"></span> <span data-i18n="cat_egadan">Egasidan (oddiy)</span></div>
   <div class="legend-row"><span class="dot" style="background:#16a34a;"></span> <span data-i18n="cat_tasdiqlangan_plain">Tasdiqlangan</span></div>
@@ -3293,19 +3547,19 @@ PUBLIC_MAP_HTML = """<!DOCTYPE html>
 <script>
 const MAP_LANG = "__LANG__";
 const MI18N = {
-  uz: { page_title: "Ijaraga Uylar — Interaktiv xarita", loading: "Xarita yuklanmoqda...", filter_btn: "Filtr", locate_title: "Mening joylashuvim", legend_title: "Belgilar",
+  uz: { page_title: "Ijaraga Uylar — Interaktiv xarita", loading: "Xarita yuklanmoqda...", filter_btn: "Filtr", locate_title: "Mening joylashuvim", legend_title: "Belgilar", close_title: "Yopish",
         cat_egadan: "Egasidan (oddiy)", cat_egadan_plain: "Egasidan", cat_tasdiqlangan_plain: "Tasdiqlangan", cat_subarenda_plain: "Subarenda", cat_premium_plain: "Premium",
         legend_top: "TOP \u2014 pullik e'lon", rooms_label: "Xonalar soni", rooms_any: "Farqi yo'q", category_label: "Toifa",
         cat_all: "Barchasi", top_only: "Faqat TOP e'lonlar", apply_btn: "Qo'llash", count_suffix: "ta e'lon",
         detail_btn: "Batafsil", channel_btn: "Kanalda", no_address: "Manzil ko'rsatilmagan", map_error: "\u26a0\ufe0f Xarita yuklanmadi. Internet aloqangizni tekshirib, sahifani qayta yuklang.",
         locate_error: "Joylashuvni aniqlab bo'lmadi. Brauzer sozlamalarida ruxsat berilganini tekshiring." },
-  ru: { page_title: "Ijaraga Uylar \u2014 \u0418\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u0430\u044f \u043a\u0430\u0440\u0442\u0430", loading: "\u041a\u0430\u0440\u0442\u0430 \u0437\u0430\u0433\u0440\u0443\u0436\u0430\u0435\u0442\u0441\u044f...", filter_btn: "\u0424\u0438\u043b\u044c\u0442\u0440", locate_title: "\u041c\u043e\u0451 \u043c\u0435\u0441\u0442\u043e\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435", legend_title: "\u041e\u0431\u043e\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f",
+  ru: { page_title: "Ijaraga Uylar \u2014 \u0418\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u0430\u044f \u043a\u0430\u0440\u0442\u0430", loading: "\u041a\u0430\u0440\u0442\u0430 \u0437\u0430\u0433\u0440\u0443\u0436\u0430\u0435\u0442\u0441\u044f...", filter_btn: "\u0424\u0438\u043b\u044c\u0442\u0440", locate_title: "\u041c\u043e\u0451 \u043c\u0435\u0441\u0442\u043e\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435", legend_title: "\u041e\u0431\u043e\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u044f", close_title: "\u0417\u0430\u043a\u0440\u044b\u0442\u044c",
         cat_egadan: "\u041e\u0442 \u0445\u043e\u0437\u044f\u0438\u043d\u0430 (\u043e\u0431\u044b\u0447\u043d.)", cat_egadan_plain: "\u041e\u0442 \u0445\u043e\u0437\u044f\u0438\u043d\u0430", cat_tasdiqlangan_plain: "\u041f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e", cat_subarenda_plain: "\u0421\u0443\u0431\u0430\u0440\u0435\u043d\u0434\u0430", cat_premium_plain: "\u041f\u0440\u0435\u043c\u0438\u0443\u043c",
         legend_top: "\u0422\u041e\u041f \u2014 \u043f\u043b\u0430\u0442\u043d\u043e\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", rooms_label: "\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u043a\u043e\u043c\u043d\u0430\u0442", rooms_any: "\u041d\u0435\u0432\u0430\u0436\u043d\u043e", category_label: "\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f",
         cat_all: "\u0412\u0441\u0435", top_only: "\u0422\u043e\u043b\u044c\u043a\u043e \u0422\u041e\u041f \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", apply_btn: "\u041f\u0440\u0438\u043c\u0435\u043d\u0438\u0442\u044c", count_suffix: "\u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439",
         detail_btn: "\u041f\u043e\u0434\u0440\u043e\u0431\u043d\u0435\u0435", channel_btn: "\u0412 \u043a\u0430\u043d\u0430\u043b\u0435", no_address: "\u0410\u0434\u0440\u0435\u0441 \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d", map_error: "\u26a0\ufe0f \u041a\u0430\u0440\u0442\u0430 \u043d\u0435 \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u043b\u0430\u0441\u044c. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0438\u043d\u0442\u0435\u0440\u043d\u0435\u0442-\u0441\u043e\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435 \u0438 \u043e\u0431\u043d\u043e\u0432\u0438\u0442\u0435 \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u0443.",
         locate_error: "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0438\u0442\u044c \u043c\u0435\u0441\u0442\u043e\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0440\u0430\u0437\u0440\u0435\u0448\u0435\u043d\u0438\u044f \u0432 \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430\u0445 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0430." },
-  en: { page_title: "Ijaraga Uylar — Interactive Map", loading: "Loading map...", filter_btn: "Filter", locate_title: "My location", legend_title: "Legend",
+  en: { page_title: "Ijaraga Uylar — Interactive Map", loading: "Loading map...", filter_btn: "Filter", locate_title: "My location", legend_title: "Legend", close_title: "Close",
         cat_egadan: "From owner (regular)", cat_egadan_plain: "From owner", cat_tasdiqlangan_plain: "Verified", cat_subarenda_plain: "Sublease", cat_premium_plain: "Premium",
         legend_top: "TOP \u2014 paid listing", rooms_label: "Rooms", rooms_any: "Any", category_label: "Category",
         cat_all: "All", top_only: "TOP listings only", apply_btn: "Apply", count_suffix: "listings",
@@ -3337,6 +3591,16 @@ function toggleFilters(open) {
 }
 function toggleLegend() {
   document.getElementById('legend-box').classList.toggle('show');
+}
+function closeMap() {
+  // Agar xarita boshqa sahifadan (masalan bosh sahifadan) ochilgan bo'lsa - "orqaga"
+  // qaytish tabiiyroq (foydalanuvchi qayerdan kelgan bo'lsa, o'sha yerga qaytadi).
+  // Aks holda (masalan to'g'ridan-to'g'ri /xarita havolasi bosilgan bo'lsa) - bosh sahifaga.
+  if (document.referrer && document.referrer.indexOf(window.location.host) !== -1 && window.history.length > 1) {
+    window.history.back();
+  } else {
+    window.location.href = '/';
+  }
 }
 document.querySelectorAll('.fp-chip').forEach(chip => {
   chip.addEventListener('click', () => {
@@ -3414,7 +3678,7 @@ async function init() {
     fetch('/api/track-view', { method: 'POST' }).catch(() => {});
 
     map = L.map('map', { tap: true, zoomControl: false }).setView([41.311081, 69.240562], 11);
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.control.zoom({ position: 'bottomleft' }).addTo(map);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 19 }).addTo(map);
 
     cluster = L.markerClusterGroup({
