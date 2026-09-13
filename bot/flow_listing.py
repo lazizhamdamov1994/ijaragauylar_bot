@@ -413,6 +413,12 @@ async def rasm_tayyor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception("E'lon matnini ko'rsatishda xatolik")
         await context.bot.send_message(chat_id, "\u26a0\ufe0f E'lon matnini ko'rsatishda tarmoq muammosi yuz berdi.")
 
+    # Slaydshov video FAQAT admin/moderatorlar uchun - oddiy e'lon
+    # beruvchilarga bu savol umuman ko'rsatilmaydi.
+    if not is_staff(user.id):
+        context.user_data["want_slideshow"] = False
+        return await _show_tasdiqlash_keyboard(update, context)
+
     slideshow_keyboard = InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("\u2705 Ha", callback_data="slideshow_yes"),
