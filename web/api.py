@@ -2,19 +2,80 @@
 Sayt/admin panel ishlatadigan kichik JSON API endpointlari (statistika,
 so'rovlar ro'yxati, kuzatuv).
 """
+import html
 import logging
+import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from common.config import ADMIN_IDS, BOT_TOKEN
-from common.db import create_support_request, db, get_blocked_phone, now_str, toggle_favorite
+from common.config import ADMIN_IDS, BOT_TOKEN, BOT_USERNAME, CHANNEL_ID, CHANNEL_USERNAME
+from common.db import (
+    broadcast_notification,
+    create_support_request,
+    db,
+    get_blocked_phone,
+    get_pending_support_requests,
+    get_setting,
+    is_subscribed,
+    now_str,
+    reply_support_request,
+    set_setting,
+    toggle_favorite,
+)
 
 from web.auth import check_auth, get_current_tg_user
 from web.listings_data import get_active_listings, normalize_phone_web
+from web.pages import notify_telegram
 from web.render import TASHKENT_DISTRICTS
+
+# MUHIM: quyidagilar bot/ paketidan import qilinadi - odatda web/ hech qachon
+# bot/'dan import qilmaydi (ikkalasi alohida-alohida ishga tushadigan
+# jarayonlar), lekin bu funksiyalar TOZA (faqat sqlite o'qish/yozish yoki matn
+# formatlash, import vaqtida yon ta'sir yo'q) va nozik formatlash/xavf-baholash
+# mantiqini o'z ichiga oladi - shuning uchun ikkinchi nusxa yaratib, vaqt
+# o'tishi bilan bot bilan mos kelmay qolish xavfini tug'dirish o'rniga,
+# BITTA manbadan qayta ishlatiladi (admin panel botdagi barcha imkoniyatlarni
+# veb orqali ham berishi kerak - shu jumladan kanalga post qilish).
+from bot.admin_moderation import log_channel_post
+from bot.constants import SETTINGS_FIELDS
+from bot.db import (
+    active_subscribers_page,
+    approve_subscription,
+    block_phone,
+    cancel_subscription,
+    count_active_subscribers,
+    get_active_subscription_id,
+    get_listing,
+    get_pending_listings,
+    get_pending_subscriptions,
+    get_subscription,
+    get_user,
+    list_blocked_phones_page,
+    reject_subscription,
+    unblock_phone,
+    update_listing_status,
+)
+from bot.fraud_detection import (
+    ban_user,
+    compute_risk_score,
+    count_listings_by_user,
+    count_reports_made,
+    count_reports_received,
+    get_flagged_users,
+    is_banned,
+    unban_user,
+)
+from bot.helpers import (
+    add_extra_admin,
+    add_moderator,
+    build_caption,
+    channel_keyboard,
+    remove_extra_admin,
+    remove_moderator,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -413,6 +474,367 @@ async def api_submit_support_request(request: Request):
         raise HTTPException(status_code=400, detail="empty_message")
     req_id = create_support_request(tg_user["uid"], tg_user.get("un"), tg_user.get("fn"), message)
     await _notify_admins_new_support_request(req_id, tg_user, message)
+    return {"ok": True}
+
+
+# ============================= ADMIN: KUTILMOQDA (E'LON / OBUNA SO'ROVLARI) =============================
+# Botdagi bilan bir xil oqim (approve_listing/approve_sub/admin_reject_reason,
+# bot/admin_moderation.py) - lekin python-telegram-bot Application contextisiz,
+# to'g'ridan-to'g'ri Telegram Bot API orqali (xuddi web/pages.py'dagi
+# notify_admins_new_web_listing kabi).
+
+async def _post_listing_to_channel(listing: dict):
+    """Kanalga rasmlar + matn+tugma post qiladi. Muvaffaqiyatli bo'lsa
+    yuborilgan xabar (matn) message_id'sini qaytaradi, aks holda None."""
+    if not BOT_TOKEN or not CHANNEL_ID:
+        return None
+    photos = listing.get("photos") or []
+    async with httpx.AsyncClient(timeout=20) as client:
+        try:
+            if len(photos) == 1:
+                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", json={"chat_id": CHANNEL_ID, "photo": photos[0]})
+            elif photos:
+                await client.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMediaGroup",
+                    json={"chat_id": CHANNEL_ID, "media": [{"type": "photo", "media": p} for p in photos]},
+                )
+        except Exception:
+            logger.exception("Kanalga rasm yuborishda xatolik (listing_id=%s)", listing.get("id"))
+            return None
+        caption = build_caption(listing, BOT_USERNAME)
+        keyboard = channel_keyboard(listing["id"], BOT_USERNAME, listing.get("latitude"), listing.get("longitude"))
+        try:
+            resp = await client.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                json={"chat_id": CHANNEL_ID, "text": caption, "parse_mode": "HTML", "reply_markup": keyboard.to_dict()},
+            )
+            data = resp.json()
+            if not data.get("ok"):
+                logger.error("Kanalga matn yuborishda xatolik: %s", data)
+                return None
+            return data["result"]["message_id"]
+        except Exception:
+            logger.exception("Kanalga matn yuborishda xatolik (listing_id=%s)", listing.get("id"))
+            return None
+
+
+@router.get("/api/admin/pending")
+def api_admin_pending(user: str = Depends(check_auth)):
+    listings = get_pending_listings(limit=100)
+    subs = get_pending_subscriptions(limit=100)
+    if subs:
+        conn = db()
+        ids = tuple({s["user_id"] for s in subs})
+        placeholders = ",".join("?" * len(ids))
+        rows = conn.execute(f"SELECT user_id, username, full_name FROM users WHERE user_id IN ({placeholders})", ids).fetchall()
+        conn.close()
+        by_id = {r["user_id"]: dict(r) for r in rows}
+        for s in subs:
+            u = by_id.get(s["user_id"]) or {}
+            s["username"] = u.get("username")
+            s["full_name"] = u.get("full_name")
+    return {"listings": listings, "subscriptions": subs}
+
+
+@router.post("/api/admin/pending/listing/{listing_id}/approve")
+async def api_admin_approve_listing(listing_id: int, user: str = Depends(check_auth)):
+    listing = get_listing(listing_id)
+    if not listing:
+        raise HTTPException(status_code=404, detail="not_found")
+    if listing["status"] != "pending":
+        raise HTTPException(status_code=409, detail="already_reviewed")
+    message_id = await _post_listing_to_channel(listing)
+    if message_id is None:
+        raise HTTPException(status_code=502, detail="channel_post_failed")
+    update_listing_status(listing_id, "approved", channel_msg_id=message_id)
+    log_channel_post(listing_id, message_id)
+    link = f"https://t.me/{CHANNEL_USERNAME}" if CHANNEL_USERNAME else None
+    msg = "✅ Sizning e'loningiz tasdiqlandi va kanalga joylandi!"
+    if link:
+        msg += f"\n{link}"
+    await notify_telegram(listing["user_id"], msg)
+    return {"ok": True, "channel_msg_id": message_id}
+
+
+@router.post("/api/admin/pending/listing/{listing_id}/reject")
+async def api_admin_reject_listing(listing_id: int, reason: str = Query(...), user: str = Depends(check_auth)):
+    listing = get_listing(listing_id)
+    if not listing:
+        raise HTTPException(status_code=404, detail="not_found")
+    if listing["status"] != "pending":
+        raise HTTPException(status_code=409, detail="already_reviewed")
+    reason = reason.strip()[:500]
+    if not reason:
+        raise HTTPException(status_code=400, detail="empty_reason")
+    update_listing_status(listing_id, "rejected", reason=reason)
+    await notify_telegram(listing["user_id"], f"❌ Sizning e'loningiz (#{listing_id}) rad etildi.\n\U0001F4DD Sabab: {html.escape(reason)}")
+    return {"ok": True}
+
+
+@router.post("/api/admin/pending/subscription/{sub_id}/approve")
+async def api_admin_approve_subscription(sub_id: int, user: str = Depends(check_auth)):
+    sub = get_subscription(sub_id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="not_found")
+    if sub["status"] != "pending":
+        raise HTTPException(status_code=409, detail="already_reviewed")
+    target_user_id, expire = approve_subscription(sub_id)
+    await notify_telegram(target_user_id, f"✅ Limitingiz faollashtirildi!\nMuddati: <b>{expire[:10]}</b> gacha.")
+    return {"ok": True, "expire_at": expire}
+
+
+@router.post("/api/admin/pending/subscription/{sub_id}/reject")
+async def api_admin_reject_subscription(sub_id: int, reason: str = Query(...), user: str = Depends(check_auth)):
+    sub = get_subscription(sub_id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="not_found")
+    if sub["status"] != "pending":
+        raise HTTPException(status_code=409, detail="already_reviewed")
+    reason = reason.strip()[:500]
+    if not reason:
+        raise HTTPException(status_code=400, detail="empty_reason")
+    reject_subscription(sub_id, reason)
+    await notify_telegram(sub["user_id"], f"❌ Obuna so'rovingiz rad etildi.\n\U0001F4DD Sabab: {html.escape(reason)}")
+    return {"ok": True}
+
+
+# ============================= ADMIN: OBUNACHILAR (Limit) =============================
+
+@router.get("/api/admin/subscribers")
+def api_admin_subscribers(user: str = Depends(check_auth)):
+    return active_subscribers_page(0, limit=1000)
+
+
+@router.post("/api/admin/subscribers/{sub_id}/cancel")
+async def api_admin_cancel_subscriber(sub_id: int, user: str = Depends(check_auth)):
+    target_user_id = cancel_subscription(sub_id)
+    if not target_user_id:
+        raise HTTPException(status_code=404, detail="not_found")
+    await notify_telegram(target_user_id, "❌ Sizning obunangiz administrator tomonidan muddatidan oldin bekor qilindi.")
+    return {"ok": True}
+
+
+# ============================= ADMIN: MODERATOR / ADMIN BOSHQARUVI =============================
+
+@router.get("/api/admin/extra-admins")
+def api_admin_extra_admins(user: str = Depends(check_auth)):
+    conn = db()
+    rows = conn.execute(
+        """SELECT a.user_id, a.added_at, u.username, u.full_name
+           FROM extra_admins a LEFT JOIN users u ON u.user_id = a.user_id
+           ORDER BY a.added_at DESC"""
+    ).fetchall()
+    conn.close()
+    return [{"user_id": r["user_id"], "username": r["username"], "full_name": r["full_name"] or f"ID:{r['user_id']}", "added_at": r["added_at"]} for r in rows]
+
+
+@router.post("/api/admin/moderators/add")
+def api_admin_add_moderator(target_user_id: int = Query(...), user: str = Depends(check_auth)):
+    add_moderator(target_user_id, 0)
+    return {"ok": True}
+
+
+@router.post("/api/admin/moderators/{mod_user_id}/remove")
+def api_admin_remove_moderator(mod_user_id: int, user: str = Depends(check_auth)):
+    remove_moderator(mod_user_id)
+    return {"ok": True}
+
+
+@router.post("/api/admin/extra-admins/add")
+def api_admin_add_extra_admin(target_user_id: int = Query(...), user: str = Depends(check_auth)):
+    add_extra_admin(target_user_id, 0)
+    return {"ok": True}
+
+
+@router.post("/api/admin/extra-admins/{admin_user_id}/remove")
+def api_admin_remove_extra_admin(admin_user_id: int, user: str = Depends(check_auth)):
+    if admin_user_id in ADMIN_IDS:
+        raise HTTPException(status_code=400, detail="cannot_remove_env_admin")
+    remove_extra_admin(admin_user_id)
+    return {"ok": True}
+
+
+# ============================= ADMIN: BLOKLANGAN RAQAMLAR =============================
+
+@router.get("/api/admin/blocked-phones")
+def api_admin_blocked_phones(user: str = Depends(check_auth)):
+    return list_blocked_phones_page(0, limit=1000)
+
+
+@router.post("/api/admin/blocked-phones/add")
+def api_admin_block_phone(phone: str = Query(...), reason: str = Query(...), user: str = Depends(check_auth)):
+    normalized = normalize_phone_web(phone)
+    if not normalized:
+        raise HTTPException(status_code=400, detail="invalid_phone")
+    reason = reason.strip()[:300]
+    if not reason:
+        raise HTTPException(status_code=400, detail="empty_reason")
+    block_phone(normalized, reason, 0)
+    return {"ok": True}
+
+
+@router.post("/api/admin/blocked-phones/{phone}/unblock")
+def api_admin_unblock_phone(phone: str, user: str = Depends(check_auth)):
+    unblock_phone(phone)
+    return {"ok": True}
+
+
+# ============================= ADMIN: XAVFLI FOYDALANUVCHILAR / FOYDALANUVCHI KARTASI =============================
+
+@router.get("/api/admin/flagged-users")
+def api_admin_flagged_users(user: str = Depends(check_auth)):
+    flagged = get_flagged_users()
+    if not flagged:
+        return []
+    conn = db()
+    ids = tuple({f["user_id"] for f in flagged})
+    placeholders = ",".join("?" * len(ids))
+    rows = conn.execute(f"SELECT user_id, username, full_name FROM users WHERE user_id IN ({placeholders})", ids).fetchall()
+    conn.close()
+    by_id = {r["user_id"]: dict(r) for r in rows}
+    result = []
+    for f in flagged:
+        u = by_id.get(f["user_id"]) or {}
+        result.append({**f, "username": u.get("username"), "full_name": u.get("full_name") or f"ID:{f['user_id']}"})
+    return result
+
+
+@router.get("/api/admin/user-card/{target_user_id}")
+def api_admin_user_card(target_user_id: int, user: str = Depends(check_auth)):
+    u = get_user(target_user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="not_found")
+    active, expire = is_subscribed(target_user_id)
+    risk = compute_risk_score(target_user_id)
+    return {
+        "user_id": target_user_id,
+        "username": u.get("username"),
+        "full_name": u.get("full_name"),
+        "phone": u.get("phone"),
+        "created_at": u.get("created_at"),
+        "subscribed": active,
+        "subscription_expire": expire if active else None,
+        "risk": risk,
+        "banned": is_banned(target_user_id),
+        "listings_count": count_listings_by_user(target_user_id),
+        "reports_made": count_reports_made(target_user_id),
+        "reports_received": count_reports_received(target_user_id),
+    }
+
+
+@router.post("/api/admin/user/{target_user_id}/ban")
+async def api_admin_ban_user(target_user_id: int, reason: str = Query("Admin tomonidan cheklandi (shubhali faollik)"), user: str = Depends(check_auth)):
+    clean_reason = reason.strip()[:300] or "Admin tomonidan cheklandi"
+    ban_user(target_user_id, clean_reason, 0)
+    await notify_telegram(target_user_id, "⚠️ Sizga botdan foydalanish cheklandi. Savollar bo'lsa, adminga murojaat qiling.")
+    return {"ok": True}
+
+
+@router.post("/api/admin/user/{target_user_id}/unban")
+def api_admin_unban_user(target_user_id: int, user: str = Depends(check_auth)):
+    unban_user(target_user_id)
+    return {"ok": True}
+
+
+@router.post("/api/admin/user/{target_user_id}/cancel-subscription")
+async def api_admin_cancel_user_subscription(target_user_id: int, user: str = Depends(check_auth)):
+    sub_id = get_active_subscription_id(target_user_id)
+    if not sub_id:
+        raise HTTPException(status_code=404, detail="no_active_subscription")
+    cancel_subscription(sub_id)
+    await notify_telegram(target_user_id, "❌ Sizning obunangiz administrator tomonidan muddatidan oldin bekor qilindi.")
+    return {"ok": True}
+
+
+@router.get("/api/admin/user-search")
+def api_admin_user_search(q: str = Query(...), user: str = Depends(check_auth)):
+    q = q.strip()
+    if not q:
+        return []
+    conn = db()
+    if q.isdigit():
+        rows = conn.execute(
+            "SELECT * FROM users WHERE user_id = ? OR phone LIKE ? ORDER BY created_at DESC LIMIT 30",
+            (int(q), f"%{q}%"),
+        ).fetchall()
+    else:
+        like = f"%{q.lstrip('@')}%"
+        rows = conn.execute(
+            "SELECT * FROM users WHERE username LIKE ? OR full_name LIKE ? ORDER BY created_at DESC LIMIT 30",
+            (like, like),
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ============================= ADMIN: SOZLAMALAR =============================
+
+@router.get("/api/admin/settings")
+def api_admin_get_settings(user: str = Depends(check_auth)):
+    return [
+        {"key": key, "label": meta["label"], "kind": meta["kind"], "hint": meta.get("hint", ""), "value": get_setting(key)}
+        for key, meta in SETTINGS_FIELDS.items()
+    ]
+
+
+@router.post("/api/admin/settings")
+def api_admin_set_setting(key: str = Query(...), value: str = Query(...), user: str = Depends(check_auth)):
+    meta = SETTINGS_FIELDS.get(key)
+    if not meta:
+        raise HTTPException(status_code=400, detail="unknown_setting")
+    kind = meta["kind"]
+    raw = value.strip()
+    if kind == "bool":
+        if raw not in ("0", "1"):
+            raise HTTPException(status_code=400, detail="invalid_value")
+        final = raw
+    elif kind in ("int", "percent"):
+        if not raw.isdigit():
+            raise HTTPException(status_code=400, detail="invalid_value")
+        if kind == "percent" and not (0 <= int(raw) <= 100):
+            raise HTTPException(status_code=400, detail="invalid_value")
+        final = raw
+    elif kind == "card":
+        digits = re.sub(r"\D", "", raw)
+        if len(digits) != 16:
+            raise HTTPException(status_code=400, detail="invalid_value")
+        final = digits
+    elif kind == "text":
+        if not raw or len(raw) > 40:
+            raise HTTPException(status_code=400, detail="invalid_value")
+        final = raw
+    else:
+        final = raw
+    set_setting(key, final)
+    return {"ok": True, "value": final}
+
+
+@router.post("/api/admin/broadcast")
+def api_admin_broadcast(title: str = Query(...), body: str = Query(...), user: str = Depends(check_auth)):
+    title = title.strip()[:120]
+    body = body.strip()[:1000]
+    if not title or not body:
+        raise HTTPException(status_code=400, detail="empty_fields")
+    sent = broadcast_notification(title, body)
+    return {"ok": True, "sent": sent}
+
+
+# ============================= ADMIN: QO'LLAB-QUVVATLASH SO'ROVLARI =============================
+
+@router.get("/api/admin/support-requests")
+def api_admin_support_requests(user: str = Depends(check_auth)):
+    return get_pending_support_requests(limit=100)
+
+
+@router.post("/api/admin/support-requests/{request_id}/reply")
+async def api_admin_reply_support_request(request_id: int, reply: str = Query(...), user: str = Depends(check_auth)):
+    reply = reply.strip()[:1000]
+    if not reply:
+        raise HTTPException(status_code=400, detail="empty_reply")
+    row = reply_support_request(request_id, reply)
+    if not row:
+        raise HTTPException(status_code=404, detail="not_found")
+    await notify_telegram(row["user_id"], f"\U0001F4AC Qo'llab-quvvatlash so'rovingizga javob keldi:\n\n{html.escape(reply)}")
     return {"ok": True}
 
 
