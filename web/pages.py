@@ -92,8 +92,11 @@ def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), pa
         return "/?" + "&".join(parts) if parts else "/"
 
     rt_tabs_html = "".join(
-        f'<a href="{rt_url(key)}" class="rt-tab{" active" if rental_type == key else ""}">{t(lang, tkey)}</a>'
-        for key, tkey in [("", "rt_all"), ("uzoq_muddat", "rt_uzoq_muddat"), ("kunlik", "rt_kunlik"), ("dacha", "rt_dacha"), ("mehmonxona", "rt_mehmonxona")]
+        f'<a href="{rt_url(key)}" class="rt-tab{" active" if rental_type == key else ""}">{icon(ikey, 15) if ikey else ""}{t(lang, tkey)}</a>'
+        for key, tkey, ikey in [
+            ("", "rt_all", ""), ("uzoq_muddat", "rt_uzoq_muddat", "home"), ("kunlik", "rt_kunlik", "calendar"),
+            ("dacha", "rt_dacha", "tree"), ("mehmonxona", "rt_mehmonxona", "bed"),
+        ]
     )
 
     if listings:
@@ -577,14 +580,7 @@ def subarenda_page(request: Request):
   </div>
 </section>
 <main class="wrap" style="padding-top:40px;padding-bottom:80px;">
-  <div class="why-grid" style="margin-bottom:50px;">
-    <div class="why-item"><div class="icon">{icon('users', 26)}</div><h3>{t(lang,'sr1_title')}</h3><p>{t(lang,'sr1_desc')}</p></div>
-    <div class="why-item"><div class="icon">{icon('coin', 26)}</div><h3>{t(lang,'sr2_title')}</h3><p>{t(lang,'sr2_desc')}</p></div>
-    <div class="why-item"><div class="icon">{icon('shield', 26)}</div><h3>{t(lang,'sr3_title')}</h3><p>{t(lang,'sr3_desc')}</p></div>
-    <div class="why-item"><div class="icon">{icon('sparkle', 26)}</div><h3>{t(lang,'sr4_title')}</h3><p>{t(lang,'sr4_desc')}</p></div>
-  </div>
-
-  <div style="max-width:520px;margin:0 auto;">
+  <div style="max-width:520px;margin:0 auto 56px;">
     <div class="sidebar-card" style="position:static;margin-bottom:0;">
       <h2 style="font-size:19px;font-weight:800;margin-bottom:6px;">{t(lang,'sr_form_title')}</h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:18px;">{t(lang,'sr_form_sub')}</p>
@@ -612,6 +608,13 @@ def subarenda_page(request: Request):
         <div style="font-size:13px;color:var(--muted);">{t(lang,'sr_success_sub')}</div>
       </div>
     </div>
+  </div>
+
+  <div class="why-grid">
+    <div class="why-item"><div class="icon">{icon('users', 26)}</div><h3>{t(lang,'sr1_title')}</h3><p>{t(lang,'sr1_desc')}</p></div>
+    <div class="why-item"><div class="icon">{icon('coin', 26)}</div><h3>{t(lang,'sr2_title')}</h3><p>{t(lang,'sr2_desc')}</p></div>
+    <div class="why-item"><div class="icon">{icon('shield', 26)}</div><h3>{t(lang,'sr3_title')}</h3><p>{t(lang,'sr3_desc')}</p></div>
+    <div class="why-item"><div class="icon">{icon('sparkle', 26)}</div><h3>{t(lang,'sr4_title')}</h3><p>{t(lang,'sr4_desc')}</p></div>
   </div>
 </main>
 {render_footer(lang)}
@@ -673,10 +676,10 @@ def elon_joylash_page(request: Request):
         <form id="listingForm">
           <div class="form-section-title">{icon('coin', 17)} {t(lang,'ej_section_rental_type')}</div>
           <div class="type-toggle" id="rentalTypeToggle">
-            <label class="type-option active" data-rt="uzoq_muddat"><input type="radio" name="rental_type" value="uzoq_muddat" checked><div class="to-title">{t(lang,'rt_uzoq_muddat')}</div></label>
-            <label class="type-option" data-rt="kunlik"><input type="radio" name="rental_type" value="kunlik"><div class="to-title">{t(lang,'rt_kunlik')}</div></label>
-            <label class="type-option" data-rt="dacha"><input type="radio" name="rental_type" value="dacha"><div class="to-title">{t(lang,'rt_dacha')}</div></label>
-            <label class="type-option" data-rt="mehmonxona"><input type="radio" name="rental_type" value="mehmonxona"><div class="to-title">{t(lang,'rt_mehmonxona')}</div></label>
+            <label class="type-option active" data-rt="uzoq_muddat"><input type="radio" name="rental_type" value="uzoq_muddat" checked><div class="to-title">{icon('home', 16)} {t(lang,'rt_uzoq_muddat')}</div></label>
+            <label class="type-option" data-rt="kunlik"><input type="radio" name="rental_type" value="kunlik"><div class="to-title">{icon('calendar', 16)} {t(lang,'rt_kunlik')}</div></label>
+            <label class="type-option" data-rt="dacha"><input type="radio" name="rental_type" value="dacha"><div class="to-title">{icon('tree', 16)} {t(lang,'rt_dacha')}</div></label>
+            <label class="type-option" data-rt="mehmonxona"><input type="radio" name="rental_type" value="mehmonxona"><div class="to-title">{icon('bed', 16)} {t(lang,'rt_mehmonxona')}</div></label>
           </div>
 
           <div class="form-section-title">{icon('home', 17)} {t(lang,'ej_section_house')}</div>

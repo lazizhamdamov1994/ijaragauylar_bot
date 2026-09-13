@@ -33,11 +33,15 @@ except Exception:
     CSS_VERSION = "1"
 
 def mask_card_holder(name: str) -> str:
-    """Karta egasi ismini saytda XAVFSIZ ko'rsatish uchun - har bir so'zning
-    faqat birinchi harfi ochiq qoladi (masalan "Laziz Hamdamov" -> "Lxxxx Hxxxxxxx")."""
+    """Karta egasi ismini saytda XAVFSIZ ko'rsatish uchun - faqat BOSHIDAGI
+    2 ta harf ochiq qoladi, qolgani "x" bilan yashiriladi (masalan
+    "Laziz Hamdamov" -> "Laxxxx")."""
+    name = (name or "").strip()
     if not name:
         return ""
-    return " ".join((w[0] + "x" * (len(w) - 1)) if len(w) > 1 else w for w in name.split())
+    if len(name) <= 2:
+        return name
+    return name[:2] + "x" * 4
 
 
 def render_credit_card(lang: str, card_digits: str, amount_text: str = "", with_copy: bool = False) -> str:
@@ -111,32 +115,36 @@ def display_address(l: dict) -> str:
 
 SUPPORTED_LANGS = ("uz", "ru", "en")
 DEFAULT_LANG = "uz"
+LANG_FLAGS = {"uz": "\U0001F1FA\U0001F1FF", "ru": "\U0001F1F7\U0001F1FA", "en": "\U0001F1EC\U0001F1E7"}
 LANG_META = {"uz": "O'zbekcha", "ru": "\u0420\u0443\u0441\u0441\u043a\u0438\u0439", "en": "English"}
 
 TRANSLATIONS = {
     "nav_home": {"uz": "Bosh sahifa", "ru": "\u0413\u043b\u0430\u0432\u043d\u0430\u044f", "en": "Home"},
-    "nav_subarenda": {"uz": "Subarenda", "ru": "\u0421\u0443\u0431\u0430\u0440\u0435\u043d\u0434\u0430", "en": "Sublease"},
-    "nav_map_title": {"uz": "Xarita", "ru": "\u041a\u0430\u0440\u0442\u0430", "en": "Map"},
+    "nav_subarenda": {"uz": "Ijara hamkorligi", "ru": "\u041f\u0430\u0440\u0442\u043d\u0451\u0440\u0441\u0442\u0432\u043e \u043f\u043e \u0430\u0440\u0435\u043d\u0434\u0435", "en": "Rental partnership"},
+    "nav_map_title": {"uz": "Xaritadan topish", "ru": "\u041d\u0430\u0439\u0442\u0438 \u043d\u0430 \u043a\u0430\u0440\u0442\u0435", "en": "Find on map"},
     "nav_bot_title": {"uz": "Telegram bot", "ru": "Telegram-\u0431\u043e\u0442", "en": "Telegram bot"},
     "nav_channel_title": {"uz": "Telegram kanal", "ru": "Telegram-\u043a\u0430\u043d\u0430\u043b", "en": "Telegram channel"},
-    "nav_post_cta": {"uz": "E'lon joylash", "ru": "\u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "Post a listing"},
-    "mobile_post": {"uz": "E'lon joylash", "ru": "\u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "Post a listing"},
+    "nav_post_cta": {"uz": "E'lon berish", "ru": "\u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "Post a listing"},
+    "mobile_post": {"uz": "E'lon berish", "ru": "\u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "Post a listing"},
+    "nav_account_label": {"uz": "Hisobingiz", "ru": "\u0412\u0430\u0448 \u043a\u0430\u0431\u0438\u043d\u0435\u0442", "en": "Your account"},
     "footer_tagline": {
         "uz": "Maklersiz, to'g'ridan-to'g'ri uy egasi bilan bog'lanish platformasi.",
         "ru": "\u041f\u043b\u0430\u0442\u0444\u043e\u0440\u043c\u0430 \u0434\u043b\u044f \u043f\u0440\u044f\u043c\u043e\u0439 \u0441\u0432\u044f\u0437\u0438 \u0441 \u0445\u043e\u0437\u044f\u0438\u043d\u043e\u043c \u0436\u0438\u043b\u044c\u044f, \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432.",
         "en": "A platform to connect directly with homeowners \u2014 no agent fees.",
     },
     "footer_rights": {"uz": "Barcha huquqlar himoyalangan.", "ru": "\u0412\u0441\u0435 \u043f\u0440\u0430\u0432\u0430 \u0437\u0430\u0449\u0438\u0449\u0435\u043d\u044b.", "en": "All rights reserved."},
+    "footer_nav_title": {"uz": "Sayt", "ru": "\u0421\u0430\u0439\u0442", "en": "Site"},
+    "footer_social_title": {"uz": "Ijtimoiy tarmoqlar", "ru": "\u0421\u043e\u0446\u0441\u0435\u0442\u0438", "en": "Social"},
 
     "hero_title": {
-        "uz": "Maklersiz uy ijarasi Toshkentda",
-        "ru": "\u0410\u0440\u0435\u043d\u0434\u0430 \u0436\u0438\u043b\u044c\u044f \u0432 \u0422\u0430\u0448\u043a\u0435\u043d\u0442\u0435 \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432",
-        "en": "Commission-free home rentals in Tashkent",
+        "uz": "Maklersiz uy toping va ijaraga bering",
+        "ru": "\u041d\u0430\u0439\u0434\u0438\u0442\u0435 \u0438\u043b\u0438 \u0441\u0434\u0430\u0439\u0442\u0435 \u0436\u0438\u043b\u044c\u0451 \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432",
+        "en": "Find or list a home \u2014 no agents involved",
     },
     "hero_sub": {
-        "uz": "To'g'ridan-to'g'ri uy egasi bilan bog'laning \u2014 hech qanday makler haqqi to'lamang",
-        "ru": "\u0421\u0432\u044f\u0436\u0438\u0442\u0435\u0441\u044c \u043d\u0430\u043f\u0440\u044f\u043c\u0443\u044e \u0441 \u0445\u043e\u0437\u044f\u0438\u043d\u043e\u043c \u2014 \u043d\u0438\u043a\u0430\u043a\u0438\u0445 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0439 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u0430\u043c",
-        "en": "Connect directly with the homeowner \u2014 pay no agent commission",
+        "uz": "Pulingizni qadrlang \u2014 makler uchun emas, o'zingiz uchun ishlating",
+        "ru": "\u0426\u0435\u043d\u0438\u0442\u0435 \u0441\u0432\u043e\u0438 \u0434\u0435\u043d\u044c\u0433\u0438 \u2014 \u0442\u0440\u0430\u0442\u044c\u0442\u0435 \u0438\u0445 \u043d\u0430 \u0441\u0435\u0431\u044f, \u0430 \u043d\u0435 \u043d\u0430 \u043c\u0430\u043a\u043b\u0435\u0440\u0430",
+        "en": "Value your money \u2014 spend it on yourself, not on an agent",
     },
     "search_district_label": {"uz": "HUDUD", "ru": "\u0420\u0410\u0419\u041e\u041d", "en": "DISTRICT"},
     "search_all_districts": {"uz": "Barcha hududlar", "ru": "\u0412\u0441\u0435 \u0440\u0430\u0439\u043e\u043d\u044b", "en": "All districts"},
@@ -147,10 +155,10 @@ TRANSLATIONS = {
     "stat_users": {"uz": "Foydalanuvchi", "ru": "\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0435\u0439", "en": "Users"},
     "stat_nofee": {"uz": "Maklersiz", "ru": "\u0411\u0435\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438", "en": "Commission-free"},
     "rt_all": {"uz": "Barchasi", "ru": "\u0412\u0441\u0435", "en": "All"},
-    "rt_uzoq_muddat": {"uz": "\U0001F3E0 Uzoq muddat", "ru": "\U0001F3E0 \u0414\u043e\u043b\u0433\u043e\u0441\u0440\u043e\u0447\u043d\u043e", "en": "\U0001F3E0 Long-term"},
-    "rt_kunlik": {"uz": "\U0001F4C5 Kunlik", "ru": "\U0001F4C5 \u041f\u043e\u0441\u0443\u0442\u043e\u0447\u043d\u043e", "en": "\U0001F4C5 Daily"},
-    "rt_dacha": {"uz": "\U0001F333 Dacha", "ru": "\U0001F333 \u0414\u0430\u0447\u0430", "en": "\U0001F333 Cottage"},
-    "rt_mehmonxona": {"uz": "\U0001F6CF Mehmonxona", "ru": "\U0001F6CF \u0413\u043e\u0441\u0442\u0435\u0432\u044b\u0435 \u043a\u043e\u043c\u043d\u0430\u0442\u044b", "en": "\U0001F6CF Guest rooms"},
+    "rt_uzoq_muddat": {"uz": "Uzoq muddat", "ru": "\u0414\u043e\u043b\u0433\u043e\u0441\u0440\u043e\u0447\u043d\u043e", "en": "Long-term"},
+    "rt_kunlik": {"uz": "Kunlik", "ru": "\u041f\u043e\u0441\u0443\u0442\u043e\u0447\u043d\u043e", "en": "Daily"},
+    "rt_dacha": {"uz": "Dacha", "ru": "\u0414\u0430\u0447\u0430", "en": "Cottage"},
+    "rt_mehmonxona": {"uz": "Mehmonxona", "ru": "\u0413\u043e\u0441\u0442\u0435\u0432\u044b\u0435 \u043a\u043e\u043c\u043d\u0430\u0442\u044b", "en": "Guest rooms"},
     "section_search_results": {"uz": "Qidiruv natijalari", "ru": "\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043f\u043e\u0438\u0441\u043a\u0430", "en": "Search results"},
     "section_latest": {"uz": "So'nggi e'lonlar", "ru": "\u041f\u043e\u0441\u043b\u0435\u0434\u043d\u0438\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", "en": "Latest listings"},
     "section_count_suffix": {"uz": "{n} ta e'lon topildi", "ru": "\u041d\u0430\u0439\u0434\u0435\u043d\u043e \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439: {n}", "en": "{n} listings found"},
@@ -161,13 +169,13 @@ TRANSLATIONS = {
     },
     "why_title": {"uz": "Nega bizni tanlashadi", "ru": "\u041f\u043e\u0447\u0435\u043c\u0443 \u0432\u044b\u0431\u0438\u0440\u0430\u044e\u0442 \u043d\u0430\u0441", "en": "Why choose us"},
     "why1_title": {"uz": "Maklersiz", "ru": "\u0411\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432", "en": "No agent fees"},
-    "why1_desc": {"uz": "Hech qanday komissiya yoki vositachi haqqi yo'q", "ru": "\u041d\u0438\u043a\u0430\u043a\u043e\u0439 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 \u0438\u043b\u0438 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u0447\u0435\u0441\u043a\u0438\u0445 \u043f\u043b\u0430\u0442\u0435\u0436\u0435\u0439", "en": "No commission or middleman fees, ever"},
+    "why1_desc": {"uz": "0% komissiya", "ru": "0% \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438", "en": "0% commission"},
     "why2_title": {"uz": "Tekshirilgan", "ru": "\u041f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e", "en": "Verified"},
-    "why2_desc": {"uz": "Har bir e'lon moderatsiyadan o'tadi, firibgarlar bloklanadi", "ru": "\u041a\u0430\u0436\u0434\u043e\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0445\u043e\u0434\u0438\u0442 \u043c\u043e\u0434\u0435\u0440\u0430\u0446\u0438\u044e, \u043c\u043e\u0448\u0435\u043d\u043d\u0438\u043a\u0438 \u0431\u043b\u043e\u043a\u0438\u0440\u0443\u044e\u0442\u0441\u044f", "en": "Every listing is moderated; scammers get blocked"},
+    "why2_desc": {"uz": "Firibgarlar bloklangan", "ru": "\u041c\u043e\u0448\u0435\u043d\u043d\u0438\u043a\u0438 \u0437\u0430\u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u0430\u043d\u044b", "en": "Scammers blocked"},
     "why3_title": {"uz": "Tezkor", "ru": "\u0411\u044b\u0441\u0442\u0440\u043e", "en": "Fast"},
-    "why3_desc": {"uz": "Bot orqali bir necha soniyada uy egasi bilan bog'laning", "ru": "\u0421\u0432\u044f\u0436\u0438\u0442\u0435\u0441\u044c \u0441 \u0445\u043e\u0437\u044f\u0438\u043d\u043e\u043c \u0447\u0435\u0440\u0435\u0437 \u0431\u043e\u0442\u0430 \u0437\u0430 \u0441\u0447\u0438\u0442\u0430\u043d\u044b\u0435 \u0441\u0435\u043a\u0443\u043d\u0434\u044b", "en": "Reach the owner via the bot in seconds"},
+    "why3_desc": {"uz": "Soniyalarda bog'laning", "ru": "\u0421\u0432\u044f\u0437\u044c \u0437\u0430 \u0441\u0435\u043a\u0443\u043d\u0434\u044b", "en": "Connect in seconds"},
     "why4_title": {"uz": "Xaritada", "ru": "\u041d\u0430 \u043a\u0430\u0440\u0442\u0435", "en": "On the map"},
-    "why4_desc": {"uz": "Uylarni interaktiv xaritada joylashuvi bo'yicha toping", "ru": "\u041d\u0430\u0445\u043e\u0434\u0438\u0442\u0435 \u0436\u0438\u043b\u044c\u0451 \u043f\u043e \u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u044e \u043d\u0430 \u0438\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0439 \u043a\u0430\u0440\u0442\u0435", "en": "Find homes by location on the interactive map"},
+    "why4_desc": {"uz": "Joylashuvi aniq", "ru": "\u0422\u043e\u0447\u043d\u043e\u0435 \u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435", "en": "Exact location"},
 
     "breadcrumb_home": {"uz": "Bosh sahifa", "ru": "\u0413\u043b\u0430\u0432\u043d\u0430\u044f", "en": "Home"},
     "badge_top": {"uz": "TOP e'lon", "ru": "\u0422\u041e\u041f \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "TOP listing"},
@@ -432,12 +440,18 @@ def t(lang: str, key: str, **kwargs) -> str:
 
 
 def lang_switcher_html(current_path: str, lang: str) -> str:
-    links = []
-    for code in SUPPORTED_LANGS:
-        cls = "lang-pill active" if code == lang else "lang-pill"
-        next_url = f"/set-lang/{code}?next={urllib.parse.quote(current_path)}"
-        links.append(f'<a href="{next_url}" class="{cls}">{code.upper()}</a>')
-    return f'<div class="lang-switcher">{"".join(links)}</div>'
+    """Bayroqli til tanlash: joriy til bayrog'i tugma sifatida ko'rinadi,
+    bosilganda faqat QOLGAN tillar (bayroq + nom bilan) ochiladi."""
+    current_flag = LANG_FLAGS.get(lang, LANG_FLAGS[DEFAULT_LANG])
+    options = "".join(
+        f'<a href="/set-lang/{code}?next={urllib.parse.quote(current_path)}" class="lang-option">'
+        f'<span class="lang-flag">{LANG_FLAGS[code]}</span>{LANG_META[code]}</a>'
+        for code in SUPPORTED_LANGS if code != lang
+    )
+    return f"""<div class="lang-switcher">
+  <button type="button" class="lang-current" onclick="event.stopPropagation();this.closest('.lang-switcher').classList.toggle('open')" aria-label="Til / Language">{current_flag}</button>
+  <div class="lang-menu">{options}</div>
+</div>"""
 
 
 @router.get("/set-lang/{lang}")
@@ -491,8 +505,6 @@ def render_head(title: str, description: str, canonical_path: str, og_image: str
 
 
 def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
-    bot_link = f"https://t.me/{BOT_USERNAME}" if BOT_USERNAME else "#"
-    channel_link = f"https://t.me/{CHANNEL_USERNAME}" if CHANNEL_USERNAME else "#"
     logo = "/logo.png"
     switcher = lang_switcher_html(current_path, lang)
     return f"""<header class="site-header">
@@ -501,12 +513,9 @@ def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
     <nav class="main-nav">
       <a href="/" class="nav-link">{t(lang,'nav_home')}</a>
       <a href="/subarenda" class="nav-link">{t(lang,'nav_subarenda')}</a>
-      <a href="/xarita" class="nav-link nav-icon-link" title="{t(lang,'nav_map_title')}">{icon('map', 18)}</a>
-      <a href="{bot_link}" class="nav-link nav-icon-link" target="_blank" title="{t(lang,'nav_bot_title')}">{icon('phone', 16)}</a>
-      <a href="{channel_link}" class="nav-link nav-icon-link" target="_blank" title="{t(lang,'nav_channel_title')}">{icon('send', 17)}</a>
-      <a href="{INSTAGRAM_URL}" class="nav-link nav-icon-link" target="_blank" title="Instagram">{icon('instagram', 18)}</a>
-      <a href="/kabinet" class="nav-link nav-icon-link" title="{t(lang,'nav_kabinet_title')}">{icon('user', 18)}</a>
+      <a href="/xarita" class="nav-link">{icon('map', 16)} {t(lang,'nav_map_title')}</a>
       {switcher}
+      <a href="/kabinet" class="nav-link nav-account-link" title="{t(lang,'nav_kabinet_title')}">{icon('user', 17)} {t(lang,'nav_account_label')}</a>
       <a href="/elon-joylash" class="btn-cta">{icon('sparkle', 14)} {t(lang,'nav_post_cta')}</a>
     </nav>
     <button class="mobile-menu-btn" onclick="toggleMobileMenu()" aria-label="Menyu">{icon('menu', 20)}</button>
@@ -516,11 +525,8 @@ def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
     <a href="/elon-joylash">{icon('sparkle', 17)} {t(lang,'mobile_post')}</a>
     <a href="/xarita">{icon('map', 17)} {t(lang,'nav_map_title')}</a>
     <a href="/subarenda">{icon('coin', 17)} {t(lang,'nav_subarenda')}</a>
-    <a href="/kabinet">{icon('user', 17)} {t(lang,'nav_kabinet_title')}</a>
-    <a href="{channel_link}" target="_blank">{icon('send', 17)} {t(lang,'nav_channel_title')}</a>
-    <a href="{INSTAGRAM_URL}" target="_blank">{icon('instagram', 17)} Instagram</a>
-    <a href="{bot_link}" target="_blank">{icon('phone', 17)} {t(lang,'nav_bot_title')}</a>
-    <div class="mobile-lang-label">UZ / RU / EN</div>
+    <a href="/kabinet">{icon('user', 17)} {t(lang,'nav_account_label')}</a>
+    <div class="mobile-lang-label">{LANG_META[lang]}</div>
     {switcher}
   </div>
 </header>
@@ -528,6 +534,9 @@ def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
 function toggleMobileMenu() {{
   document.getElementById('mobileMenu').classList.toggle('open');
 }}
+document.addEventListener('click', function() {{
+  document.querySelectorAll('.lang-switcher.open').forEach(function(el) {{ el.classList.remove('open'); }});
+}});
 // MUHIM: brauzerning "orqaga" tugmasi bosilganda sahifa bfcache'dan
 // (avvalgi holatida "muzlatilgan" holda) tiklanishi mumkin - bu holda
 // mobil menyu ochiq qolib ketishi yoki body scroll qulflangan holda
@@ -539,6 +548,7 @@ window.addEventListener('pageshow', function(event) {{
   document.documentElement.style.overflow = '';
   const lb = document.getElementById('lightbox');
   if (lb) lb.classList.remove('open');
+  document.querySelectorAll('.lang-switcher.open').forEach(function(el) {{ el.classList.remove('open'); }});
 }});
 </script>"""
 
@@ -551,18 +561,23 @@ def render_footer(lang: str = DEFAULT_LANG) -> str:
     return f"""<footer class="site-footer">
   <div class="wrap">
     <div class="footer-inner">
-      <div>
+      <div class="footer-col footer-col-brand">
         <div class="footer-brand"><img src="{logo}" alt="{SITE_NAME}"> {BRAND_SHORT}</div>
-        <div style="font-size:13px;max-width:320px;color:var(--muted);">{t(lang,'footer_tagline')}</div>
+        <div class="footer-tagline">{t(lang,'footer_tagline')}</div>
       </div>
-      <div class="footer-links">
+      <div class="footer-col">
+        <div class="footer-col-title">{t(lang,'footer_nav_title')}</div>
         <a href="/">{t(lang,'nav_home')}</a>
         <a href="/elon-joylash">{t(lang,'mobile_post')}</a>
         <a href="/xarita">{t(lang,'nav_map_title')}</a>
         <a href="/subarenda">{t(lang,'nav_subarenda')}</a>
-        <a href="{channel_link}" target="_blank">{t(lang,'nav_channel_title')}</a>
-        <a href="{bot_link}" target="_blank">{t(lang,'nav_bot_title')}</a>
-        <a href="{INSTAGRAM_URL}" target="_blank">Instagram</a>
+        <a href="/kabinet">{t(lang,'nav_account_label')}</a>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">{t(lang,'footer_social_title')}</div>
+        <a href="{channel_link}" target="_blank">{icon('send', 15)} {t(lang,'nav_channel_title')}</a>
+        <a href="{bot_link}" target="_blank">{icon('phone', 14)} {t(lang,'nav_bot_title')}</a>
+        <a href="{INSTAGRAM_URL}" target="_blank">{icon('instagram', 15)} Instagram</a>
       </div>
     </div>
     <div class="footer-bottom">&copy; {year} {SITE_NAME}. {t(lang,'footer_rights')}</div>
@@ -656,6 +671,11 @@ ICONS = {
     "menu": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>',
     "message": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.2 0-2.3-.2-3.4-.7L3 21l1.7-4.6A8.5 8.5 0 1 1 21 11.5Z"/></svg>',
     "user": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.9 3.6-7 8-7s8 3.1 8 7"/></svg>',
+    "calendar": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M3.5 10h17"/></svg>',
+    "tree": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-7"/><path d="M12 15c-3.5 0-6-2.3-6-5.3C6 6.3 8.7 3 12 2c3.3 1 6 4.3 6 7.7 0 3-2.5 5.3-6 5.3Z"/></svg>',
+    "heart": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5s-7.5-4.6-9.8-9.4C.8 7.6 2.4 4.5 5.6 3.8c2-.4 3.9.4 5 2 .5-1.6 2.4-2.4 5-2 3.2.7 4.8 3.8 3.4 7.3C19.5 15.9 12 20.5 12 20.5Z"/></svg>',
+    "heart_filled": '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 20.5s-7.5-4.6-9.8-9.4C.8 7.6 2.4 4.5 5.6 3.8c2-.4 3.9.4 5 2 .5-1.6 2.4-2.4 5-2 3.2.7 4.8 3.8 3.4 7.3C19.5 15.9 12 20.5 12 20.5Z"/></svg>',
+    "alert": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2 20.5h20L12 3Z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.5" r="0.6" fill="currentColor" stroke="none"/></svg>',
 }
 
 

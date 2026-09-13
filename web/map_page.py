@@ -5,14 +5,20 @@ Ommaviy interaktiv xarita (/xarita) va joylashuv tanlash WebApp sahifasi
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from web.render import get_lang
+from web.render import CSS_VERSION, get_lang, render_header
 
 router = APIRouter()
 
 @router.get("/xarita", response_class=HTMLResponse)
 def public_map_page(request: Request):
     lang = get_lang(request)
-    return PUBLIC_MAP_HTML.replace("__LANG__", lang)
+    html = PUBLIC_MAP_HTML.replace("__LANG__", lang).replace("__CSS_VERSION__", CSS_VERSION)
+    # MUHIM: xarita sahifasi o'zining alohida (to'liq ekranli, qorong'i
+    # mavzuli) topbar'iga ega, lekin foydalanuvchi saytning asosiy top
+    # menyusidan (Bosh sahifa, tillar, Hisobingiz va h.k.) foydalana olishi
+    # kerak - shuning uchun standart sayt header'i ustidan qo'shiladi
+    # (#topbar CSS'dagi "top" qiymati header balandligiga moslab suriladi).
+    return html.replace("<body>\n<div id=\"loading\">", f"<body>\n{render_header(lang, '/xarita')}\n<div id=\"loading\">", 1)
 
 
 @router.get("/tanla-joy", response_class=HTMLResponse)
@@ -33,6 +39,9 @@ PUBLIC_MAP_HTML = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Ijaraga Uylar \u2014 Interaktiv xarita</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/site.css?v=__CSS_VERSION__">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
@@ -44,12 +53,16 @@ PUBLIC_MAP_HTML = """<!DOCTYPE html>
   html, body { width: 100%; height: 100%; overflow: hidden; }
   body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; background: var(--map-bg); }
 
+  /* --map-header-h: standart sayt header balandligi - #topbar va #map
+     shundan PASTDA boshlanadi, shunda asosiy sayt navigatsiyasi (Bosh
+     sahifa, tillar, Hisobingiz) xarita ustida doim ko'rinib turadi. */
+  :root { --map-header-h: 65px; }
+  @media (max-width: 640px) { :root { --map-header-h: 57px; } }
   #topbar {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    position: fixed; top: var(--map-header-h); left: 0; right: 0; z-index: 1000;
     background: rgba(19,28,46,0.92); backdrop-filter: blur(10px);
     padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px;
     border-bottom: 1px solid var(--map-line); color: var(--map-ink);
-    padding-top: calc(10px + env(safe-area-inset-top));
   }
   #topbar h1 { font-size: 14.5px; font-weight: 700; }
   #topbar .count { font-size: 11.5px; color: var(--map-muted); font-weight: 600; }

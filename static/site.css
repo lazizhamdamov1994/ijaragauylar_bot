@@ -52,6 +52,8 @@
   .btn-cta:hover { background: var(--brand-dark); }
   .btn-cta:active { transform: scale(0.97); }
   .nav-icon-link { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0 !important; color: var(--ink-soft); }
+  nav.main-nav a.nav-link.nav-account-link { display: inline-flex; align-items: center; gap: 6px; background: var(--bg-soft); }
+  nav.main-nav a.nav-link { display: inline-flex; align-items: center; gap: 6px; }
   .mobile-menu-btn {
     display: none; width: 38px; height: 38px; border-radius: var(--radius-pill); border: none;
     background: var(--bg-soft); color: var(--ink); align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
@@ -67,14 +69,24 @@
   .mobile-menu a:last-child { border-bottom: none; }
   .mobile-menu a:hover { color: var(--brand); }
 
-  /* ============ TIL TANLAGICH (uz/ru/en) ============ */
-  .lang-switcher { display: flex; gap: 2px; background: var(--bg-soft); border-radius: var(--radius-pill); padding: 3px; flex-shrink: 0; }
-  .lang-pill { padding: 6px 10px; border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 800; color: var(--muted); letter-spacing: .3px; }
-  .lang-pill.active { background: #fff; color: var(--ink); box-shadow: var(--shadow-sm); }
-  .lang-pill:hover:not(.active) { color: var(--ink); }
-  /* Mobil menyuda - to'liq kenglikka cho'zilgan, teng bo'laklangan, barmoq bilan bosish uchun qulay */
-  .mobile-menu .lang-switcher { margin: 14px 6px 4px; padding: 4px; background: var(--bg-soft); }
-  .mobile-menu .lang-pill { flex: 1; text-align: center; padding: 11px 8px; font-size: 13px; }
+  /* ============ TIL TANLAGICH (bayroqli, O'zbekchadan boshlanadi) ============ */
+  .lang-switcher { position: relative; flex-shrink: 0; }
+  .lang-current {
+    width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg-soft);
+    font-size: 17px; display: flex; align-items: center; justify-content: center; cursor: pointer; line-height: 1;
+  }
+  .lang-current:hover { background: #fff; box-shadow: var(--shadow-sm); }
+  .lang-menu {
+    display: none; position: absolute; top: 46px; right: 0; background: #fff; border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 6px; min-width: 160px; z-index: 600;
+  }
+  .lang-switcher.open .lang-menu { display: block; }
+  .lang-option { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--radius-sm); font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .lang-option:hover { background: var(--bg-soft); }
+  .lang-flag { font-size: 17px; }
+  /* Mobil menyuda - shu iconli tugma o'zi yetarli, alohida kenglikka cho'zish shart emas */
+  .mobile-menu .lang-switcher { margin: 10px 6px 4px; }
+  .mobile-menu .lang-menu { left: 0; right: auto; top: 48px; }
   .mobile-lang-label { padding: 0 6px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-top: 4px; }
   @media (max-width: 640px) {
     .header-inner { padding: 12px 16px; }
@@ -120,6 +132,7 @@
   /* ============ IJARA TURI TABLARI (kunlik/uzoq muddat/dacha/mehmonxona) ============ */
   .rt-tabs { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
   .rt-tab {
+    display: inline-flex; align-items: center; gap: 6px;
     padding: 8px 16px; border-radius: var(--radius-pill); background: #fff; font-size: 12.5px; font-weight: 700;
     color: var(--ink-soft); box-shadow: var(--shadow-sm); border: 1px solid transparent; white-space: nowrap;
   }
@@ -147,7 +160,7 @@
 
   /* ============ LISTING CARDS ============ */
   .listing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 28px 22px; }
-  @media (max-width: 640px) { .listing-grid { grid-template-columns: repeat(2, 1fr); gap: 18px 12px; } }
+  @media (max-width: 640px) { .listing-grid { grid-template-columns: 1fr; gap: 18px; } }
   .listing-card { cursor: pointer; }
   .lc-photo { position: relative; aspect-ratio: 1/1; background: var(--bg-soft); overflow: hidden; border-radius: var(--radius); margin-bottom: 10px; }
   .listing-card:hover .lc-photo img { transform: scale(1.06); }
@@ -197,13 +210,17 @@
   .why-item p { font-size: 13.5px; color: var(--muted); }
 
   /* ============ FOOTER ============ */
-  footer.site-footer { background: #fff; border-top: 1px solid var(--line); padding: 40px 0 24px; }
-  .footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 24px; margin-bottom: 24px; }
-  .footer-brand { display: flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 800; font-size: 16px; margin-bottom: 8px; }
-  .footer-brand img { width: 26px; height: 26px; border-radius: 7px; }
-  .footer-links { display: flex; gap: 22px; flex-wrap: wrap; }
-  .footer-links a { font-size: 13.5px; font-weight: 600; color: var(--ink-soft); }
-  .footer-links a:hover { color: var(--ink); text-decoration: underline; }
+  footer.site-footer { background: var(--bg-soft); border-top: 1px solid var(--line); padding: 48px 0 24px; }
+  .footer-inner { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 32px; margin-bottom: 32px; }
+  @media (max-width: 720px) { .footer-inner { grid-template-columns: 1fr 1fr; } .footer-col-brand { grid-column: 1 / -1; } }
+  @media (max-width: 460px) { .footer-inner { grid-template-columns: 1fr; gap: 26px; } }
+  .footer-col { display: flex; flex-direction: column; gap: 11px; }
+  .footer-col a { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--ink-soft); }
+  .footer-col a:hover { color: var(--brand); }
+  .footer-col-title { font-size: 12px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--ink); margin-bottom: 2px; }
+  .footer-brand { display: flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 800; font-size: 17px; margin-bottom: 6px; }
+  .footer-brand img { width: 28px; height: 28px; border-radius: 7px; }
+  .footer-tagline { font-size: 13.5px; color: var(--muted); max-width: 320px; line-height: 1.6; }
   .footer-bottom { border-top: 1px solid var(--line); padding-top: 18px; font-size: 12.5px; text-align: center; color: var(--muted); }
 
   .empty-state { text-align: center; padding: 70px 20px; color: var(--muted); }
@@ -311,9 +328,11 @@
   .credit-card-brand { font-size: 10.5px; font-weight: 800; letter-spacing: 1.2px; color: #C9CDD8; }
   .credit-card-number {
     font-family: 'Courier New', monospace; font-weight: 700;
-    font-size: clamp(14px, 4.2vw, 18px); letter-spacing: clamp(1px, 0.55vw, 2.5px);
-    margin-bottom: 20px; position: relative; z-index: 1; white-space: nowrap;
+    font-size: clamp(12.5px, 4vw, 18px); letter-spacing: clamp(0.3px, 0.5vw, 2.5px);
+    margin-bottom: 20px; position: relative; z-index: 1;
+    white-space: nowrap; overflow-wrap: normal; word-break: keep-all;
   }
+  @media (max-width: 360px) { .credit-card { padding: 14px; } }
   .credit-card-bottom { display: flex; align-items: flex-end; justify-content: space-between; position: relative; z-index: 1; }
   .credit-card-label { font-size: 9px; font-weight: 700; letter-spacing: .8px; color: #8890A0; text-transform: uppercase; margin-bottom: 3px; }
   .credit-card-holder { font-size: 13px; font-weight: 700; letter-spacing: .4px; }
