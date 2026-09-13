@@ -126,6 +126,15 @@ def init_schema() -> None:
         name TEXT, phone TEXT, message TEXT, status TEXT DEFAULT 'yangi', created_at TEXT)""")
     conn.execute("""CREATE TABLE IF NOT EXISTS web_listing_submissions (
         id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT, created_at TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS favorites (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, listing_id INTEGER NOT NULL,
+        created_at TEXT, UNIQUE(user_id, listing_id))""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS support_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, username TEXT, full_name TEXT,
+        message TEXT, status TEXT DEFAULT 'yangi', admin_reply TEXT, created_at TEXT, replied_at TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS user_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, title TEXT, body TEXT,
+        is_read INTEGER DEFAULT 0, created_at TEXT)""")
     conn.commit()
     conn.close()
 
@@ -219,3 +228,139 @@ def get_blocked_phone(phone: str):
 
 def is_phone_blocked(phone: str) -> bool:
     return get_blocked_phone(phone) is not None
+
+
+# ============================= SEVIMLILAR (bot va sayt UMUMIY) =============================
+
+def toggle_favorite(user_id: int, listing_id: int) -> bool:
+    """E'lonni sevimlilarga qo'shadi/o'chiradi - YANGI holatni (True=qo'shildi,
+    False=o'chirildi) qaytaradi."""
+    conn = db()
+    row = conn.execute("SELECT id FROM favorites WHERE user_id = ? AND listing_id = ?", (user_id, listing_id)).fetchone()
+    if row:
+        conn.execute("DELETE FROM favorites WHERE id = ?", (row["id"],))
+        conn.commit()
+        conn.close()
+        return False
+    conn.execute("INSERT INTO favorites (user_id, listing_id, created_at) VALUES (?, ?, ?)", (user_id, listing_id, now_str()))
+    conn.commit()
+    conn.close()
+    return True
+
+
+def get_favorite_listing_ids(user_id: int) -> set:
+    conn = db()
+    rows = conn.execute("SELECT listing_id FROM favorites WHERE user_id = ?", (user_id,)).fetchall()
+    conn.close()
+    return {r["listing_id"] for r in rows}
+
+
+def get_favorite_listings_full(user_id: int) -> list:
+    """Foydalanuvchining sevimli e'lonlarini (hali FAOL/tasdiqlangan
+    bo'lganlarini, eng yangisi birinchi) to'liq ma'lumot bilan qaytaradi."""
+    conn = db()
+    rows = conn.execute(
+        """SELECT l.* FROM favorites f JOIN listings l ON l.id = f.listing_id
+           WHERE f.user_id = ? AND l.status = 'approved' AND COALESCE(l.expired,0) = 0
+           ORDER BY f.created_at DESC""",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ============================= QO'LLAB-QUVVATLASH SO'ROVLARI (foydalanuvchi -> admin) =============================
+
+def create_support_request(user_id: int, username: str, full_name: str, message: str) -> int:
+    conn = db()
+    conn.execute(
+        "INSERT INTO support_requests (user_id, username, full_name, message, status, created_at) VALUES (?, ?, ?, ?, 'yangi', ?)",
+        (user_id, username, full_name, message, now_str()),
+    )
+    conn.commit()
+    req_id = conn.execute("SELECT last_insert_rowid() id").fetchone()["id"]
+    conn.close()
+    return req_id
+
+
+def get_user_support_requests(user_id: int) -> list:
+    conn = db()
+    rows = conn.execute(
+        "SELECT * FROM support_requests WHERE user_id = ? ORDER BY created_at DESC", (user_id,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_pending_support_requests(limit: int = 50) -> list:
+    conn = db()
+    rows = conn.execute(
+        "SELECT * FROM support_requests WHERE status = 'yangi' ORDER BY created_at ASC LIMIT ?", (limit,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def reply_support_request(request_id: int, reply: str) -> dict | None:
+    """Javob yozadi va so'rovni 'javob berildi' deb belgilaydi - qaysi
+    foydalanuvchiga bildirishnoma yuborish kerakligini bilish uchun
+    to'liq qatorni (user_id bilan) qaytaradi."""
+    conn = db()
+    conn.execute(
+        "UPDATE support_requests SET admin_reply = ?, status = 'javob_berildi', replied_at = ? WHERE id = ?",
+        (reply, now_str(), request_id),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM support_requests WHERE id = ?", (request_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+# ============================= BILDIRISHNOMALAR (admin -> foydalanuvchi, shaxsiy kabinetda ko'rinadi) =============================
+
+def add_user_notification(user_id: int, title: str, body: str) -> None:
+    conn = db()
+    conn.execute(
+        "INSERT INTO user_notifications (user_id, title, body, is_read, created_at) VALUES (?, ?, ?, 0, ?)",
+        (user_id, title, body, now_str()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def broadcast_notification(title: str, body: str) -> int:
+    """Barcha (botdan foydalangan) foydalanuvchilarga bitta xabarni
+    yuboradi - nechta odamga yetganini qaytaradi."""
+    conn = db()
+    user_ids = [r["user_id"] for r in conn.execute("SELECT user_id FROM users").fetchall()]
+    now = now_str()
+    conn.executemany(
+        "INSERT INTO user_notifications (user_id, title, body, is_read, created_at) VALUES (?, ?, ?, 0, ?)",
+        [(uid, title, body, now) for uid in user_ids],
+    )
+    conn.commit()
+    conn.close()
+    return len(user_ids)
+
+
+def get_user_notifications(user_id: int, limit: int = 20) -> list:
+    conn = db()
+    rows = conn.execute(
+        "SELECT * FROM user_notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?", (user_id, limit)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def count_unread_notifications(user_id: int) -> int:
+    conn = db()
+    n = conn.execute("SELECT COUNT(*) c FROM user_notifications WHERE user_id = ? AND is_read = 0", (user_id,)).fetchone()["c"]
+    conn.close()
+    return n
+
+
+def mark_notifications_read(user_id: int) -> None:
+    conn = db()
+    conn.execute("UPDATE user_notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0", (user_id,))
+    conn.commit()
+    conn.close()

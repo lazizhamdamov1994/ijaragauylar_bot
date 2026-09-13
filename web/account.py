@@ -11,12 +11,19 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Upload
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from common.config import ADMIN_IDS, BOT_TOKEN, BOT_USERNAME, CARD_HOLDER, SESSION_COOKIE, SESSION_MAX_AGE, SITE_URL
-from common.db import db, now_str
+from common.db import (
+    db,
+    get_favorite_listings_full,
+    get_user_notifications,
+    get_user_support_requests,
+    mark_notifications_read,
+    now_str,
+)
 
 from web.auth import create_session_token, get_current_tg_user, is_web_subscribed, verify_telegram_auth
 from web.listings_data import current_card_number, current_subscription_days, current_subscription_price
 from web.pages import telegram_upload_photos
-from web.render import DEFAULT_LANG, esc_html, get_lang, icon, render_credit_card, render_footer, render_head, render_header, t
+from web.render import DEFAULT_LANG, esc_html, get_lang, icon, render_credit_card, render_footer, render_head, render_header, render_listing_card, t
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -120,12 +127,93 @@ def kabinet_page(request: Request):
     display_name = esc_html(tg_user.get("fn") or "")
     username_line = f' · @{esc_html(tg_user["un"])}' if tg_user.get("un") else ""
 
+    # Bildirishnomalar (admin tomonidan yuborilgan) - ko'rilgach o'qilgan
+    # deb belgilanadi (sahifa ochilganda darhol - keyingi safar "yangi"
+    # nishoni ko'rsatilmaydi).
+    notifications = get_user_notifications(uid)
+    notif_html = ""
+    if notifications:
+        items = "".join(
+            f'<div class="kb-notif{"" if n["is_read"] else " unread"}">'
+            f'<div class="kb-notif-title">{esc_html(n["title"] or "")}</div>'
+            f'<div class="kb-notif-body">{esc_html(n["body"] or "")}</div>'
+            f'<div class="kb-notif-date">{(n["created_at"] or "")[:16]}</div></div>'
+            for n in notifications
+        )
+        notif_html = f'<div class="kb-card"><div class="kb-card-title">{t(lang,"kb_notifications_title")}</div><div class="kb-notif-list">{items}</div></div>'
+        mark_notifications_read(uid)
+
+    # Sevimlilar
+    favorites = get_favorite_listings_full(uid)
+    favorited_ids = {f["id"] for f in favorites}
+    if favorites:
+        fav_cards = "".join(render_listing_card(f, favorited_ids) for f in favorites)
+        fav_body = f'<div class="listing-grid">{fav_cards}</div>'
+    else:
+        fav_body = f'<div class="kb-empty">{t(lang,"kb_no_favorites")}</div>'
+    fav_html = f'<div class="kb-card"><div class="kb-card-title">{t(lang,"kb_favorites_title")}</div>{fav_body}</div>'
+
+    # Qo'llab-quvvatlash so'rovlari (foydalanuvchi -> admin)
+    support_requests = get_user_support_requests(uid)
+    support_history_html = ""
+    if support_requests:
+        items = ""
+        for r in support_requests:
+            replied = r["status"] == "javob_berildi"
+            status_label = t(lang, "kb_support_status_replied") if replied else t(lang, "kb_support_status_new")
+            status_cls = "st-approved" if replied else "st-pending"
+            reply_html = (
+                f'<div class="kb-support-reply"><b>{t(lang,"kb_support_reply_label")}</b> {esc_html(r["admin_reply"] or "")}</div>'
+                if replied else ""
+            )
+            items += (
+                f'<div class="kb-support-item"><div class="kb-support-msg">{esc_html(r["message"] or "")}</div>'
+                f'<div class="kb-support-meta"><span class="kb-status {status_cls}">{status_label}</span> '
+                f'<span class="kb-support-date">{(r["created_at"] or "")[:16]}</span></div>{reply_html}</div>'
+            )
+        support_history_html = f'<div class="kb-support-history"><div class="kb-card-title" style="margin-top:18px;">{t(lang,"kb_support_history_title")}</div>{items}</div>'
+
+    support_html = f"""<div class="kb-card">
+    <div class="kb-card-title">{t(lang,'kb_support_title')}</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">{t(lang,'kb_support_hint')}</p>
+    <form id="supportForm" onsubmit="return submitSupport(event)">
+      <textarea name="message" required maxlength="1000" rows="3" placeholder="{t(lang,'kb_support_placeholder')}"
+        style="width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;font-size:14px;font-family:inherit;resize:vertical;"></textarea>
+      <button type="submit" class="btn-cta" style="margin-top:10px;border:none;cursor:pointer;">{t(lang,'kb_support_submit')}</button>
+      <div id="supportSuccess" style="display:none;color:var(--brand);font-size:13px;font-weight:700;margin-top:10px;">{icon('check_circle',14)} {t(lang,'kb_support_sent')}</div>
+    </form>
+    {support_history_html}
+  </div>
+  <script>
+  async function submitSupport(e) {{
+    e.preventDefault();
+    const form = e.target;
+    const btn = form.querySelector('button[type=submit]');
+    const ta = form.querySelector('textarea');
+    btn.disabled = true;
+    try {{
+      const res = await fetch('/api/kabinet/support', {{
+        method: 'POST', headers: {{'Content-Type': 'application/json'}},
+        body: JSON.stringify({{message: ta.value}}),
+      }});
+      if (res.ok) {{
+        ta.value = '';
+        document.getElementById('supportSuccess').style.display = 'block';
+      }} else {{
+        btn.disabled = false;
+      }}
+    }} catch (err) {{ btn.disabled = false; }}
+    return false;
+  }}
+  </script>"""
+
     head = render_head(t(lang, "kabinet_title"), t(lang, "kabinet_title"), "/kabinet", lang=lang, noindex=True)
     body = f"""<body>
 {render_header(lang, "/kabinet")}
 <main class="wrap" style="padding-top:32px;padding-bottom:80px;max-width:760px;">
   <h1 style="font-family:var(--font-display);font-size:24px;margin-bottom:4px;">{t(lang,'kabinet_title')}</h1>
   <p style="color:var(--muted);font-size:14px;margin-bottom:22px;">{display_name}{username_line}</p>
+  {notif_html}
   <div class="kb-card">
     <div class="kb-card-title">{t(lang,'kb_limit_title')}</div>
     {limit_html}
@@ -134,6 +222,8 @@ def kabinet_page(request: Request):
     <div class="kb-card-title">{t(lang,'kb_my_listings')}</div>
     {listings_html}
   </div>
+  {fav_html}
+  {support_html}
   <a href="/logout?next=/" style="font-size:13px;color:var(--muted);">{t(lang,'kb_logout')}</a>
 </main>
 {render_footer(lang)}

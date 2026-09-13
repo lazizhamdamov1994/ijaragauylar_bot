@@ -23,7 +23,7 @@ from common.config import (
     SITE_NAME,
     SITE_URL,
 )
-from common.db import db, is_phone_blocked, now_str
+from common.db import db, get_favorite_listing_ids, is_phone_blocked, now_str
 from common.telegram_media import watermark_photo_bytes_list
 
 from web.auth import _client_ip, get_current_tg_user, is_web_subscribed
@@ -72,6 +72,9 @@ def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), pa
     stats = site_stats_summary()
     total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
 
+    tg_user = get_current_tg_user(request)
+    favorited_ids = get_favorite_listing_ids(tg_user["uid"]) if tg_user else frozenset()
+
     district_options = "".join(
         f'<option value="{d}" {"selected" if d.lower() == hudud.lower() else ""}>{d}</option>'
         for d in TASHKENT_DISTRICTS
@@ -98,7 +101,7 @@ def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), pa
     )
 
     if listings:
-        cards_html = "".join(render_listing_card(l) for l in listings)
+        cards_html = "".join(render_listing_card(l, favorited_ids) for l in listings)
     else:
         cards_html = f"""<div class="empty-state" style="grid-column:1/-1;">
             <div class="icon">{icon('search', 40)}</div>
@@ -201,6 +204,49 @@ def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), pa
   {pag_html}
 </main>
 
+<section class="phone-check-section">
+  <div class="wrap">
+    <div class="phone-check-box">
+      <h3>{icon('shield', 20)} {t(lang,'phone_check_title')}</h3>
+      <p>{t(lang,'phone_check_desc')}</p>
+      <div class="phone-check-form">
+        <input type="tel" id="phoneCheckInput" placeholder="{t(lang,'phone_check_placeholder')}" onkeydown="if(event.key==='Enter')checkPhoneNumber()">
+        <button type="button" onclick="checkPhoneNumber()">{icon('search', 15)} {t(lang,'phone_check_btn')}</button>
+      </div>
+      <div id="phoneCheckResult"></div>
+    </div>
+  </div>
+</section>
+<script>
+async function checkPhoneNumber() {{
+  const input = document.getElementById('phoneCheckInput');
+  const resultEl = document.getElementById('phoneCheckResult');
+  const phone = input.value.trim();
+  if (!phone) return;
+  resultEl.className = 'pc-result';
+  resultEl.textContent = "{t(lang,'phone_check_checking')}";
+  try {{
+    const res = await fetch('/api/phone-check?phone=' + encodeURIComponent(phone));
+    if (!res.ok) {{
+      resultEl.className = 'pc-result pc-error';
+      resultEl.textContent = "{t(lang,'phone_check_invalid')}";
+      return;
+    }}
+    const data = await res.json();
+    if (data.blocked) {{
+      resultEl.className = 'pc-result pc-blocked';
+      resultEl.textContent = "⚠️ {t(lang,'phone_check_blocked')}";
+    }} else {{
+      resultEl.className = 'pc-result pc-ok';
+      resultEl.textContent = "✅ {t(lang,'phone_check_ok')}";
+    }}
+  }} catch (err) {{
+    resultEl.className = 'pc-result pc-error';
+    resultEl.textContent = "{t(lang,'phone_check_error')}";
+  }}
+}}
+</script>
+
 <section class="why-section">
   <div class="wrap">
     <div class="section-head"><h2>{t(lang,'why_title')}</h2></div>
@@ -285,6 +331,8 @@ def listing_detail(request: Request, listing_id: int):
     bot_link = f"https://t.me/{BOT_USERNAME}?start=phone_{l['id']}" if BOT_USERNAME else "#"
 
     tg_user = get_current_tg_user(request)
+    favorited_ids = get_favorite_listing_ids(tg_user["uid"]) if tg_user else frozenset()
+    is_favorited = l["id"] in favorited_ids
     has_limit = False
     if tg_user:
         has_limit, _limit_expire = is_web_subscribed(tg_user["uid"])
@@ -344,7 +392,7 @@ def listing_detail(request: Request, listing_id: int):
     related = get_related_listings(l["id"], l.get("manzil") or addr)
     related_html = ""
     if related:
-        related_cards = "".join(render_listing_card(r) for r in related)
+        related_cards = "".join(render_listing_card(r, favorited_ids) for r in related)
         related_html = f"""<div class="related-strip">
   <div class="section-head"><h2>{t(lang,'related_title')}</h2></div>
   <div class="listing-grid">{related_cards}</div>
@@ -400,7 +448,14 @@ def listing_detail(request: Request, listing_id: int):
       <div class="gallery-wrap">{gallery_html}</div>
       {lightbox_html}
 
-      <h1 class="detail-title">{esc_html(addr)}</h1>
+      <div class="detail-title-row">
+        <h1 class="detail-title">{esc_html(addr)}</h1>
+        <button type="button" class="detail-fav-btn{' active' if is_favorited else ''}" data-listing-id="{l['id']}"
+          onclick="toggleFavorite({l['id']}, this)">
+          <span class="fav-icon-outline">{icon('heart', 17)}</span><span class="fav-icon-filled">{icon('heart_filled', 17)}</span>
+          <span class="fav-label-outline">{t(lang,'fav_save')}</span><span class="fav-label-filled">{t(lang,'fav_saved')}</span>
+        </button>
+      </div>
       {moljal_block}
       <div class="detail-badges">
         {paid_badge}

@@ -352,6 +352,22 @@ TRANSLATIONS = {
     "status_rejected": {"uz": "Rad etilgan", "ru": "\u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u043e", "en": "Rejected"},
     "status_expired": {"uz": "Topshirilgan", "ru": "\u0421\u0434\u0430\u043d\u043e", "en": "Rented out"},
     "kb_logout": {"uz": "Chiqish", "ru": "\u0412\u044b\u0439\u0442\u0438", "en": "Log out"},
+    "kb_notifications_title": {"uz": "Bildirishnomalar", "ru": "\u0423\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f", "en": "Notifications"},
+    "kb_favorites_title": {"uz": "Sevimlilarim", "ru": "\u0418\u0437\u0431\u0440\u0430\u043d\u043d\u043e\u0435", "en": "Favorites"},
+    "kb_no_favorites": {"uz": "Hali hech qanday e'lonni saqlamadingiz.", "ru": "\u0412\u044b \u043f\u043e\u043a\u0430 \u043d\u0435 \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u043b\u0438 \u043d\u0438 \u043e\u0434\u043d\u043e\u0433\u043e \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f.", "en": "You haven't saved any listings yet."},
+    "kb_support_title": {"uz": "Yordam kerakmi?", "ru": "\u041d\u0443\u0436\u043d\u0430 \u043f\u043e\u043c\u043e\u0449\u044c?", "en": "Need help?"},
+    "kb_support_hint": {
+        "uz": "Savolingiz yoki muammoyingiz bo'lsa, shu yerga yozing \u2014 tez orada javob beramiz.",
+        "ru": "\u0415\u0441\u043b\u0438 \u0443 \u0432\u0430\u0441 \u0435\u0441\u0442\u044c \u0432\u043e\u043f\u0440\u043e\u0441 \u0438\u043b\u0438 \u043f\u0440\u043e\u0431\u043b\u0435\u043c\u0430, \u043d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u0437\u0434\u0435\u0441\u044c \u2014 \u043c\u044b \u0441\u043a\u043e\u0440\u043e \u043e\u0442\u0432\u0435\u0442\u0438\u043c.",
+        "en": "If you have a question or an issue, write here \u2014 we'll reply soon.",
+    },
+    "kb_support_placeholder": {"uz": "Xabaringizni yozing...", "ru": "\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u0432\u0430\u0448\u0435 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435...", "en": "Write your message..."},
+    "kb_support_submit": {"uz": "Yuborish", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c", "en": "Send"},
+    "kb_support_sent": {"uz": "Xabaringiz yuborildi, tez orada javob beramiz!", "ru": "\u0421\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u043e, \u0441\u043a\u043e\u0440\u043e \u043e\u0442\u0432\u0435\u0442\u0438\u043c!", "en": "Your message was sent, we'll reply soon!"},
+    "kb_support_history_title": {"uz": "Sizning so'rovlaringiz", "ru": "\u0412\u0430\u0448\u0438 \u043e\u0431\u0440\u0430\u0449\u0435\u043d\u0438\u044f", "en": "Your requests"},
+    "kb_support_status_new": {"uz": "Kutilmoqda", "ru": "\u041e\u0436\u0438\u0434\u0430\u0435\u0442", "en": "Pending"},
+    "kb_support_status_replied": {"uz": "Javob berildi", "ru": "\u041e\u0442\u0432\u0435\u0447\u0435\u043d\u043e", "en": "Replied"},
+    "kb_support_reply_label": {"uz": "Admin javobi:", "ru": "\u041e\u0442\u0432\u0435\u0442 \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0430:", "en": "Admin's reply:"},
     "kb_back": {"uz": "\u2190 Kabinetga qaytish", "ru": "\u2190 \u041d\u0430\u0437\u0430\u0434 \u0432 \u043a\u0430\u0431\u0438\u043d\u0435\u0442", "en": "\u2190 Back to my account"},
     "kb_pay_hint": {
         "uz": "To'lovni shu kartaga o'tkazing, so'ng chek rasmini yuklang. Admin tekshirib, tasdiqlagach Limitingiz avtomatik faollashadi.",
@@ -385,6 +401,25 @@ TRANSLATIONS = {
     },
     "card_brand": {"uz": "TO'LOV KARTASI", "ru": "\u041f\u041b\u0410\u0422\u0401\u0416\u041d\u0410\u042f \u041a\u0410\u0420\u0422\u0410", "en": "PAYMENT CARD"},
     "card_holder_label": {"uz": "Karta egasi", "ru": "\u0414\u0435\u0440\u0436\u0430\u0442\u0435\u043b\u044c \u043a\u0430\u0440\u0442\u044b", "en": "Card holder"},
+    "fav_save": {"uz": "Saqlash", "ru": "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c", "en": "Save"},
+    "fav_saved": {"uz": "Saqlangan", "ru": "\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e", "en": "Saved"},
+    "phone_check_title": {"uz": "Raqamni tekshirish", "ru": "\u041f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c \u043d\u043e\u043c\u0435\u0440", "en": "Check a phone number"},
+    "phone_check_desc": {
+        "uz": "Shubhali telefon raqami bormi? Shu yerda tekshiring \u2014 bizning tizimda bloklangan bo'lsa, darhol bilib olasiz.",
+        "ru": "\u0415\u0441\u0442\u044c \u043f\u043e\u0434\u043e\u0437\u0440\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0439 \u043d\u043e\u043c\u0435\u0440 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430? \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0437\u0434\u0435\u0441\u044c \u2014 \u0435\u0441\u043b\u0438 \u043e\u043d \u0437\u0430\u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u0430\u043d \u0432 \u043d\u0430\u0448\u0435\u0439 \u0441\u0438\u0441\u0442\u0435\u043c\u0435, \u0432\u044b \u0441\u0440\u0430\u0437\u0443 \u0443\u0437\u043d\u0430\u0435\u0442\u0435.",
+        "en": "Have a suspicious phone number? Check it here \u2014 if it's blocked in our system, you'll know right away.",
+    },
+    "phone_check_placeholder": {"uz": "+998 90 123 45 67", "ru": "+998 90 123 45 67", "en": "+998 90 123 45 67"},
+    "phone_check_btn": {"uz": "Tekshirish", "ru": "\u041f\u0440\u043e\u0432\u0435\u0440\u0438\u0442\u044c", "en": "Check"},
+    "phone_check_checking": {"uz": "Tekshirilmoqda...", "ru": "\u041f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442\u0441\u044f...", "en": "Checking..."},
+    "phone_check_invalid": {"uz": "Raqam formati noto'g'ri. Masalan: +998901234567", "ru": "\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u0444\u043e\u0440\u043c\u0430\u0442 \u043d\u043e\u043c\u0435\u0440\u0430. \u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: +998901234567", "en": "Invalid phone format. Example: +998901234567"},
+    "phone_check_blocked": {
+        "uz": "Diqqat! Bu raqam bizning tizimda BLOKLANGAN.",
+        "ru": "\u0412\u043d\u0438\u043c\u0430\u043d\u0438\u0435! \u042d\u0442\u043e\u0442 \u043d\u043e\u043c\u0435\u0440 \u0417\u0410\u0411\u041b\u041e\u041a\u0418\u0420\u041e\u0412\u0410\u041d \u0432 \u043d\u0430\u0448\u0435\u0439 \u0441\u0438\u0441\u0442\u0435\u043c\u0435.",
+        "en": "Warning! This number is BLOCKED in our system.",
+    },
+    "phone_check_ok": {"uz": "Bu raqam bloklanmagan.", "ru": "\u042d\u0442\u043e\u0442 \u043d\u043e\u043c\u0435\u0440 \u043d\u0435 \u0437\u0430\u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u0430\u043d.", "en": "This number is not blocked."},
+    "phone_check_error": {"uz": "Xatolik yuz berdi, qayta urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Something went wrong, please try again."},
 
     # ---- SEO: sahifa sarlavhalari va tavsiflari (har bir til uchun alohida) ----
     "seo_home_title": {
@@ -534,6 +569,21 @@ def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
 function toggleMobileMenu() {{
   document.getElementById('mobileMenu').classList.toggle('open');
 }}
+async function toggleFavorite(listingId, btn) {{
+  try {{
+    const res = await fetch('/api/favorites/toggle', {{
+      method: 'POST', headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{listing_id: listingId}}),
+    }});
+    if (res.status === 401) {{
+      window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+      return;
+    }}
+    if (!res.ok) return;
+    const data = await res.json();
+    btn.classList.toggle('active', !!data.favorited);
+  }} catch (err) {{ /* jimgina e'tiborsiz qoldiriladi - tarmoq muammosi */ }}
+}}
 document.addEventListener('click', function() {{
   document.querySelectorAll('.lang-switcher.open').forEach(function(el) {{ el.classList.remove('open'); }});
 }});
@@ -605,7 +655,7 @@ RENTAL_TYPE_LABELS = {
 
 
 
-def render_listing_card(l: dict) -> str:
+def render_listing_card(l: dict, favorited_ids: frozenset = frozenset()) -> str:
     photos = l.get("photos") or []
     img = photo_url(photos[0]) if photos else ""
     img_html = f'<img src="{img}" alt="{esc_html(display_address(l))}" loading="lazy">' if img else f'<div class="lc-placeholder">{icon("home", 34)}</div>'
@@ -628,11 +678,17 @@ def render_listing_card(l: dict) -> str:
     if kimlarga:
         meta_parts.append(f'{icon("users", 14)} {esc_html(kimlarga[:16])}')
     meta_html = f'<div class="lc-meta">{" &nbsp;·&nbsp; ".join(meta_parts)}</div>' if meta_parts else ""
+    fav_active = " active" if l["id"] in favorited_ids else ""
+    fav_btn = f"""<button type="button" class="lc-fav-btn{fav_active}" data-listing-id="{l['id']}"
+    onclick="event.preventDefault();event.stopPropagation();toggleFavorite({l['id']}, this);" aria-label="Sevimlilarga qo'shish">
+    <span class="fav-icon-outline">{icon('heart', 17)}</span><span class="fav-icon-filled">{icon('heart_filled', 17)}</span>
+  </button>"""
     return f"""<a href="/uy/{l['id']}" class="listing-card">
   <div class="lc-photo">
     {img_html}
     {paid_badge}
     {cat_badge}
+    {fav_btn}
   </div>
   <div class="lc-body">
     <div class="lc-top">

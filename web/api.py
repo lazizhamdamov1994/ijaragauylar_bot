@@ -6,12 +6,14 @@ import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from common.db import db, now_str
+from common.config import ADMIN_IDS, BOT_TOKEN
+from common.db import create_support_request, db, get_blocked_phone, now_str, toggle_favorite
 
-from web.auth import check_auth
-from web.listings_data import get_active_listings
+from web.auth import check_auth, get_current_tg_user
+from web.listings_data import get_active_listings, normalize_phone_web
 from web.render import TASHKENT_DISTRICTS
 
 logger = logging.getLogger(__name__)
@@ -346,6 +348,72 @@ def api_moderator_stats(user: str = Depends(check_auth)):
         })
     conn.close()
     return result
+
+
+# ============================= SEVIMLILAR (faqat Telegram orqali kirgan foydalanuvchi) =============================
+
+@router.post("/api/favorites/toggle")
+async def api_toggle_favorite(request: Request):
+    tg_user = get_current_tg_user(request)
+    if not tg_user:
+        raise HTTPException(status_code=401, detail="login_required")
+    data = await request.json()
+    try:
+        listing_id = int(data.get("listing_id") or 0)
+    except (TypeError, ValueError):
+        listing_id = 0
+    if not listing_id:
+        raise HTTPException(status_code=400)
+    favorited = toggle_favorite(tg_user["uid"], listing_id)
+    return {"ok": True, "favorited": favorited}
+
+
+# ============================= RAQAM TEKSHIRISH (ommaviy, saytda) =============================
+
+@router.get("/api/phone-check")
+def api_phone_check(phone: str = Query("")):
+    normalized = normalize_phone_web(phone)
+    if not normalized:
+        raise HTTPException(status_code=400, detail="invalid_phone")
+    blocked = get_blocked_phone(normalized)
+    return {"blocked": blocked is not None, "reason": (blocked.get("reason") if blocked else None)}
+
+
+# ============================= QO'LLAB-QUVVATLASH SO'ROVI (shaxsiy kabinetdan) =============================
+
+async def _notify_admins_new_support_request(req_id: int, tg_user: dict, message: str) -> None:
+    """Adminlarga Telegram orqali darhol xabar beradi - alohida admin
+    veb-sahifasi hali yo'q, botni faol ishlatishadi, shuning uchun
+    eng tez YETIB BORADIGAN kanal shu."""
+    if not BOT_TOKEN or not ADMIN_IDS:
+        return
+    uname = f"@{tg_user['un']}" if tg_user.get("un") else f"ID:{tg_user['uid']}"
+    text = (
+        f"\U0001F4AC <b>Yangi so'rov (sayt, Shaxsiy kabinet)</b>\n\n"
+        f"\U0001F464 {tg_user.get('fn') or uname} ({uname})\n\n"
+        f"{message}\n\n"
+        f"Javob berish uchun bot admin panelidagi “So'rovlar” bo'limidan foydalaning (#{req_id})."
+    )
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            for admin_id in ADMIN_IDS:
+                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={"chat_id": admin_id, "text": text, "parse_mode": "HTML"})
+    except Exception:
+        logger.exception("Adminlarga yangi so'rov haqida xabar berishda xatolik")
+
+
+@router.post("/api/kabinet/support")
+async def api_submit_support_request(request: Request):
+    tg_user = get_current_tg_user(request)
+    if not tg_user:
+        raise HTTPException(status_code=401, detail="login_required")
+    data = await request.json()
+    message = (data.get("message") or "").strip()[:1000]
+    if not message:
+        raise HTTPException(status_code=400, detail="empty_message")
+    req_id = create_support_request(tg_user["uid"], tg_user.get("un"), tg_user.get("fn"), message)
+    await _notify_admins_new_support_request(req_id, tg_user, message)
+    return {"ok": True}
 
 
 
