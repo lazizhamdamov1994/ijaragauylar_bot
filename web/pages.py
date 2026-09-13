@@ -31,7 +31,6 @@ from web.listings_data import (
     PER_PAGE,
     current_card_number,
     current_listing_price,
-    current_subscription_price,
     get_related_listings,
     get_site_listing,
     get_site_listings,
@@ -53,7 +52,6 @@ from web.render import (
     icon,
     mask_card_holder,
     photo_url,
-    render_credit_card,
     render_footer,
     render_head,
     render_header,
@@ -296,20 +294,19 @@ def listing_detail(request: Request, listing_id: int):
         sidebar_note_html = f'<div class="sidebar-note">{t(lang,"sidebar_note_limit_active")}</div>'
     else:
         # Limiti yo'q (kirgan yoki kirmagan, farqi yo'q) - tugma har doim
-        # oddiy "Uy egasi raqamini ko'rish" deb turadi, bosilgandagina
-        # to'lov taklifi (kartasi bilan) sahifadan chiqmasdan ochiladi.
+        # oddiy "Uy egasi raqamini ko'rish" deb turadi. Bosilganda KARTA
+        # DARHOL chiqmaydi - avval e'tiborni tortadigan "Limit kerak"
+        # ogohlantirishi ko'rinadi; karta va chek yuklash oynasi faqat
+        # "Limit sotib olish" bosilgach, /kabinet/limit sahifasida ochiladi.
         buy_next = f"/kabinet/limit?listing_id={l['id']}"
         buy_link = buy_next if tg_user else f"/login?next={urllib.parse.quote(buy_next, safe='')}"
-        card_digits = re.sub(r"\D", "", current_card_number())
-        price = current_subscription_price()
-        card_html = render_credit_card(lang, card_digits, amount_text=f"{price:,} {t(lang,'sum')}", with_copy=True)
         phone_cta_html = (
             f'<button type="button" class="sidebar-cta" style="width:100%;border:none;cursor:pointer;" '
             f'onclick="document.getElementById(\'phoneLock\').classList.add(\'open\');this.style.display=\'none\';">'
             f'{icon("phone", 16)} {t(lang,"sidebar_cta_view_phone")}</button>'
-            f'<div id="phoneLock" class="phone-lock">'
-            f'<p class="phone-lock-text">{t(lang,"paywall_no_limit_msg", price=f"{price:,} " + t(lang,"sum"))}</p>'
-            f'{card_html}'
+            f'<div id="phoneLock" class="phone-lock paywall-alert">'
+            f'{icon("alert", 26)}'
+            f'<p class="phone-lock-text">{t(lang,"paywall_no_limit_msg")}</p>'
             f'<a href="{buy_link}" class="paywall-cta">{t(lang,"kb_buy_limit")} →</a>'
             f'</div>'
         )

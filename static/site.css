@@ -314,6 +314,15 @@
   .phone-lock.open { display: block; animation: phoneLockIn .25s ease; }
   @keyframes phoneLockIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
   .phone-lock-text { font-size: 13px; color: var(--ink-soft); text-align: center; margin-bottom: 14px; line-height: 1.5; }
+  /* Diqqatni tortadigan "Limit kerak" ogohlantirish paneli - karta HALI
+     ko'rsatilmaydi, foydalanuvchi "Limit sotib olish"ni bosgandan KEYIN
+     (alohida sahifada) karta va chek yuklash oynasi ochiladi. */
+  .paywall-alert {
+    background: var(--brand-light); border: 1.5px solid var(--brand); border-radius: var(--radius-lg);
+    padding: 20px 18px; text-align: center;
+  }
+  .paywall-alert .ico { color: var(--brand); margin-bottom: 8px; }
+  .paywall-alert .phone-lock-text { color: var(--ink); font-weight: 600; margin-bottom: 16px; }
   .credit-card {
     background: linear-gradient(135deg, #1B2436 0%, #101826 60%, #2A2117 100%);
     border-radius: 16px; padding: 18px 20px; color: #fff; box-shadow: var(--shadow-lg);
