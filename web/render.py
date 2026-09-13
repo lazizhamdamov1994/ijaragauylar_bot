@@ -1,0 +1,675 @@
+"""
+Sayt uchun umumiy render yordamchilari: i18n (uz/ru/en), sahifa
+head/header/footer, e'lon kartochkasi, to'lov kartasi vizuali, ikonalar.
+"""
+import hashlib
+import os
+import urllib.parse
+from datetime import datetime
+
+from fastapi import APIRouter, Request
+from fastapi.responses import RedirectResponse
+
+from common.config import (
+    BOT_USERNAME,
+    BRAND_SHORT,
+    CARD_HOLDER,
+    CHANNEL_USERNAME,
+    GOOGLE_SITE_VERIFICATION,
+    INSTAGRAM_URL,
+    SITE_NAME,
+    SITE_URL,
+    YANDEX_VERIFICATION,
+)
+
+router = APIRouter()
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+try:
+    with open(os.path.join(STATIC_DIR, "site.css"), "rb") as _f:
+        CSS_VERSION = hashlib.md5(_f.read()).hexdigest()[:8]
+except Exception:
+    CSS_VERSION = "1"
+
+def mask_card_holder(name: str) -> str:
+    """Karta egasi ismini saytda XAVFSIZ ko'rsatish uchun - har bir so'zning
+    faqat birinchi harfi ochiq qoladi (masalan "Laziz Hamdamov" -> "Lxxxx Hxxxxxxx")."""
+    if not name:
+        return ""
+    return " ".join((w[0] + "x" * (len(w) - 1)) if len(w) > 1 else w for w in name.split())
+
+
+def render_credit_card(lang: str, card_digits: str, amount_text: str = "", with_copy: bool = False) -> str:
+    """Karta raqamini haqiqiy bank kartasiga o'xshash, chiroyli ko'rinishda
+    chiqaradi - listing_detail va /kabinet/limit ikkalasida ham ishlatiladi."""
+    card_grouped = " ".join(card_digits[i:i + 4] for i in range(0, len(card_digits), 4)) if card_digits else ""
+    masked_holder = mask_card_holder(CARD_HOLDER) or SITE_NAME
+    amount_html = f'<div class="credit-card-amount">{amount_text}</div>' if amount_text else ""
+    copy_html = ""
+    if with_copy and card_digits:
+        copy_html = (
+            f'<button type="button" class="card-copy-btn" onclick="copyCardNumber(this, \'{card_digits}\')">'
+            f'{icon("copy", 13)} <span>{t(lang, "copy_btn")}</span></button>'
+        )
+    return f"""<div class="credit-card">
+  <div class="credit-card-top"><span class="credit-card-chip"></span><span class="credit-card-brand">{t(lang,'card_brand')}</span></div>
+  <div class="credit-card-number">{esc_html(card_grouped) or '—'}</div>
+  <div class="credit-card-bottom">
+    <div><div class="credit-card-label">{t(lang,'card_holder_label')}</div><div class="credit-card-holder">{esc_html(masked_holder)}</div></div>
+    {amount_html}
+  </div>
+</div>
+{copy_html}"""
+
+
+
+TASHKENT_DISTRICTS = [
+    "Yunusobod", "Chilonzor", "Sergeli", "Mirzo Ulug'bek", "Shayxontohur",
+    "Olmazor", "Bektemir", "Uchtepa", "Yashnobod", "Yakkasaroy",
+    "Mirobod", "Yangihayot",
+]
+
+_DISTRICT_ALIASES = {
+    "Yunusobod": ["yunusobod", "yunusabad", "юнусобод", "юнусабад"],
+    "Chilonzor": ["chilonzor", "chilanzar", "чилонзор", "чиланзар"],
+    "Sergeli": ["sergeli", "сергели"],
+    "Mirzo Ulug'bek": ["mirzo ulug", "mirzo-ulug", "мирзо улуг", "мирзо-улуг"],
+    "Shayxontohur": ["shayxontohur", "shaykhontohur", "шайхонтохур", "шайхантахур"],
+    "Olmazor": ["olmazor", "olmazar", "олмазор", "олмазар"],
+    "Bektemir": ["bektemir", "бектемир"],
+    "Uchtepa": ["uchtepa", "учтепа"],
+    "Yashnobod": ["yashnobod", "yashnabad", "яшнобод", "яшнабад"],
+    "Yakkasaroy": ["yakkasaroy", "yakkasaray", "яккасарой", "яккасарай"],
+    "Mirobod": ["mirobod", "миробод"],
+    "Yangihayot": ["yangihayot", "янгихаёт", "янгихает"],
+}
+
+
+def extract_district(text: str) -> str:
+    """Matndan (masalan tezkor e'lon xom matnidan) tuman nomini avtomatik
+    aniqlaydi. Topilmasa umumiy \"Toshkent\" qaytaradi."""
+    low = (text or "").lower()
+    for canonical, aliases in _DISTRICT_ALIASES.items():
+        for alias in aliases:
+            if alias in low:
+                return canonical
+    return "Toshkent"
+
+
+def display_address(l: dict) -> str:
+    """Kartochka/sarlavha uchun manzilni qaytaradi - agar oddiy manzil
+    bo'lmasa (tezkor e'lonlarda bo'lgani kabi), xom matndan tuman nomini
+    avtomatik aniqlab, o'rniga qo'yadi."""
+    manzil = (l.get("manzil") or "").strip()
+    if manzil:
+        return manzil
+    district = extract_district(l.get("raw_text") or "")
+    return f"{district}dagi e'lon"
+
+
+
+SUPPORTED_LANGS = ("uz", "ru", "en")
+DEFAULT_LANG = "uz"
+LANG_META = {"uz": "O'zbekcha", "ru": "\u0420\u0443\u0441\u0441\u043a\u0438\u0439", "en": "English"}
+
+TRANSLATIONS = {
+    "nav_home": {"uz": "Bosh sahifa", "ru": "\u0413\u043b\u0430\u0432\u043d\u0430\u044f", "en": "Home"},
+    "nav_subarenda": {"uz": "Subarenda", "ru": "\u0421\u0443\u0431\u0430\u0440\u0435\u043d\u0434\u0430", "en": "Sublease"},
+    "nav_map_title": {"uz": "Xarita", "ru": "\u041a\u0430\u0440\u0442\u0430", "en": "Map"},
+    "nav_bot_title": {"uz": "Telegram bot", "ru": "Telegram-\u0431\u043e\u0442", "en": "Telegram bot"},
+    "nav_channel_title": {"uz": "Telegram kanal", "ru": "Telegram-\u043a\u0430\u043d\u0430\u043b", "en": "Telegram channel"},
+    "nav_post_cta": {"uz": "E'lon joylash", "ru": "\u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "Post a listing"},
+    "mobile_post": {"uz": "E'lon joylash", "ru": "\u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "Post a listing"},
+    "footer_tagline": {
+        "uz": "Maklersiz, to'g'ridan-to'g'ri uy egasi bilan bog'lanish platformasi.",
+        "ru": "\u041f\u043b\u0430\u0442\u0444\u043e\u0440\u043c\u0430 \u0434\u043b\u044f \u043f\u0440\u044f\u043c\u043e\u0439 \u0441\u0432\u044f\u0437\u0438 \u0441 \u0445\u043e\u0437\u044f\u0438\u043d\u043e\u043c \u0436\u0438\u043b\u044c\u044f, \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432.",
+        "en": "A platform to connect directly with homeowners \u2014 no agent fees.",
+    },
+    "footer_rights": {"uz": "Barcha huquqlar himoyalangan.", "ru": "\u0412\u0441\u0435 \u043f\u0440\u0430\u0432\u0430 \u0437\u0430\u0449\u0438\u0449\u0435\u043d\u044b.", "en": "All rights reserved."},
+
+    "hero_title": {
+        "uz": "Maklersiz uy ijarasi Toshkentda",
+        "ru": "\u0410\u0440\u0435\u043d\u0434\u0430 \u0436\u0438\u043b\u044c\u044f \u0432 \u0422\u0430\u0448\u043a\u0435\u043d\u0442\u0435 \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432",
+        "en": "Commission-free home rentals in Tashkent",
+    },
+    "hero_sub": {
+        "uz": "To'g'ridan-to'g'ri uy egasi bilan bog'laning \u2014 hech qanday makler haqqi to'lamang",
+        "ru": "\u0421\u0432\u044f\u0436\u0438\u0442\u0435\u0441\u044c \u043d\u0430\u043f\u0440\u044f\u043c\u0443\u044e \u0441 \u0445\u043e\u0437\u044f\u0438\u043d\u043e\u043c \u2014 \u043d\u0438\u043a\u0430\u043a\u0438\u0445 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0439 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u0430\u043c",
+        "en": "Connect directly with the homeowner \u2014 pay no agent commission",
+    },
+    "search_district_label": {"uz": "HUDUD", "ru": "\u0420\u0410\u0419\u041e\u041d", "en": "DISTRICT"},
+    "search_all_districts": {"uz": "Barcha hududlar", "ru": "\u0412\u0441\u0435 \u0440\u0430\u0439\u043e\u043d\u044b", "en": "All districts"},
+    "search_rooms_label": {"uz": "XONALAR SONI", "ru": "\u041a\u041e\u041b\u0418\u0427\u0415\u0421\u0422\u0412\u041e \u041a\u041e\u041c\u041d\u0410\u0422", "en": "ROOMS"},
+    "search_rooms_any": {"uz": "Farqi yo'q", "ru": "\u041d\u0435\u0432\u0430\u0436\u043d\u043e", "en": "Any"},
+    "search_btn": {"uz": "Qidirish", "ru": "\u041f\u043e\u0438\u0441\u043a", "en": "Search"},
+    "stat_active": {"uz": "Faol e'lon", "ru": "\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439", "en": "Active listings"},
+    "stat_users": {"uz": "Foydalanuvchi", "ru": "\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0435\u0439", "en": "Users"},
+    "stat_nofee": {"uz": "Maklersiz", "ru": "\u0411\u0435\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438", "en": "Commission-free"},
+    "rt_all": {"uz": "Barchasi", "ru": "\u0412\u0441\u0435", "en": "All"},
+    "rt_uzoq_muddat": {"uz": "\U0001F3E0 Uzoq muddat", "ru": "\U0001F3E0 \u0414\u043e\u043b\u0433\u043e\u0441\u0440\u043e\u0447\u043d\u043e", "en": "\U0001F3E0 Long-term"},
+    "rt_kunlik": {"uz": "\U0001F4C5 Kunlik", "ru": "\U0001F4C5 \u041f\u043e\u0441\u0443\u0442\u043e\u0447\u043d\u043e", "en": "\U0001F4C5 Daily"},
+    "rt_dacha": {"uz": "\U0001F333 Dacha", "ru": "\U0001F333 \u0414\u0430\u0447\u0430", "en": "\U0001F333 Cottage"},
+    "rt_mehmonxona": {"uz": "\U0001F6CF Mehmonxona", "ru": "\U0001F6CF \u0413\u043e\u0441\u0442\u0435\u0432\u044b\u0435 \u043a\u043e\u043c\u043d\u0430\u0442\u044b", "en": "\U0001F6CF Guest rooms"},
+    "section_search_results": {"uz": "Qidiruv natijalari", "ru": "\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043f\u043e\u0438\u0441\u043a\u0430", "en": "Search results"},
+    "section_latest": {"uz": "So'nggi e'lonlar", "ru": "\u041f\u043e\u0441\u043b\u0435\u0434\u043d\u0438\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", "en": "Latest listings"},
+    "section_count_suffix": {"uz": "{n} ta e'lon topildi", "ru": "\u041d\u0430\u0439\u0434\u0435\u043d\u043e \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439: {n}", "en": "{n} listings found"},
+    "empty_listings": {
+        "uz": "Hech qanday e'lon topilmadi. Boshqa filtrni sinab ko'ring.",
+        "ru": "\u041e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u044b. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0434\u0440\u0443\u0433\u043e\u0439 \u0444\u0438\u043b\u044c\u0442\u0440.",
+        "en": "No listings found. Try a different filter.",
+    },
+    "why_title": {"uz": "Nega bizni tanlashadi", "ru": "\u041f\u043e\u0447\u0435\u043c\u0443 \u0432\u044b\u0431\u0438\u0440\u0430\u044e\u0442 \u043d\u0430\u0441", "en": "Why choose us"},
+    "why1_title": {"uz": "Maklersiz", "ru": "\u0411\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432", "en": "No agent fees"},
+    "why1_desc": {"uz": "Hech qanday komissiya yoki vositachi haqqi yo'q", "ru": "\u041d\u0438\u043a\u0430\u043a\u043e\u0439 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438 \u0438\u043b\u0438 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u0447\u0435\u0441\u043a\u0438\u0445 \u043f\u043b\u0430\u0442\u0435\u0436\u0435\u0439", "en": "No commission or middleman fees, ever"},
+    "why2_title": {"uz": "Tekshirilgan", "ru": "\u041f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043e", "en": "Verified"},
+    "why2_desc": {"uz": "Har bir e'lon moderatsiyadan o'tadi, firibgarlar bloklanadi", "ru": "\u041a\u0430\u0436\u0434\u043e\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0445\u043e\u0434\u0438\u0442 \u043c\u043e\u0434\u0435\u0440\u0430\u0446\u0438\u044e, \u043c\u043e\u0448\u0435\u043d\u043d\u0438\u043a\u0438 \u0431\u043b\u043e\u043a\u0438\u0440\u0443\u044e\u0442\u0441\u044f", "en": "Every listing is moderated; scammers get blocked"},
+    "why3_title": {"uz": "Tezkor", "ru": "\u0411\u044b\u0441\u0442\u0440\u043e", "en": "Fast"},
+    "why3_desc": {"uz": "Bot orqali bir necha soniyada uy egasi bilan bog'laning", "ru": "\u0421\u0432\u044f\u0436\u0438\u0442\u0435\u0441\u044c \u0441 \u0445\u043e\u0437\u044f\u0438\u043d\u043e\u043c \u0447\u0435\u0440\u0435\u0437 \u0431\u043e\u0442\u0430 \u0437\u0430 \u0441\u0447\u0438\u0442\u0430\u043d\u044b\u0435 \u0441\u0435\u043a\u0443\u043d\u0434\u044b", "en": "Reach the owner via the bot in seconds"},
+    "why4_title": {"uz": "Xaritada", "ru": "\u041d\u0430 \u043a\u0430\u0440\u0442\u0435", "en": "On the map"},
+    "why4_desc": {"uz": "Uylarni interaktiv xaritada joylashuvi bo'yicha toping", "ru": "\u041d\u0430\u0445\u043e\u0434\u0438\u0442\u0435 \u0436\u0438\u043b\u044c\u0451 \u043f\u043e \u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u044e \u043d\u0430 \u0438\u043d\u0442\u0435\u0440\u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0439 \u043a\u0430\u0440\u0442\u0435", "en": "Find homes by location on the interactive map"},
+
+    "breadcrumb_home": {"uz": "Bosh sahifa", "ru": "\u0413\u043b\u0430\u0432\u043d\u0430\u044f", "en": "Home"},
+    "badge_top": {"uz": "TOP e'lon", "ru": "\u0422\u041e\u041f \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "TOP listing"},
+    "badge_verified": {"uz": "Tekshirilgan e'lon", "ru": "\u041f\u0440\u043e\u0432\u0435\u0440\u0435\u043d\u043d\u043e\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "Verified listing"},
+    "fact_rooms": {"uz": "Xonalar soni", "ru": "\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u043a\u043e\u043c\u043d\u0430\u0442", "en": "Rooms"},
+    "fact_for_whom": {"uz": "Kimlarga", "ru": "\u041a\u043e\u043c\u0443 \u0441\u0434\u0430\u0451\u0442\u0441\u044f", "en": "For whom"},
+    "desc_title": {"uz": "Tavsif", "ru": "\u041e\u043f\u0438\u0441\u0430\u043d\u0438\u0435", "en": "Description"},
+    "no_desc": {"uz": "Qo'shimcha ma'lumot berilmagan.", "ru": "\u0414\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f \u043d\u0435 \u0443\u043a\u0430\u0437\u0430\u043d\u0430.", "en": "No additional details provided."},
+    "sidebar_cta": {"uz": "Telefon raqamini olish", "ru": "\u041f\u043e\u043b\u0443\u0447\u0438\u0442\u044c \u043d\u043e\u043c\u0435\u0440 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430", "en": "Get phone number"},
+    "sidebar_note": {"uz": "Telegram bot orqali xavfsiz va tez", "ru": "\u0411\u044b\u0441\u0442\u0440\u043e \u0438 \u0431\u0435\u0437\u043e\u043f\u0430\u0441\u043d\u043e \u0447\u0435\u0440\u0435\u0437 Telegram-\u0431\u043e\u0442\u0430", "en": "Fast and secure via the Telegram bot"},
+    "share_btn": {"uz": "Ulashish", "ru": "\u041f\u043e\u0434\u0435\u043b\u0438\u0442\u044c\u0441\u044f", "en": "Share"},
+    "copy_btn": {"uz": "Nusxalash", "ru": "\u0421\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c", "en": "Copy"},
+    "copied_btn": {"uz": "Nusxalandi", "ru": "\u0421\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u043d\u043e", "en": "Copied"},
+    "link_copied": {"uz": "Havola nusxalandi!", "ru": "\u0421\u0441\u044b\u043b\u043a\u0430 \u0441\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u043d\u0430!", "en": "Link copied!"},
+    "inquiry_toggle": {"uz": "Uy egasiga so'rov yuborish", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043f\u0440\u043e\u0441 \u0445\u043e\u0437\u044f\u0438\u043d\u0443", "en": "Send a request to the owner"},
+    "inquiry_name_ph": {"uz": "Ismingiz", "ru": "\u0412\u0430\u0448\u0435 \u0438\u043c\u044f", "en": "Your name"},
+    "inquiry_phone_ph": {"uz": "Telefon raqamingiz", "ru": "\u0412\u0430\u0448 \u043d\u043e\u043c\u0435\u0440 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430", "en": "Your phone number"},
+    "inquiry_msg_ph": {"uz": "Xabar (ixtiyoriy)", "ru": "\u0421\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 (\u043d\u0435\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e)", "en": "Message (optional)"},
+    "inquiry_send": {"uz": "Yuborish", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c", "en": "Send"},
+    "inquiry_success": {"uz": "So'rovingiz yuborildi!", "ru": "\u0412\u0430\u0448 \u0437\u0430\u043f\u0440\u043e\u0441 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d!", "en": "Your request has been sent!"},
+    "inquiry_error": {"uz": "Xatolik yuz berdi, qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Something went wrong, please try again."},
+    "related_title": {"uz": "O'xshash e'lonlar", "ru": "\u041f\u043e\u0445\u043e\u0436\u0438\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", "en": "Similar listings"},
+    "not_found_title": {"uz": "E'lon topilmadi", "ru": "\u041e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e", "en": "Listing not found"},
+    "not_found_desc": {
+        "uz": "Bu e'lon topilmadi yoki muddati tugagan",
+        "ru": "\u042d\u0442\u043e \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e \u0438\u043b\u0438 \u0441\u0440\u043e\u043a \u0435\u0433\u043e \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u0438\u0441\u0442\u0451\u043a",
+        "en": "This listing was not found or has expired",
+    },
+    "not_found_body": {
+        "uz": "Bu e'lon topilmadi yoki muddati tugagan.",
+        "ru": "\u042d\u0442\u043e \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e \u0438\u043b\u0438 \u0441\u0440\u043e\u043a \u0435\u0433\u043e \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u0438\u0441\u0442\u0451\u043a.",
+        "en": "This listing was not found or has expired.",
+    },
+    "back_home_btn": {"uz": "Bosh sahifaga qaytish", "ru": "\u0412\u0435\u0440\u043d\u0443\u0442\u044c\u0441\u044f \u043d\u0430 \u0433\u043b\u0430\u0432\u043d\u0443\u044e", "en": "Back to home"},
+    "no_photo": {"uz": "Rasm yo'q", "ru": "\u041d\u0435\u0442 \u0444\u043e\u0442\u043e", "en": "No photo"},
+
+    "ej_hero_title": {"uz": "Uyingizni ijaraga bering", "ru": "\u0421\u0434\u0430\u0439\u0442\u0435 \u0436\u0438\u043b\u044c\u0451 \u0432 \u0430\u0440\u0435\u043d\u0434\u0443", "en": "Rent out your home"},
+    "ej_hero_sub": {
+        "uz": "Formani to'ldiring \u2014 e'loningiz tekshirilgach, avtomatik ravishda Telegram kanalimizda va shu saytda e'lon qilinadi. Ro'yxatdan o'tish shart emas.",
+        "ru": "\u0417\u0430\u043f\u043e\u043b\u043d\u0438\u0442\u0435 \u0444\u043e\u0440\u043c\u0443 \u2014 \u043f\u043e\u0441\u043b\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438 \u043f\u043e\u044f\u0432\u0438\u0442\u0441\u044f \u0432 \u043d\u0430\u0448\u0435\u043c Telegram-\u043a\u0430\u043d\u0430\u043b\u0435 \u0438 \u043d\u0430 \u0441\u0430\u0439\u0442\u0435. \u0420\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u044f \u043d\u0435 \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f.",
+        "en": "Fill out the form \u2014 once reviewed, your listing automatically appears in our Telegram channel and on this site. No registration needed.",
+    },
+    "ej_badge": {
+        "uz": "Har bir e'lon qo'lda tekshiriladi \u2014 firibgarlarga joy yo'q",
+        "ru": "\u041a\u0430\u0436\u0434\u043e\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442\u0441\u044f \u0432\u0440\u0443\u0447\u043d\u0443\u044e \u2014 \u043c\u043e\u0448\u0435\u043d\u043d\u0438\u043a\u0430\u043c \u0437\u0434\u0435\u0441\u044c \u043d\u0435 \u043c\u0435\u0441\u0442\u043e",
+        "en": "Every listing is manually reviewed \u2014 no room for scammers",
+    },
+    "ej_section_rental_type": {"uz": "Ijara turi", "ru": "\u0422\u0438\u043f \u0430\u0440\u0435\u043d\u0434\u044b", "en": "Rental type"},
+    "ej_section_house": {"uz": "Uy haqida", "ru": "\u041e \u0436\u0438\u043b\u044c\u0435", "en": "About the property"},
+    "ej_manzil_label": {"uz": "Manzil (tuman, mahalla)", "ru": "\u0410\u0434\u0440\u0435\u0441 (\u0440\u0430\u0439\u043e\u043d, \u043c\u0430\u0445\u0430\u043b\u043b\u044f)", "en": "Address (district, neighborhood)"},
+    "ej_manzil_ph": {"uz": "Masalan: Yunusobod, 12-kvartal", "ru": "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u042e\u043d\u0443\u0441\u0430\u0431\u0430\u0434, 12-\u0439 \u043a\u0432\u0430\u0440\u0442\u0430\u043b", "en": "e.g. Yunusobod, block 12"},
+    "ej_moljal_label": {"uz": "Mo'ljal", "ru": "\u041e\u0440\u0438\u0435\u043d\u0442\u0438\u0440", "en": "Landmark"},
+    "ej_moljal_ph": {"uz": "Masalan: Metro bekatiga yaqin, Korzinka yonida", "ru": "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u0440\u044f\u0434\u043e\u043c \u0441 \u043c\u0435\u0442\u0440\u043e, \u0432\u043e\u0437\u043b\u0435 Korzinka", "en": "e.g. near the metro, next to Korzinka"},
+    "ej_xona_label": {"uz": "Nechta xonali?", "ru": "\u0421\u043a\u043e\u043b\u044c\u043a\u043e \u043a\u043e\u043c\u043d\u0430\u0442?", "en": "Number of rooms"},
+    "ej_xona_ph": {"uz": "Masalan: 2 xona, studio", "ru": "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: 2 \u043a\u043e\u043c\u043d\u0430\u0442\u044b, \u0441\u0442\u0443\u0434\u0438\u044f", "en": "e.g. 2 rooms, studio"},
+    "ej_kimlarga_label": {"uz": "Kimlarga beriladi?", "ru": "\u041a\u043e\u043c\u0443 \u0441\u0434\u0430\u0451\u0442\u0441\u044f?", "en": "Who is it for?"},
+    "ej_kimlarga_ph": {"uz": "Masalan: oilaga, talabalarga", "ru": "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u0441\u0435\u043c\u044c\u0435, \u0441\u0442\u0443\u0434\u0435\u043d\u0442\u0430\u043c", "en": "e.g. families, students"},
+    "ej_qulaylik_label": {"uz": "Sharoitlari", "ru": "\u0423\u0441\u043b\u043e\u0432\u0438\u044f", "en": "Amenities"},
+    "ej_qulaylik_ph": {
+        "uz": "Masalan: ta'mirlangan, mebel bilan, isitish tizimi bor...",
+        "ru": "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u0441 \u0440\u0435\u043c\u043e\u043d\u0442\u043e\u043c, \u0441 \u043c\u0435\u0431\u0435\u043b\u044c\u044e, \u0435\u0441\u0442\u044c \u043e\u0442\u043e\u043f\u043b\u0435\u043d\u0438\u0435...",
+        "en": "e.g. renovated, furnished, has heating...",
+    },
+    "ej_narx_label": {"uz": "Narxi", "ru": "\u0426\u0435\u043d\u0430", "en": "Price"},
+    "ej_narx_ph": {"uz": "Masalan: 150$, 1.2 mln, kelishiladi", "ru": "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: 150$, 1.2 \u043c\u043b\u043d, \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u043d\u0430\u044f", "en": "e.g. $150, negotiable"},
+    "ej_section_contact": {"uz": "Aloqa", "ru": "\u041a\u043e\u043d\u0442\u0430\u043a\u0442\u044b", "en": "Contact"},
+    "ej_fullname_label": {"uz": "Ismingiz", "ru": "\u0412\u0430\u0448\u0435 \u0438\u043c\u044f", "en": "Your name"},
+    "ej_fullname_ph": {"uz": "Ixtiyoriy", "ru": "\u041d\u0435\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e", "en": "Optional"},
+    "ej_phone_label": {"uz": "Telefon raqami", "ru": "\u041d\u043e\u043c\u0435\u0440 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430", "en": "Phone number"},
+    "ej_phone_hint": {
+        "uz": "Bu raqam e'londa ko'rsatiladi \u2014 ijarachilar shu orqali siz bilan bog'lanadi.",
+        "ru": "\u042d\u0442\u043e\u0442 \u043d\u043e\u043c\u0435\u0440 \u0431\u0443\u0434\u0435\u0442 \u0432\u0438\u0434\u0435\u043d \u0432 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0438 \u2014 \u0430\u0440\u0435\u043d\u0434\u0430\u0442\u043e\u0440\u044b \u0441\u0432\u044f\u0436\u0443\u0442\u0441\u044f \u0441 \u0432\u0430\u043c\u0438 \u043f\u043e \u043d\u0435\u043c\u0443.",
+        "en": "This number will be shown in the listing \u2014 renters will contact you on it.",
+    },
+    "ej_section_location": {"uz": "Joylashuv (ixtiyoriy)", "ru": "\u0420\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435 (\u043d\u0435\u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u043e)", "en": "Location (optional)"},
+    "ej_loc_toggle": {"uz": "Xaritada aniq nuqtani belgilash", "ru": "\u0423\u043a\u0430\u0437\u0430\u0442\u044c \u0442\u043e\u0447\u043a\u0443 \u043d\u0430 \u043a\u0430\u0440\u0442\u0435", "en": "Pin the exact spot on the map"},
+    "ej_section_photos": {"uz": "Rasmlar", "ru": "\u0424\u043e\u0442\u043e\u0433\u0440\u0430\u0444\u0438\u0438", "en": "Photos"},
+    "ej_photo_drop_title": {"uz": "Rasmlarni shu yerga bosing yoki tashlang", "ru": "\u041d\u0430\u0436\u043c\u0438\u0442\u0435 \u0438\u043b\u0438 \u043f\u0435\u0440\u0435\u0442\u0430\u0449\u0438\u0442\u0435 \u0444\u043e\u0442\u043e \u0441\u044e\u0434\u0430", "en": "Click or drop photos here"},
+    "ej_photo_drop_sub": {"uz": "1 dan 10 tagacha, har biri 10MB gacha", "ru": "\u041e\u0442 1 \u0434\u043e 10 \u0444\u043e\u0442\u043e, \u043a\u0430\u0436\u0434\u043e\u0435 \u0434\u043e 10\u041c\u0411", "en": "1 to 10 photos, up to 10MB each"},
+    "ej_section_type": {"uz": "E'lon turi", "ru": "\u0422\u0438\u043f \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", "en": "Listing type"},
+    "ej_type_free_title": {"uz": "Bepul", "ru": "\u0411\u0435\u0441\u043f\u043b\u0430\u0442\u043d\u043e", "en": "Free"},
+    "ej_type_free_desc": {
+        "uz": "Kanalga bir marta joylanadi, navbat asosida ko'rib chiqiladi.",
+        "ru": "\u041f\u0443\u0431\u043b\u0438\u043a\u0443\u0435\u0442\u0441\u044f \u0432 \u043a\u0430\u043d\u0430\u043b\u0435 \u043e\u0434\u0438\u043d \u0440\u0430\u0437, \u0440\u0430\u0441\u0441\u043c\u0430\u0442\u0440\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u0432 \u043f\u043e\u0440\u044f\u0434\u043a\u0435 \u043e\u0447\u0435\u0440\u0435\u0434\u0438.",
+        "en": "Posted to the channel once, reviewed in queue order.",
+    },
+    "ej_type_paid_title": {"uz": "Pullik \u2014 {price} so'm", "ru": "\u041f\u043b\u0430\u0442\u043d\u043e \u2014 {price} \u0441\u0443\u043c", "en": "Paid \u2014 {price} UZS"},
+    "ej_type_paid_desc": {
+        "uz": "Uyingiz topshirilguncha (kamida 7 kun) doim TOP'da \u2014 tezroq va ko'proq ko'rinadi.",
+        "ru": "\u0412\u0430\u0448\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u0432 \u0422\u041e\u041f\u0435, \u043f\u043e\u043a\u0430 \u0436\u0438\u043b\u044c\u0451 \u043d\u0435 \u0441\u0434\u0430\u043d\u043e (\u043c\u0438\u043d\u0438\u043c\u0443\u043c 7 \u0434\u043d\u0435\u0439) \u2014 \u0431\u044b\u0441\u0442\u0440\u0435\u0435 \u0438 \u0431\u043e\u043b\u044c\u0448\u0435 \u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u043e\u0432.",
+        "en": "Stays TOP-pinned until your place is rented (at least 7 days) \u2014 faster, more visibility.",
+    },
+    "ej_pay_card_label": {"uz": "TO'LOV KARTASI", "ru": "\u041a\u0410\u0420\u0422\u0410 \u0414\u041b\u042f \u041e\u041f\u041b\u0410\u0422\u042b", "en": "PAYMENT CARD"},
+    "ej_pay_copy": {"uz": "Nusxalash", "ru": "\u0421\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u0442\u044c", "en": "Copy"},
+    "ej_pay_hint": {
+        "uz": "Yuqoridagi kartaga {price} so'm o'tkazing, so'ng chek skrinshotini yuklang.",
+        "ru": "\u041f\u0435\u0440\u0435\u0432\u0435\u0434\u0438\u0442\u0435 {price} \u0441\u0443\u043c \u043d\u0430 \u043a\u0430\u0440\u0442\u0443 \u0432\u044b\u0448\u0435, \u0437\u0430\u0442\u0435\u043c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0441\u043a\u0440\u0438\u043d\u0448\u043e\u0442 \u0447\u0435\u043a\u0430.",
+        "en": "Transfer {price} UZS to the card above, then upload a screenshot of the receipt.",
+    },
+    "ej_receipt_title": {"uz": "To'lov chekini yuklash", "ru": "\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0447\u0435\u043a \u043e\u0431 \u043e\u043f\u043b\u0430\u0442\u0435", "en": "Upload payment receipt"},
+    "ej_receipt_sub": {"uz": "Skrinshot yoki fotosurat", "ru": "\u0421\u043a\u0440\u0438\u043d\u0448\u043e\u0442 \u0438\u043b\u0438 \u0444\u043e\u0442\u043e", "en": "Screenshot or photo"},
+    "ej_submit_btn": {"uz": "E'lonni yuborish", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435", "en": "Submit listing"},
+    "ej_submit_note": {
+        "uz": "Yuborish orqali siz e'lon ma'lumotlarining to'g'riligini tasdiqlaysiz.",
+        "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u043b\u044f\u044f \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435, \u0432\u044b \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0430\u0435\u0442\u0435 \u0434\u043e\u0441\u0442\u043e\u0432\u0435\u0440\u043d\u043e\u0441\u0442\u044c \u0443\u043a\u0430\u0437\u0430\u043d\u043d\u044b\u0445 \u0434\u0430\u043d\u043d\u044b\u0445.",
+        "en": "By submitting, you confirm the listing details are accurate.",
+    },
+    "ej_success_title": {"uz": "E'loningiz qabul qilindi!", "ru": "\u0412\u0430\u0448\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u0438\u043d\u044f\u0442\u043e!", "en": "Your listing was received!"},
+    "ej_success_text": {
+        "uz": "Tez orada administrator tekshirib, tasdiqlaydi \u2014 shundan so'ng Telegram kanalimizda va saytda chiqadi. E'lon raqami: #{id}",
+        "ru": "\u0412 \u0431\u043b\u0438\u0436\u0430\u0439\u0448\u0435\u0435 \u0432\u0440\u0435\u043c\u044f \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440 \u043f\u0440\u043e\u0432\u0435\u0440\u0438\u0442 \u0438 \u043e\u0434\u043e\u0431\u0440\u0438\u0442 \u0435\u0433\u043e \u2014 \u043f\u043e\u0441\u043b\u0435 \u044d\u0442\u043e\u0433\u043e \u043e\u043d\u043e \u043f\u043e\u044f\u0432\u0438\u0442\u0441\u044f \u0432 \u043d\u0430\u0448\u0435\u043c Telegram-\u043a\u0430\u043d\u0430\u043b\u0435 \u0438 \u043d\u0430 \u0441\u0430\u0439\u0442\u0435. \u041d\u043e\u043c\u0435\u0440 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f: #{id}",
+        "en": "An administrator will review and approve it shortly \u2014 then it will appear in our Telegram channel and on the site. Listing number: #{id}",
+    },
+    "ej_err_no_photo": {"uz": "Kamida 1 ta uy rasmini yuklang.", "ru": "\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0445\u043e\u0442\u044f \u0431\u044b 1 \u0444\u043e\u0442\u043e \u0436\u0438\u043b\u044c\u044f.", "en": "Upload at least 1 photo of the property."},
+    "ej_err_no_receipt": {
+        "uz": "Pullik e'lon uchun to'lov chekining skrinshotini yuklang.",
+        "ru": "\u0414\u043b\u044f \u043f\u043b\u0430\u0442\u043d\u043e\u0433\u043e \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0441\u043a\u0440\u0438\u043d\u0448\u043e\u0442 \u0447\u0435\u043a\u0430 \u043e\u0431 \u043e\u043f\u043b\u0430\u0442\u0435.",
+        "en": "Upload a payment receipt screenshot for a paid listing.",
+    },
+    "ej_submitting": {"uz": "Yuborilmoqda...", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u043a\u0430...", "en": "Submitting..."},
+    "ej_err_generic": {"uz": "Xatolik yuz berdi. Qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Something went wrong. Please try again."},
+    "ej_err_network": {"uz": "Internet aloqasida muammo. Qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0431\u043b\u0435\u043c\u0430 \u0441 \u0438\u043d\u0442\u0435\u0440\u043d\u0435\u0442-\u0441\u043e\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435\u043c. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Network problem. Please try again."},
+
+    "sr_hero_title": {"uz": "Uyingizni bizga ishoning", "ru": "\u0414\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0441\u0432\u043e\u0451 \u0436\u0438\u043b\u044c\u0451 \u043d\u0430\u043c", "en": "Trust us with your property"},
+    "sr_hero_sub": {
+        "uz": "Ijarachi qidirish, shartnoma va oylik to'lovlar bilan bosh og'rig'ini unuting \u2014 biz hammasini boshqaramiz, sizga esa har oy kafolatlangan ijara puli keladi.",
+        "ru": "\u0417\u0430\u0431\u0443\u0434\u044c\u0442\u0435 \u043e \u043f\u043e\u0438\u0441\u043a\u0435 \u0430\u0440\u0435\u043d\u0434\u0430\u0442\u043e\u0440\u043e\u0432, \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u0430\u0445 \u0438 \u0435\u0436\u0435\u043c\u0435\u0441\u044f\u0447\u043d\u044b\u0445 \u043f\u043b\u0430\u0442\u0435\u0436\u0430\u0445 \u2014 \u043c\u044b \u0431\u0435\u0440\u0451\u043c \u0432\u0441\u0451 \u043d\u0430 \u0441\u0435\u0431\u044f, \u0430 \u0432\u044b \u043a\u0430\u0436\u0434\u044b\u0439 \u043c\u0435\u0441\u044f\u0446 \u043f\u043e\u043b\u0443\u0447\u0430\u0435\u0442\u0435 \u0433\u0430\u0440\u0430\u043d\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u0443\u044e \u0430\u0440\u0435\u043d\u0434\u043d\u0443\u044e \u043f\u043b\u0430\u0442\u0443.",
+        "en": "Forget the hassle of finding tenants, contracts, and monthly payments \u2014 we handle everything, and you receive guaranteed rent every month.",
+    },
+    "sr1_title": {"uz": "Ijarachi biz tomondan", "ru": "\u0410\u0440\u0435\u043d\u0434\u0430\u0442\u043e\u0440\u043e\u0432 \u0438\u0449\u0435\u043c \u043c\u044b", "en": "We find the tenants"},
+    "sr1_desc": {"uz": "Sizga ijarachi izlashning hojati yo'q - buni to'liq biz bajaramiz", "ru": "\u0412\u0430\u043c \u043d\u0435 \u043d\u0443\u0436\u043d\u043e \u0438\u0441\u043a\u0430\u0442\u044c \u0430\u0440\u0435\u043d\u0434\u0430\u0442\u043e\u0440\u043e\u0432 \u2014 \u043c\u044b \u0434\u0435\u043b\u0430\u0435\u043c \u044d\u0442\u043e \u043f\u043e\u043b\u043d\u043e\u0441\u0442\u044c\u044e \u0441\u0430\u043c\u0438", "en": "You don't need to search for tenants \u2014 we handle it entirely"},
+    "sr2_title": {"uz": "Kafolatlangan to'lov", "ru": "\u0413\u0430\u0440\u0430\u043d\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u0430\u044f \u043e\u043f\u043b\u0430\u0442\u0430", "en": "Guaranteed payment"},
+    "sr2_desc": {"uz": "Uy bo'sh tursa ham, kelishilgan summa har oy sizga to'lanadi", "ru": "\u0414\u0430\u0436\u0435 \u0435\u0441\u043b\u0438 \u0436\u0438\u043b\u044c\u0451 \u043f\u0443\u0441\u0442\u0443\u0435\u0442, \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u043d\u0430\u044f \u0441\u0443\u043c\u043c\u0430 \u0432\u044b\u043f\u043b\u0430\u0447\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u043a\u0430\u0436\u0434\u044b\u0439 \u043c\u0435\u0441\u044f\u0446", "en": "Even if the property is vacant, the agreed amount is paid every month"},
+    "sr3_title": {"uz": "Rasmiy shartnoma", "ru": "\u041e\u0444\u0438\u0446\u0438\u0430\u043b\u044c\u043d\u044b\u0439 \u0434\u043e\u0433\u043e\u0432\u043e\u0440", "en": "Official contract"},
+    "sr3_desc": {"uz": "Barcha jarayon yozma shartnoma asosida, qonuniy tartibda amalga oshiriladi", "ru": "\u0412\u0435\u0441\u044c \u043f\u0440\u043e\u0446\u0435\u0441\u0441 \u043e\u0444\u043e\u0440\u043c\u043b\u044f\u0435\u0442\u0441\u044f \u043f\u0438\u0441\u044c\u043c\u0435\u043d\u043d\u044b\u043c \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u043e\u043c \u0432 \u0437\u0430\u043a\u043e\u043d\u043d\u043e\u043c \u043f\u043e\u0440\u044f\u0434\u043a\u0435", "en": "The whole process is governed by a written, legally sound contract"},
+    "sr4_title": {"uz": "Uy holatini nazorat", "ru": "\u041a\u043e\u043d\u0442\u0440\u043e\u043b\u044c \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u044f \u0436\u0438\u043b\u044c\u044f", "en": "Property condition monitoring"},
+    "sr4_desc": {"uz": "Uyingiz muntazam tekshiriladi, muammolar tezkor hal qilinadi", "ru": "\u0412\u0430\u0448\u0435 \u0436\u0438\u043b\u044c\u0451 \u0440\u0435\u0433\u0443\u043b\u044f\u0440\u043d\u043e \u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442\u0441\u044f, \u043f\u0440\u043e\u0431\u043b\u0435\u043c\u044b \u0440\u0435\u0448\u0430\u044e\u0442\u0441\u044f \u043e\u043f\u0435\u0440\u0430\u0442\u0438\u0432\u043d\u043e", "en": "Your property is checked regularly, and issues are resolved promptly"},
+    "sr_form_title": {"uz": "Ariza qoldiring", "ru": "\u041e\u0441\u0442\u0430\u0432\u044c\u0442\u0435 \u0437\u0430\u044f\u0432\u043a\u0443", "en": "Leave a request"},
+    "sr_form_sub": {"uz": "Mutaxassisimiz 24 soat ichida siz bilan bog'lanadi", "ru": "\u041d\u0430\u0448 \u0441\u043f\u0435\u0446\u0438\u0430\u043b\u0438\u0441\u0442 \u0441\u0432\u044f\u0436\u0435\u0442\u0441\u044f \u0441 \u0432\u0430\u043c\u0438 \u0432 \u0442\u0435\u0447\u0435\u043d\u0438\u0435 24 \u0447\u0430\u0441\u043e\u0432", "en": "Our specialist will contact you within 24 hours"},
+    "sr_name_ph": {"uz": "Ismingiz", "ru": "\u0412\u0430\u0448\u0435 \u0438\u043c\u044f", "en": "Your name"},
+    "sr_phone_ph": {"uz": "Telefon raqamingiz (+998...)", "ru": "\u0412\u0430\u0448 \u043d\u043e\u043c\u0435\u0440 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430 (+998...)", "en": "Your phone number (+998...)"},
+    "sr_manzil_ph": {"uz": "Uy manzili (tuman, mahalla)", "ru": "\u0410\u0434\u0440\u0435\u0441 \u0436\u0438\u043b\u044c\u044f (\u0440\u0430\u0439\u043e\u043d, \u043c\u0430\u0445\u0430\u043b\u043b\u044f)", "en": "Property address (district, neighborhood)"},
+    "sr_xona_ph": {"uz": "Xonalar soni", "ru": "\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u043a\u043e\u043c\u043d\u0430\u0442", "en": "Number of rooms"},
+    "sr_narx_ph": {"uz": "Kutilayotgan oylik narx ($ yoki so'm)", "ru": "\u041e\u0436\u0438\u0434\u0430\u0435\u043c\u0430\u044f \u0435\u0436\u0435\u043c\u0435\u0441\u044f\u0447\u043d\u0430\u044f \u0446\u0435\u043d\u0430 ($ \u0438\u043b\u0438 \u0441\u0443\u043c)", "en": "Expected monthly price ($ or UZS)"},
+    "sr_submit_btn": {"uz": "Arizani yuborish", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u044f\u0432\u043a\u0443", "en": "Submit request"},
+    "sr_success_title": {"uz": "Arizangiz qabul qilindi!", "ru": "\u0412\u0430\u0448\u0430 \u0437\u0430\u044f\u0432\u043a\u0430 \u043f\u0440\u0438\u043d\u044f\u0442\u0430!", "en": "Your request was received!"},
+    "sr_success_sub": {"uz": "Tez orada siz bilan bog'lanamiz.", "ru": "\u041c\u044b \u0441\u043a\u043e\u0440\u043e \u0441\u0432\u044f\u0436\u0435\u043c\u0441\u044f \u0441 \u0432\u0430\u043c\u0438.", "en": "We'll be in touch shortly."},
+    "sr_error": {"uz": "Xatolik yuz berdi, qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Something went wrong, please try again."},
+
+    # ---- Telegram orqali kirish / shaxsiy kabinet ----
+    "nav_kabinet_title": {"uz": "Shaxsiy kabinet", "ru": "\u041b\u0438\u0447\u043d\u044b\u0439 \u043a\u0430\u0431\u0438\u043d\u0435\u0442", "en": "My account"},
+    "login_title": {"uz": "Telegram orqali kirish", "ru": "\u0412\u0445\u043e\u0434 \u0447\u0435\u0440\u0435\u0437 Telegram", "en": "Log in with Telegram"},
+    "login_desc": {
+        "uz": "Shaxsiy kabinetingizga kirish va Limit sotib olish uchun Telegram akkountingiz orqali tasdiqlang.",
+        "ru": "\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435 \u0447\u0435\u0440\u0435\u0437 \u0441\u0432\u043e\u0439 \u0430\u043a\u043a\u0430\u0443\u043d\u0442 Telegram, \u0447\u0442\u043e\u0431\u044b \u0432\u043e\u0439\u0442\u0438 \u0432 \u043b\u0438\u0447\u043d\u044b\u0439 \u043a\u0430\u0431\u0438\u043d\u0435\u0442 \u0438 \u043a\u0443\u043f\u0438\u0442\u044c \u041b\u0438\u043c\u0438\u0442.",
+        "en": "Confirm with your Telegram account to access your dashboard and buy a Limit.",
+    },
+    "kabinet_title": {"uz": "Shaxsiy kabinet", "ru": "\u041b\u0438\u0447\u043d\u044b\u0439 \u043a\u0430\u0431\u0438\u043d\u0435\u0442", "en": "My account"},
+    "kb_limit_title": {"uz": "Limit holati", "ru": "\u0421\u0442\u0430\u0442\u0443\u0441 \u041b\u0438\u043c\u0438\u0442\u0430", "en": "Limit status"},
+    "kb_limit_active": {
+        "uz": "\u2705 Limit {date} sanagacha faol",
+        "ru": "\u2705 \u041b\u0438\u043c\u0438\u0442 \u0430\u043a\u0442\u0438\u0432\u0435\u043d \u0434\u043e {date}",
+        "en": "\u2705 Limit active until {date}",
+    },
+    "kb_buy_limit": {"uz": "Limit sotib olish", "ru": "\u041a\u0443\u043f\u0438\u0442\u044c \u041b\u0438\u043c\u0438\u0442", "en": "Buy a Limit"},
+    "kb_my_listings": {"uz": "Mening e'lonlarim", "ru": "\u041c\u043e\u0438 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", "en": "My listings"},
+    "kb_no_listings": {"uz": "Siz hali botda e'lon joylamagansiz.", "ru": "\u0412\u044b \u0435\u0449\u0451 \u043d\u0435 \u0440\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u043b\u0438 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u0447\u0435\u0440\u0435\u0437 \u0431\u043e\u0442\u0430.", "en": "You haven't posted a listing via the bot yet."},
+    "kb_col_addr": {"uz": "Manzil", "ru": "\u0410\u0434\u0440\u0435\u0441", "en": "Address"},
+    "kb_col_price": {"uz": "Narxi", "ru": "\u0426\u0435\u043d\u0430", "en": "Price"},
+    "kb_col_status": {"uz": "Holati", "ru": "\u0421\u0442\u0430\u0442\u0443\u0441", "en": "Status"},
+    "kb_col_date": {"uz": "Sana", "ru": "\u0414\u0430\u0442\u0430", "en": "Date"},
+    "status_pending": {"uz": "Ko'rib chiqilmoqda", "ru": "\u041d\u0430 \u0440\u0430\u0441\u0441\u043c\u043e\u0442\u0440\u0435\u043d\u0438\u0438", "en": "Under review"},
+    "status_approved": {"uz": "Faol", "ru": "\u0410\u043a\u0442\u0438\u0432\u043d\u043e", "en": "Active"},
+    "status_rejected": {"uz": "Rad etilgan", "ru": "\u041e\u0442\u043a\u043b\u043e\u043d\u0435\u043d\u043e", "en": "Rejected"},
+    "status_expired": {"uz": "Topshirilgan", "ru": "\u0421\u0434\u0430\u043d\u043e", "en": "Rented out"},
+    "kb_logout": {"uz": "Chiqish", "ru": "\u0412\u044b\u0439\u0442\u0438", "en": "Log out"},
+    "kb_back": {"uz": "\u2190 Kabinetga qaytish", "ru": "\u2190 \u041d\u0430\u0437\u0430\u0434 \u0432 \u043a\u0430\u0431\u0438\u043d\u0435\u0442", "en": "\u2190 Back to my account"},
+    "kb_pay_hint": {
+        "uz": "To'lovni shu kartaga o'tkazing, so'ng chek rasmini yuklang. Admin tekshirib, tasdiqlagach Limitingiz avtomatik faollashadi.",
+        "ru": "\u041f\u0435\u0440\u0435\u0432\u0435\u0434\u0438\u0442\u0435 \u043e\u043f\u043b\u0430\u0442\u0443 \u043d\u0430 \u044d\u0442\u0443 \u043a\u0430\u0440\u0442\u0443, \u0437\u0430\u0442\u0435\u043c \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u0435 \u0441\u043a\u0440\u0438\u043d\u0448\u043e\u0442 \u0447\u0435\u043a\u0430. \u041f\u043e\u0441\u043b\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u0430\u0434\u043c\u0438\u043d\u043e\u043c \u041b\u0438\u043c\u0438\u0442 \u0430\u043a\u0442\u0438\u0432\u0438\u0440\u0443\u0435\u0442\u0441\u044f \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438.",
+        "en": "Transfer payment to this card, then upload a screenshot of the receipt. Your Limit activates automatically once an admin approves it.",
+    },
+    "kb_upload_receipt": {"uz": "To'lov chekini yuklash", "ru": "\u0417\u0430\u0433\u0440\u0443\u0437\u0438\u0442\u044c \u0447\u0435\u043a \u043e\u043f\u043b\u0430\u0442\u044b", "en": "Upload payment receipt"},
+    "kb_submit_receipt": {"uz": "Yuborish", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c", "en": "Submit"},
+    "kb_receipt_sent": {
+        "uz": "Chekingiz qabul qilindi! Admin tekshirgach, Telegram botingizga xabar keladi va Limit faollashadi.",
+        "ru": "\u0427\u0435\u043a \u043f\u0440\u0438\u043d\u044f\u0442! \u041f\u043e\u0441\u043b\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u0430\u0434\u043c\u0438\u043d\u043e\u043c \u0432\u0430\u043c \u043f\u0440\u0438\u0434\u0451\u0442 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u0432 Telegram-\u0431\u043e\u0442, \u0438 \u041b\u0438\u043c\u0438\u0442 \u0431\u0443\u0434\u0435\u0442 \u0430\u043a\u0442\u0438\u0432\u0438\u0440\u043e\u0432\u0430\u043d.",
+        "en": "Your receipt was received! You'll get a Telegram message once an admin approves it, and your Limit will activate.",
+    },
+    "kb_error": {"uz": "Xatolik yuz berdi, qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Something went wrong, please try again."},
+    "sum": {"uz": "so'm", "ru": "\u0441\u0443\u043c", "en": "UZS"},
+    "days": {"uz": "kun", "ru": "\u0434\u043d\u0435\u0439", "en": "days"},
+    "sidebar_cta_login": {"uz": "Telegram orqali kirib ko'rish", "ru": "\u0412\u043e\u0439\u0442\u0438 \u0447\u0435\u0440\u0435\u0437 Telegram, \u0447\u0442\u043e\u0431\u044b \u043f\u043e\u0441\u043c\u043e\u0442\u0440\u0435\u0442\u044c", "en": "Log in with Telegram to view"},
+    "sidebar_cta_buy_limit": {"uz": "Limit sotib olib ko'rish", "ru": "\u041a\u0443\u043f\u0438\u0442\u044c \u041b\u0438\u043c\u0438\u0442, \u0447\u0442\u043e\u0431\u044b \u043f\u043e\u0441\u043c\u043e\u0442\u0440\u0435\u0442\u044c", "en": "Buy a Limit to view"},
+    "sidebar_note_limit_active": {"uz": "Limitingiz faol \u2014 raqamga bemalol qo'ng'iroq qiling", "ru": "\u0412\u0430\u0448 \u041b\u0438\u043c\u0438\u0442 \u0430\u043a\u0442\u0438\u0432\u0435\u043d \u2014 \u0437\u0432\u043e\u043d\u0438\u0442\u0435 \u043f\u043e \u043d\u043e\u043c\u0435\u0440\u0443", "en": "Your Limit is active \u2014 feel free to call"},
+    "sidebar_note_web_limit": {
+        "uz": "Uy egasi raqamini faqat faol Limitga ega foydalanuvchilar ko'radi.",
+        "ru": "\u041d\u043e\u043c\u0435\u0440 \u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0430 \u0432\u0438\u0434\u044f\u0442 \u0442\u043e\u043b\u044c\u043a\u043e \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0438 \u0441 \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u043c \u041b\u0438\u043c\u0438\u0442\u043e\u043c.",
+        "en": "Only users with an active Limit can see the owner's phone number.",
+    },
+    "sidebar_note_via_bot": {"uz": "Yoki bot orqali ko'ring", "ru": "\u0418\u043b\u0438 \u043f\u043e\u0441\u043c\u043e\u0442\u0440\u0438\u0442\u0435 \u0447\u0435\u0440\u0435\u0437 \u0431\u043e\u0442\u0430", "en": "Or view via the bot"},
+    "sidebar_cta_view_phone": {"uz": "Uy egasi raqamini ko'rish", "ru": "\u041f\u043e\u0441\u043c\u043e\u0442\u0440\u0435\u0442\u044c \u043d\u043e\u043c\u0435\u0440 \u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0430", "en": "View owner's phone number"},
+    "paywall_no_limit_msg": {
+        "uz": "Kechirasiz, uy egasi raqamini ko'rish uchun sizda Limit mavjud emas. Uy egalari raqamlarini ko'rish uchun mana bu kartaga {price} to'lov qiling:",
+        "ru": "\u0418\u0437\u0432\u0438\u043d\u0438\u0442\u0435, \u0443 \u0432\u0430\u0441 \u043d\u0435\u0442 \u0430\u043a\u0442\u0438\u0432\u043d\u043e\u0433\u043e \u041b\u0438\u043c\u0438\u0442\u0430 \u0434\u043b\u044f \u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u0430 \u043d\u043e\u043c\u0435\u0440\u0430 \u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0430. \u0427\u0442\u043e\u0431\u044b \u0432\u0438\u0434\u0435\u0442\u044c \u043d\u043e\u043c\u0435\u0440\u0430 \u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0435\u0432, \u043f\u0435\u0440\u0435\u0432\u0435\u0434\u0438\u0442\u0435 {price} \u043d\u0430 \u044d\u0442\u0443 \u043a\u0430\u0440\u0442\u0443:",
+        "en": "Sorry, you don't have an active Limit to view the owner's phone number. To see owners' phone numbers, pay {price} to this card:",
+    },
+    "card_brand": {"uz": "TO'LOV KARTASI", "ru": "\u041f\u041b\u0410\u0422\u0401\u0416\u041d\u0410\u042f \u041a\u0410\u0420\u0422\u0410", "en": "PAYMENT CARD"},
+    "card_holder_label": {"uz": "Karta egasi", "ru": "\u0414\u0435\u0440\u0436\u0430\u0442\u0435\u043b\u044c \u043a\u0430\u0440\u0442\u044b", "en": "Card holder"},
+
+    # ---- SEO: sahifa sarlavhalari va tavsiflari (har bir til uchun alohida) ----
+    "seo_home_title": {
+        "uz": "Ijaraga uy, kvartira \u2014 Toshkentda maklersiz ijara | Ijaraga Uylar Maklersiz",
+        "ru": "\u0410\u0440\u0435\u043d\u0434\u0430 \u043a\u0432\u0430\u0440\u0442\u0438\u0440\u044b \u0438 \u0434\u043e\u043c\u0430 \u0432 \u0422\u0430\u0448\u043a\u0435\u043d\u0442\u0435 \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432 | Ijaraga Uylar Maklersiz",
+        "en": "Apartments & Houses for Rent in Tashkent \u2014 No Agent Fees | Ijaraga Uylar Maklersiz",
+    },
+    "seo_home_desc": {
+        "uz": "Toshkentda ijaraga uy va kvartira \u2014 maklersiz, to'g'ridan-to'g'ri uy egasidan. Hozirda {active} ta faol e'lon: kunlik, uzoq muddatli, dacha va mehmonxona uchun xonalar.",
+        "ru": "\u0410\u0440\u0435\u043d\u0434\u0430 \u043a\u0432\u0430\u0440\u0442\u0438\u0440 \u0438 \u0434\u043e\u043c\u043e\u0432 \u0432 \u0422\u0430\u0448\u043a\u0435\u043d\u0442\u0435 \u043d\u0430\u043f\u0440\u044f\u043c\u0443\u044e \u043e\u0442 \u0441\u043e\u0431\u0441\u0442\u0432\u0435\u043d\u043d\u0438\u043a\u0430, \u0431\u0435\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438. \u0421\u0435\u0439\u0447\u0430\u0441 {active} \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439: \u043f\u043e\u0441\u0443\u0442\u043e\u0447\u043d\u043e, \u0434\u043e\u043b\u0433\u043e\u0441\u0440\u043e\u0447\u043d\u043e, \u0434\u0430\u0447\u0438 \u0438 \u0433\u043e\u0441\u0442\u0435\u0432\u044b\u0435 \u043a\u043e\u043c\u043d\u0430\u0442\u044b.",
+        "en": "Rent apartments and houses in Tashkent directly from the owner \u2014 zero agent commission. {active} active listings now: daily, long-term, cottages and guest rooms.",
+    },
+    "seo_listing_title": {"uz": "{addr} \u2014 ijaraga, {price} | Ijaraga Uylar", "ru": "{addr} \u2014 \u0430\u0440\u0435\u043d\u0434\u0430, {price} | Ijaraga Uylar", "en": "{addr} \u2014 for rent, {price} | Ijaraga Uylar"},
+    "seo_listing_desc": {
+        "uz": "{xona}. Narxi: {price}. Toshkentda maklersiz ijara \u2014 to'g'ridan-to'g'ri uy egasi bilan bog'laning, komissiya yo'q.",
+        "ru": "{xona}. \u0426\u0435\u043d\u0430: {price}. \u0410\u0440\u0435\u043d\u0434\u0430 \u0432 \u0422\u0430\u0448\u043a\u0435\u043d\u0442\u0435 \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432 \u2014 \u0441\u0432\u044f\u0436\u0438\u0442\u0435\u0441\u044c \u043d\u0430\u043f\u0440\u044f\u043c\u0443\u044e \u0441 \u0441\u043e\u0431\u0441\u0442\u0432\u0435\u043d\u043d\u0438\u043a\u043e\u043c, \u0431\u0435\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438.",
+        "en": "{xona}. Price: {price}. Commission-free rental in Tashkent \u2014 connect directly with the owner, no agent fees.",
+    },
+    "seo_subarenda_title": {
+        "uz": "Subarenda \u2014 uyingizni ishonchli boshqaruvga bering | Ijaraga Uylar",
+        "ru": "\u0421\u0443\u0431\u0430\u0440\u0435\u043d\u0434\u0430 \u2014 \u0434\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0432\u0430\u0448\u0435\u0439 \u043d\u0435\u0434\u0432\u0438\u0436\u0438\u043c\u043e\u0441\u0442\u044c\u044e | Ijaraga Uylar",
+        "en": "Sublease Program \u2014 Trusted Property Management | Ijaraga Uylar",
+    },
+    "seo_subarenda_desc": {
+        "uz": "Uyingizni bizga uzoq muddatli ijaraga bering \u2014 biz ijarachini topamiz, boshqaramiz va har oy kafolatlangan to'lovni amalga oshiramiz.",
+        "ru": "\u0421\u0434\u0430\u0439\u0442\u0435 \u043d\u0435\u0434\u0432\u0438\u0436\u0438\u043c\u043e\u0441\u0442\u044c \u043d\u0430\u043c \u0432 \u0434\u043e\u043b\u0433\u043e\u0441\u0440\u043e\u0447\u043d\u0443\u044e \u0441\u0443\u0431\u0430\u0440\u0435\u043d\u0434\u0443 \u2014 \u043c\u044b \u043d\u0430\u0439\u0434\u0451\u043c \u0430\u0440\u0435\u043d\u0434\u0430\u0442\u043e\u0440\u0430, \u0432\u043e\u0437\u044c\u043c\u0451\u043c \u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u043d\u0430 \u0441\u0435\u0431\u044f \u0438 \u043e\u0431\u0435\u0441\u043f\u0435\u0447\u0438\u043c \u0433\u0430\u0440\u0430\u043d\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u0443\u044e \u0435\u0436\u0435\u043c\u0435\u0441\u044f\u0447\u043d\u0443\u044e \u043e\u043f\u043b\u0430\u0442\u0443.",
+        "en": "Lease your property to us long-term \u2014 we find the tenant, manage everything, and pay you a guaranteed monthly amount.",
+    },
+    "seo_post_title": {
+        "uz": "E'lon joylash \u2014 uyingizni bepul reklama qiling | Ijaraga Uylar",
+        "ru": "\u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043e\u0431 \u0430\u0440\u0435\u043d\u0434\u0435 | Ijaraga Uylar",
+        "en": "Post a Rental Listing | Ijaraga Uylar",
+    },
+    "seo_post_desc": {
+        "uz": "Uyingizni ijaraga berasizmi? Veb-saytdan to'g'ridan-to'g'ri, ro'yxatdan o'tmasdan e'lon joylang. Moderatsiyadan so'ng Telegram kanalimiz va saytimizda chiqadi.",
+        "ru": "\u0421\u0434\u0430\u0451\u0442\u0435 \u0436\u0438\u043b\u044c\u0451 \u0432 \u0430\u0440\u0435\u043d\u0434\u0443? \u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043f\u0440\u044f\u043c\u043e \u043d\u0430 \u0441\u0430\u0439\u0442\u0435, \u0431\u0435\u0437 \u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u0438. \u041f\u043e\u0441\u043b\u0435 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0438 \u043e\u043d\u043e \u043f\u043e\u044f\u0432\u0438\u0442\u0441\u044f \u0432 \u043d\u0430\u0448\u0435\u043c Telegram-\u043a\u0430\u043d\u0430\u043b\u0435 \u0438 \u043d\u0430 \u0441\u0430\u0439\u0442\u0435.",
+        "en": "Renting out your place? Post your listing directly on the site, no account needed. After moderation it appears on our Telegram channel and website.",
+    },
+}
+
+
+def get_lang(request: Request) -> str:
+    lang = request.query_params.get("lang") or request.cookies.get("lang") or DEFAULT_LANG
+    return lang if lang in SUPPORTED_LANGS else DEFAULT_LANG
+
+
+def t(lang: str, key: str, **kwargs) -> str:
+    entry = TRANSLATIONS.get(key)
+    if not entry:
+        return key
+    text = entry.get(lang) or entry.get(DEFAULT_LANG) or key
+    return text.format(**kwargs) if kwargs else text
+
+
+def lang_switcher_html(current_path: str, lang: str) -> str:
+    links = []
+    for code in SUPPORTED_LANGS:
+        cls = "lang-pill active" if code == lang else "lang-pill"
+        next_url = f"/set-lang/{code}?next={urllib.parse.quote(current_path)}"
+        links.append(f'<a href="{next_url}" class="{cls}">{code.upper()}</a>')
+    return f'<div class="lang-switcher">{"".join(links)}</div>'
+
+
+@router.get("/set-lang/{lang}")
+def set_lang(lang: str, next: str = "/"):
+    if lang not in SUPPORTED_LANGS:
+        lang = DEFAULT_LANG
+    if not next.startswith("/"):
+        next = "/"
+    resp = RedirectResponse(url=next, status_code=307)
+    resp.set_cookie("lang", lang, max_age=31536000, path="/", samesite="lax")
+    return resp
+
+
+def render_head(title: str, description: str, canonical_path: str, og_image: str = "", lang: str = DEFAULT_LANG, noindex: bool = False) -> str:
+    canonical = f"{SITE_URL}{canonical_path}" if SITE_URL else canonical_path
+    if not og_image and SITE_URL:
+        og_image = f"{SITE_URL}/logo.png"
+    alt_links = "".join(
+        f'<link rel="alternate" hreflang="{code}" href="{canonical}{"&" if "?" in canonical else "?"}lang={code}">'
+        for code in SUPPORTED_LANGS
+    )
+    # x-default: Google'ga qaysi tilga to'g'ri kelmagan qidiruvchilar uchun
+    # standart (o'zbek) versiyani ko'rsatishni bildiradi.
+    alt_links += f'<link rel="alternate" hreflang="x-default" href="{canonical}">'
+    robots_content = "noindex,nofollow" if noindex else "index,follow"
+    verification_tags = ""
+    if GOOGLE_SITE_VERIFICATION:
+        verification_tags += f'<meta name="google-site-verification" content="{GOOGLE_SITE_VERIFICATION}">'
+    if YANDEX_VERIFICATION:
+        verification_tags += f'<meta name="yandex-verification" content="{YANDEX_VERIFICATION}">'
+    return f"""<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title}</title>
+<meta name="description" content="{description}">
+<meta name="robots" content="{robots_content}">
+<link rel="canonical" href="{canonical}">
+{alt_links}
+{verification_tags}
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{SITE_NAME}">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{description}">
+<meta property="og:image" content="{og_image}">
+<meta property="og:url" content="{canonical}">
+<meta property="og:locale" content="{lang}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#FF3B5C">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/site.css?v={CSS_VERSION}">"""
+
+
+def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
+    bot_link = f"https://t.me/{BOT_USERNAME}" if BOT_USERNAME else "#"
+    channel_link = f"https://t.me/{CHANNEL_USERNAME}" if CHANNEL_USERNAME else "#"
+    logo = "/logo.png"
+    switcher = lang_switcher_html(current_path, lang)
+    return f"""<header class="site-header">
+  <div class="header-inner">
+    <a href="/" class="brand"><img src="{logo}" alt="{SITE_NAME}"> {BRAND_SHORT}</a>
+    <nav class="main-nav">
+      <a href="/" class="nav-link">{t(lang,'nav_home')}</a>
+      <a href="/subarenda" class="nav-link">{t(lang,'nav_subarenda')}</a>
+      <a href="/xarita" class="nav-link nav-icon-link" title="{t(lang,'nav_map_title')}">{icon('map', 18)}</a>
+      <a href="{bot_link}" class="nav-link nav-icon-link" target="_blank" title="{t(lang,'nav_bot_title')}">{icon('phone', 16)}</a>
+      <a href="{channel_link}" class="nav-link nav-icon-link" target="_blank" title="{t(lang,'nav_channel_title')}">{icon('send', 17)}</a>
+      <a href="{INSTAGRAM_URL}" class="nav-link nav-icon-link" target="_blank" title="Instagram">{icon('instagram', 18)}</a>
+      <a href="/kabinet" class="nav-link nav-icon-link" title="{t(lang,'nav_kabinet_title')}">{icon('user', 18)}</a>
+      {switcher}
+      <a href="/elon-joylash" class="btn-cta">{icon('sparkle', 14)} {t(lang,'nav_post_cta')}</a>
+    </nav>
+    <button class="mobile-menu-btn" onclick="toggleMobileMenu()" aria-label="Menyu">{icon('menu', 20)}</button>
+  </div>
+  <div class="mobile-menu" id="mobileMenu">
+    <a href="/">{icon('home', 17)} {t(lang,'nav_home')}</a>
+    <a href="/elon-joylash">{icon('sparkle', 17)} {t(lang,'mobile_post')}</a>
+    <a href="/xarita">{icon('map', 17)} {t(lang,'nav_map_title')}</a>
+    <a href="/subarenda">{icon('coin', 17)} {t(lang,'nav_subarenda')}</a>
+    <a href="/kabinet">{icon('user', 17)} {t(lang,'nav_kabinet_title')}</a>
+    <a href="{channel_link}" target="_blank">{icon('send', 17)} {t(lang,'nav_channel_title')}</a>
+    <a href="{INSTAGRAM_URL}" target="_blank">{icon('instagram', 17)} Instagram</a>
+    <a href="{bot_link}" target="_blank">{icon('phone', 17)} {t(lang,'nav_bot_title')}</a>
+    <div class="mobile-lang-label">UZ / RU / EN</div>
+    {switcher}
+  </div>
+</header>
+<script>
+function toggleMobileMenu() {{
+  document.getElementById('mobileMenu').classList.toggle('open');
+}}
+// MUHIM: brauzerning "orqaga" tugmasi bosilganda sahifa bfcache'dan
+// (avvalgi holatida "muzlatilgan" holda) tiklanishi mumkin - bu holda
+// mobil menyu ochiq qolib ketishi yoki body scroll qulflangan holda
+// qolib ketishi mumkin edi. Shu narsani har safar tuzatib qo'yamiz.
+window.addEventListener('pageshow', function(event) {{
+  const menu = document.getElementById('mobileMenu');
+  if (menu) menu.classList.remove('open');
+  document.body.style.overflow = '';
+  document.documentElement.style.overflow = '';
+  const lb = document.getElementById('lightbox');
+  if (lb) lb.classList.remove('open');
+}});
+</script>"""
+
+
+def render_footer(lang: str = DEFAULT_LANG) -> str:
+    bot_link = f"https://t.me/{BOT_USERNAME}" if BOT_USERNAME else "#"
+    channel_link = f"https://t.me/{CHANNEL_USERNAME}" if CHANNEL_USERNAME else "#"
+    year = datetime.now().year
+    logo = "/logo.png"
+    return f"""<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-inner">
+      <div>
+        <div class="footer-brand"><img src="{logo}" alt="{SITE_NAME}"> {BRAND_SHORT}</div>
+        <div style="font-size:13px;max-width:320px;color:var(--muted);">{t(lang,'footer_tagline')}</div>
+      </div>
+      <div class="footer-links">
+        <a href="/">{t(lang,'nav_home')}</a>
+        <a href="/elon-joylash">{t(lang,'mobile_post')}</a>
+        <a href="/xarita">{t(lang,'nav_map_title')}</a>
+        <a href="/subarenda">{t(lang,'nav_subarenda')}</a>
+        <a href="{channel_link}" target="_blank">{t(lang,'nav_channel_title')}</a>
+        <a href="{bot_link}" target="_blank">{t(lang,'nav_bot_title')}</a>
+        <a href="{INSTAGRAM_URL}" target="_blank">Instagram</a>
+      </div>
+    </div>
+    <div class="footer-bottom">&copy; {year} {SITE_NAME}. {t(lang,'footer_rights')}</div>
+  </div>
+</footer>"""
+
+
+def photo_url(file_id: str) -> str:
+    base = SITE_URL or ""
+    return f"{base}/photo/{file_id}"
+
+
+CATEGORY_LABELS = {
+    "tasdiqlangan": ("\u2705 Tasdiqlangan", "cat-verified"),
+    "subarenda": ("\U0001F3E2 Subarenda", "cat-subarenda"),
+    "premium": ("\U0001F48E Premium", "cat-premium"),
+}
+
+RENTAL_TYPE_LABELS = {
+    "kunlik": ("\U0001F4C5 Kunlik", "rt-kunlik"),
+    "uzoq_muddat": ("\U0001F3E0 Uzoq muddat", "rt-uzoq"),
+    "dacha": ("\U0001F333 Dacha", "rt-dacha"),
+    "mehmonxona": ("\U0001F6CF Mehmonxona", "rt-mehmon"),
+}
+
+
+
+def render_listing_card(l: dict) -> str:
+    photos = l.get("photos") or []
+    img = photo_url(photos[0]) if photos else ""
+    img_html = f'<img src="{img}" alt="{esc_html(display_address(l))}" loading="lazy">' if img else f'<div class="lc-placeholder">{icon("home", 34)}</div>'
+    paid_badge = f'<span class="lc-badge lc-badge-fire">{icon("bolt", 13)} TOP</span>' if (l.get("price_charged") or 0) > 0 else ""
+    cat = l.get("category")
+    cat_badge = ""
+    if cat and cat in CATEGORY_LABELS:
+        label, css_cls = CATEGORY_LABELS[cat]
+        cat_badge = f'<span class="lc-badge {css_cls}" style="{"left:auto;right:10px;" if paid_badge else ""}">{label}</span>'
+    xona = (l.get("xona") or "").strip()
+    kimlarga = (l.get("kimlarga") or "").strip()
+    meta_parts = []
+    if l.get("is_quick"):
+        meta_parts.append('⚡ Tezkor e\'lon')
+    rtype = l.get("rental_type")
+    if rtype and rtype != "uzoq_muddat" and rtype in RENTAL_TYPE_LABELS:
+        meta_parts.append(esc_html(RENTAL_TYPE_LABELS[rtype][0]))
+    if xona:
+        meta_parts.append(f'{icon("bed", 14)} {esc_html(xona)}')
+    if kimlarga:
+        meta_parts.append(f'{icon("users", 14)} {esc_html(kimlarga[:16])}')
+    meta_html = f'<div class="lc-meta">{" &nbsp;·&nbsp; ".join(meta_parts)}</div>' if meta_parts else ""
+    return f"""<a href="/uy/{l['id']}" class="listing-card">
+  <div class="lc-photo">
+    {img_html}
+    {paid_badge}
+    {cat_badge}
+  </div>
+  <div class="lc-body">
+    <div class="lc-top">
+      <div class="lc-title">{esc_html(display_address(l))}</div>
+    </div>
+    {meta_html}
+    <div class="lc-price">{esc_html(l.get('narx') or '')}</div>
+  </div>
+</a>"""
+
+
+ICONS = {
+    "bed": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6"/><path d="M3 18h18"/><path d="M7 10V7a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v3"/><path d="M3 14v4"/><path d="M21 14v4"/></svg>',
+    "users": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1"/><circle cx="10" cy="8" r="3.5"/><path d="M21 20v-1a4 4 0 0 0-2.5-3.7"/><path d="M15.5 4.3a3.5 3.5 0 0 1 0 6.9"/></svg>',
+    "pin": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 10c0 5.5-7 11-7 11s-7-5.5-7-11a7 7 0 0 1 14 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+    "target": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z"/><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg>',
+    "search": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>',
+    "shield": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c4.5-1.5 7.5-5.5 7.5-10.5V6l-7.5-3-7.5 3v4.5C4.5 15.5 7.5 19.5 12 21Z"/><path d="m9 12 2 2 4-4.5"/></svg>',
+    "bolt": '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12.6 1.4 3.3 13.5c-.4.5 0 1.3.7 1.3h6.1l-1.6 7.5c-.2.9.9 1.5 1.5.8l9.7-12.4c.4-.5 0-1.3-.7-1.3h-6.3l1.7-7.2c.2-.9-1-1.5-1.7-.8Z"/></svg>',
+    "map": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6 9 4Z"/><path d="M9 4v14"/><path d="M15 6v14"/></svg>',
+    "coin": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-.8-1.5-1.3-3-1.3-2 0-3.2 1-3.2 2.3 0 3 6 1.3 6 4.3 0 1.4-1.3 2.4-3.2 2.4-1.5 0-2.6-.5-3.2-1.3"/><path d="M12 6.5v11"/></svg>',
+    "phone": '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6.6 10.8c1.4 2.7 3.6 4.9 6.3 6.3l2.1-2.1c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.6c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.2 1L6.6 10.8Z"/></svg>',
+    "share": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v14"/></svg>',
+    "copy": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="13" height="13" rx="2.5"/><path d="M16 8V5.5A2.5 2.5 0 0 0 13.5 3h-8A2.5 2.5 0 0 0 3 5.5v8A2.5 2.5 0 0 0 5.5 16H8"/></svg>',
+    "chevron_left": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
+    "chevron_right": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
+    "home": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9a1 1 0 0 0 1 1h3v-6h4v6h3a1 1 0 0 0 1-1v-9"/></svg>',
+    "check_circle": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 5-5.5"/></svg>',
+    "sparkle": '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2.5c.3 3 1 5.2 2.3 6.5s3.5 2 6.5 2.3c-3 .3-5.2 1-6.5 2.3s-2 3.5-2.3 6.5c-.3-3-1-5.2-2.3-6.5S6.2 11.6 3.2 11.3c3-.3 5.2-1 6.5-2.3S11.7 5.5 12 2.5Z"/></svg>',
+    "camera_off": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l16 16"/><path d="M9.5 4.5H14l1.3 2H18a2 2 0 0 1 2 2v8.8"/><path d="M18.6 18.6a2 2 0 0 1-.6.1H5a2 2 0 0 1-2-2V8.5a2 2 0 0 1 2-2h.4"/><circle cx="12" cy="13" r="3.2"/></svg>',
+    "sad": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="0.9" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="0.9" fill="currentColor" stroke="none"/><path d="M8.5 16c1-1.2 2.2-1.8 3.5-1.8s2.5.6 3.5 1.8"/></svg>',
+    "close": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>',
+    "expand": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M21 16v3a2 2 0 0 1-2 2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/></svg>',
+    "send": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 11 13"/><path d="M21 3 14.5 21a.4.4 0 0 1-.7 0L11 13l-8-2.8a.4.4 0 0 1 0-.7L21 3Z"/></svg>',
+    "instagram": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="0.6" fill="currentColor" stroke="none"/></svg>',
+    "menu": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>',
+    "message": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.2 0-2.3-.2-3.4-.7L3 21l1.7-4.6A8.5 8.5 0 1 1 21 11.5Z"/></svg>',
+    "user": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.9 3.6-7 8-7s8 3.1 8 7"/></svg>',
+}
+
+
+def icon(name: str, size: int = 18) -> str:
+    svg = ICONS.get(name, "")
+    return f'<span class="ico" style="width:{size}px;height:{size}px;">{svg}</span>'
+
+
+def esc_html(s) -> str:
+    if s is None:
+        return ""
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;"))
+
+
+# ============================= BOSH SAHIFA =============================
+
+
