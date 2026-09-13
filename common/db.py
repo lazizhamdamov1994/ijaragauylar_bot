@@ -9,7 +9,6 @@ mavjud serverdagi bazani o'chirish yoki qo'lda migratsiya qilish SHART EMAS,
 `init_schema()`/`migrate_schema()` idempotent (necha marta chaqirilsa ham
 xavfsiz).
 """
-import json
 import logging
 import sqlite3
 from datetime import datetime
@@ -258,10 +257,7 @@ def get_favorite_listing_ids(user_id: int) -> set:
 
 def get_favorite_listings_full(user_id: int) -> list:
     """Foydalanuvchining sevimli e'lonlarini (hali FAOL/tasdiqlangan
-    bo'lganlarini, eng yangisi birinchi) to'liq ma'lumot bilan qaytaradi.
-    `photos` ustuni bazada JSON MATN sifatida saqlanadi - kartochka
-    render qilinishi uchun bu yerda ro'yxatga PARSE qilib beriladi
-    (boshqa joylarda - masalan web/listings_data.py'da - xuddi shunday)."""
+    bo'lganlarini, eng yangisi birinchi) to'liq ma'lumot bilan qaytaradi."""
     conn = db()
     rows = conn.execute(
         """SELECT l.* FROM favorites f JOIN listings l ON l.id = f.listing_id
@@ -270,15 +266,7 @@ def get_favorite_listings_full(user_id: int) -> list:
         (user_id,),
     ).fetchall()
     conn.close()
-    result = []
-    for r in rows:
-        d = dict(r)
-        try:
-            d["photos"] = json.loads(d.get("photos") or "[]")
-        except (TypeError, ValueError):
-            d["photos"] = []
-        result.append(d)
-    return result
+    return [dict(r) for r in rows]
 
 
 # ============================= QO'LLAB-QUVVATLASH SO'ROVLARI (foydalanuvchi -> admin) =============================
