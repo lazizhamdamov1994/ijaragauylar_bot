@@ -36,6 +36,8 @@ from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 
+from common.telegram_media import watermark_telegram_photo
+
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -62,35 +64,30 @@ from telegram.ext import (
 )
 
 # ============================= SOZLAMALAR (.env) =============================
+# MUHIM: barcha .env o'qish endi common/config.py'da BITTA joyda - bu yerda
+# faqat o'sha qiymatlarni botga tanish nomlar bilan import qilamiz, hech
+# qanday qiymat/nom o'zgarmagan.
 
 load_dotenv()
 
-TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_ID_RAW = os.getenv("CHANNEL_ID")
-CHANNEL_ID = int(CHANNEL_ID_RAW) if CHANNEL_ID_RAW else None
-CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "")
-ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
+from common.config import (  # noqa: E402
+    ADMIN_IDS,
+    ADMIN_USERNAME,
+    BOT_TOKEN as TOKEN,
+    CARD_HOLDER,
+    CHANNEL_ID,
+    CHANNEL_USERNAME,
+    DASHBOARD_URL,
+    DB_PATH,
+    DEFAULT_SETTINGS as INITIAL_SETTINGS,
+    MAX_DAILY_LISTINGS,
+    MOD_DAILY_LISTINGS,
+    STALE_CHECK_DAYS,
+)
+
 TASHKENT_TZ = ZoneInfo("Asia/Tashkent")  # Barcha rejalashtirilgan vazifalar shu vaqt mintaqasida ishlaydi (server UTCda bo'lsa ham)
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "your_admin_username")
-DASHBOARD_URL = os.getenv("DASHBOARD_URL", "").rstrip("/")  # masalan: https://5-180-183-175.nip.io
-
-DB_PATH = os.getenv("DB_PATH", "elonlar.db")
 MAX_PHOTOS = 10
-MAX_DAILY_LISTINGS = int(os.getenv("MAX_DAILY_LISTINGS", "5"))
-MOD_DAILY_LISTINGS = int(os.getenv("MOD_DAILY_LISTINGS", "50"))
-STALE_CHECK_DAYS = int(os.getenv("STALE_CHECK_DAYS", "7"))
-CARD_HOLDER = os.getenv("CARD_HOLDER", "")
 PAGE_SIZE = 10
-
-INITIAL_SETTINGS = {
-    "listing_price": os.getenv("LISTING_PRICE", "20000"),
-    "subscription_price": os.getenv("SUBSCRIPTION_PRICE", "20000"),
-    "subscription_days": os.getenv("SUBSCRIPTION_DAYS", "30"),
-    "card_number": os.getenv("CARD_NUMBER", "5614681434261669"),
-    "subscriber_discount_percent": os.getenv("SUBSCRIBER_DISCOUNT_PERCENT", "25"),
-    "free_views_enabled": "1",
-    "free_views_count": "2",
-}
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -194,140 +191,28 @@ SETTINGS_FIELDS = {
 
 
 # ============================= MA'LUMOTLAR BAZASI =============================
+# MUHIM: bazaga oid umumiy funksiyalar endi common/db.py'da BITTA joyda
+# (bot.py va dashboard.py ikkalasi ham shundan foydalanadi - nomlar va
+# xatti-harakat ATAYIN eskisi bilan bir xil qoldirilgan).
 
-def db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def now_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def safe_parse_dt(value):
-    """Bazadagi sana-vaqt matnini xavfsiz o'qiydi. Eski/nostandart formatdagi
-    yozuvlar uchun (masalan qo'lda tuzatilgan yozuvlar) None qaytaradi,
-    XATOGA UCHRAMAYDI - bot hech qachon shu sabab bilan qulamasligi kerak."""
-    if not value:
-        return None
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(value, fmt)
-        except (ValueError, TypeError):
-            continue
-    return None
+from common.db import (  # noqa: E402
+    db,
+    now_str,
+    safe_parse_dt,
+    get_setting,
+    set_setting,
+    is_subscribed,
+    get_blocked_phone,
+    is_phone_blocked,
+    init_and_migrate,
+)
 
 
 def init_db() -> None:
-    conn = db()
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY, username TEXT, full_name TEXT, phone TEXT, created_at TEXT)"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS listings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, username TEXT, full_name TEXT,
-            sender_phone TEXT, manzil TEXT, moljal TEXT, kimlarga TEXT, xona TEXT, qulaylik TEXT, narx TEXT,
-            telefon TEXT, photos TEXT, payment_receipt TEXT, price_charged INTEGER, status TEXT DEFAULT 'pending',
-            reject_reason TEXT, channel_msg_id INTEGER, created_at TEXT)"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS subscriptions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, receipt_photo TEXT, months INTEGER DEFAULT 1,
-            price_charged INTEGER, target_listing_id INTEGER, status TEXT DEFAULT 'pending', reject_reason TEXT,
-            created_at TEXT, approved_at TEXT, expire_at TEXT)"""
-    )
-    conn.execute("""CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)""")
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS blocked_phones (
-            phone TEXT PRIMARY KEY, reason TEXT, blocked_by INTEGER, blocked_at TEXT)"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS moderators (
-            user_id INTEGER PRIMARY KEY, added_by INTEGER, added_at TEXT)"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS extra_admins (
-            user_id INTEGER PRIMARY KEY, added_by INTEGER, added_at TEXT)"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS channel_posts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL,
-            message_id INTEGER NOT NULL, posted_at TEXT, buttons_fixed INTEGER DEFAULT 0)"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS location_alerts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, location TEXT, created_at TEXT)"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS listing_reports (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
-            reason TEXT, created_at TEXT)"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS phone_reveals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, listing_id INTEGER NOT NULL, revealed_at TEXT)"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS paywall_hits (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, listing_id INTEGER, hit_at TEXT)"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS phone_check_uses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, checked_at TEXT)"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS banned_users (
-            user_id INTEGER PRIMARY KEY, reason TEXT, banned_by INTEGER, banned_at TEXT)"""
-    )
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS receipt_hashes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, phash TEXT, user_id INTEGER, context_label TEXT,
-            ref_id INTEGER, created_at TEXT)"""
-    )
-    conn.commit()
-    conn.close()
-    migrate_db()
-    seed_settings()
-
-
-def migrate_db() -> None:
-    conn = db()
-    for table, needed in (
-        ("listings", {"sender_phone": "TEXT", "payment_receipt": "TEXT", "price_charged": "INTEGER", "is_quick": "INTEGER DEFAULT 0", "raw_text": "TEXT", "last_confirmed_at": "TEXT", "expired": "INTEGER DEFAULT 0", "stale_reports": "INTEGER DEFAULT 0", "receipt_warning": "TEXT", "buttons_fixed": "INTEGER DEFAULT 0", "latitude": "REAL", "longitude": "REAL", "category": "TEXT DEFAULT 'egadan'", "rental_type": "TEXT DEFAULT 'uzoq_muddat'"}),
-        ("subscriptions", {"months": "INTEGER DEFAULT 1", "price_charged": "INTEGER", "target_listing_id": "INTEGER", "receipt_warning": "TEXT"}),
-        ("users", {"free_views_used": "INTEGER DEFAULT 0", "bonus_views": "INTEGER DEFAULT 0", "referred_by": "INTEGER", "referral_bonus_given": "INTEGER DEFAULT 0"}),
-    ):
-        existing = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
-        for col, coltype in needed.items():
-            if col not in existing:
-                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}")
-                logger.info("Migratsiya: '%s' jadvaliga '%s' ustuni qo'shildi", table, col)
-    conn.commit()
-    conn.close()
-
-
-def seed_settings() -> None:
-    conn = db()
-    for key, value in INITIAL_SETTINGS.items():
-        conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value))
-    conn.commit()
-    conn.close()
-
-
-def get_setting(key: str) -> str:
-    conn = db()
-    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-    conn.close()
-    return row["value"] if row else INITIAL_SETTINGS.get(key, "")
-
-
-def set_setting(key: str, value: str) -> None:
-    conn = db()
-    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, value))
-    conn.commit()
-    conn.close()
+    """Bazadagi barcha jadval/ustunlarni yaratadi va standart sozlamalarni
+    urug'laydi - endi common/db.init_and_migrate() orqali (bot va sayt bitta
+    sxemani baham ko'radi)."""
+    init_and_migrate()
 
 
 def listing_price() -> int:
@@ -641,19 +526,7 @@ def cancel_subscription(sub_id: int):
     return sub["user_id"]
 
 
-def is_subscribed(user_id: int):
-    conn = db()
-    row = conn.execute(
-        "SELECT expire_at FROM subscriptions WHERE user_id = ? AND status = 'approved' ORDER BY expire_at DESC LIMIT 1",
-        (user_id,),
-    ).fetchone()
-    conn.close()
-    if not row or not row["expire_at"]:
-        return False, None
-    expire = safe_parse_dt(row["expire_at"])
-    if expire is None:
-        return False, None
-    return expire > datetime.now(), row["expire_at"]
+# is_subscribed() endi common/db.py'dan import qilinadi (yuqoridagi import bloki).
 
 
 def get_active_subscription_id(user_id: int):
@@ -880,11 +753,7 @@ def unblock_phone(phone: str) -> None:
     conn.close()
 
 
-def get_blocked_phone(phone: str):
-    conn = db()
-    row = conn.execute("SELECT * FROM blocked_phones WHERE phone = ?", (phone,)).fetchone()
-    conn.close()
-    return dict(row) if row else None
+# get_blocked_phone() endi common/db.py'dan import qilinadi (yuqoridagi import bloki).
 
 
 def count_blocked_phones() -> int:
@@ -3103,7 +2972,10 @@ async def quick_rasm_qabul(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(rasmlar) >= MAX_PHOTOS:
             await update.message.reply_text(f"\u26a0\ufe0f Maksimal {MAX_PHOTOS} ta rasm yuborish mumkin.")
             return QUICK_PHOTOS
-        rasmlar.append(update.message.photo[-1].file_id)
+        file_id = update.message.photo[-1].file_id
+        if ADMIN_IDS:
+            file_id = await watermark_telegram_photo(file_id, ADMIN_IDS[0])
+        rasmlar.append(file_id)
         await quick_update_photo_status(update, context)
         return QUICK_PHOTOS
     if await try_escape_to_menu(update, context):
@@ -3687,7 +3559,10 @@ async def rasm_qabul(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(rasmlar) >= MAX_PHOTOS:
             await update.message.reply_text(f"\u26a0\ufe0f Maksimal {MAX_PHOTOS} ta rasm yuborish mumkin.")
             return RASMLAR
-        rasmlar.append(update.message.photo[-1].file_id)
+        file_id = update.message.photo[-1].file_id
+        if ADMIN_IDS:
+            file_id = await watermark_telegram_photo(file_id, ADMIN_IDS[0])
+        rasmlar.append(file_id)
         await update_photo_status(update, context)
         return RASMLAR
 
