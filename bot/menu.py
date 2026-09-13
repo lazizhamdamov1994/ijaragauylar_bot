@@ -37,6 +37,14 @@ from bot.constants import *  # noqa: F401,F403
 from bot.db import *  # noqa: F401,F403
 from bot.helpers import *  # noqa: F401,F403
 from bot.fraud_detection import *  # noqa: F401,F403
+# text_menu_router quyidagi modullardagi show_* funksiyalarni chaqiradi -
+# ular menu.py'dan KEYIN emas, shu yerda kerak (birortasi menu.py'ni
+# import qilmaydi, shuning uchun aylanma import xavfi yo'q).
+from bot.location_alerts import *  # noqa: F401,F403
+from bot.admin_panel import *  # noqa: F401,F403
+from bot.flow_listing import *  # noqa: F401,F403
+from bot.admin_moderators import *  # noqa: F401,F403
+from bot.flow_complaint import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
 

@@ -35,42 +35,15 @@ from bot.constants import *  # noqa: F401,F403
 from bot.db import *  # noqa: F401,F403
 from bot.helpers import *  # noqa: F401,F403
 from bot.fraud_detection import *  # noqa: F401,F403
+from bot.flow_complaint import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
 
 # ============================= MODERATOR SHAXSIY STATISTIKASI =============================
-
-def count_listings_stats_by_user(user_id: int) -> dict:
-    conn = db()
-    row = conn.execute(
-        """SELECT COUNT(*) AS total,
-                  SUM(CASE WHEN status='approved' AND COALESCE(expired,0)=0 THEN 1 ELSE 0 END) AS active,
-                  SUM(CASE WHEN status='approved' AND COALESCE(expired,0)=1 THEN 1 ELSE 0 END) AS closed,
-                  SUM(CASE WHEN status='rejected' THEN 1 ELSE 0 END) AS rejected,
-                  SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending
-           FROM listings WHERE user_id = ?""",
-        (user_id,),
-    ).fetchone()
-    conn.close()
-    return {
-        "total": row["total"] or 0, "active": row["active"] or 0, "closed": row["closed"] or 0,
-        "rejected": row["rejected"] or 0, "pending": row["pending"] or 0,
-    }
-
-
-TRUSTED_MIN_LISTINGS = 3
-
-
-def is_trusted_poster(user_id) -> bool:
-    """Airbnb uslubidagi ishonch belgisi: kamida TRUSTED_MIN_LISTINGS ta
-    tasdiqlangan e'lon bergan VA hech qanday shikoyat olmagan e'lon beruvchi."""
-    if not user_id:
-        return False
-    stats = count_listings_stats_by_user(user_id)
-    if (stats["active"] + stats["closed"]) < TRUSTED_MIN_LISTINGS:
-        return False
-    return count_reports_received(user_id) == 0
-
+# MUHIM: count_listings_stats_by_user / TRUSTED_MIN_LISTINGS / is_trusted_poster
+# endi bot/helpers.py'da (build_caption ularni chaqiradi, u esa bu fayldan
+# OLDINROQ import zanjirida turadi - shuning uchun bu yerda emas, o'sha yerda
+# aniqlanishi kerak).
 
 async def show_moderator_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id

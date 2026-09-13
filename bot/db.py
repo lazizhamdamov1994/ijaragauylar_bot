@@ -3,6 +3,10 @@ Botning o'z ma'lumotlar bazasi qatlami - e'lonlar, obunalar, foydalanuvchilar,
 bloklangan raqamlar, statistika. `common/db.py`dagi UMUMIY (sayt bilan
 baham ko'rilgan) funksiyalardan farqli o'laroq, bu yerdagilar FAQAT botga xos.
 """
+import json
+import re
+from datetime import datetime, timedelta
+
 from common.db import db, now_str, safe_parse_dt, get_setting, set_setting, is_subscribed, get_blocked_phone, is_phone_blocked
 
 from bot.constants import *  # noqa: F401,F403
@@ -416,6 +420,15 @@ def stats_today() -> dict:
     return stats_for_period(today, tomorrow)
 
 
+def count_reports_received(user_id: int) -> int:
+    conn = db()
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM listing_reports WHERE listing_id IN (SELECT id FROM listings WHERE user_id = ?)", (user_id,)
+    ).fetchone()["c"]
+    conn.close()
+    return n
+
+
 def count_new_users_in_period(date_from: str, date_to_exclusive: str) -> int:
     conn = db()
     n = conn.execute(
@@ -425,119 +438,6 @@ def count_new_users_in_period(date_from: str, date_to_exclusive: str) -> int:
     return n
 
 
-def get_period_bounds(period: str):
-    """Berilgan davr uchun (boshlanish, tugash, oldingi davr boshlanishi,
-    oldingi davr tugashi, ko'rinadigan nom) qaytaradi - taqqoslash uchun."""
-    now = datetime.now()
-    if period == "daily":
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + timedelta(days=1)
-        prev_start, prev_end = start - timedelta(days=1), start
-        label = f"\U0001F4C5 Bugun ({start.strftime('%d.%m.%Y')})"
-        prev_label = "kechagi kunga nisbatan"
-    elif period == "weekly":
-        start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + timedelta(days=7)
-        prev_start, prev_end = start - timedelta(days=7), start
-        label = f"\U0001F4C6 Bu hafta ({start.strftime('%d.%m')} \u2014 {(end - timedelta(days=1)).strftime('%d.%m.%Y')})"
-        prev_label = "o'tgan haftaga nisbatan"
-    elif period == "monthly":
-        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        end = (start.replace(year=start.year + 1, month=1) if start.month == 12 else start.replace(month=start.month + 1))
-        prev_start = (start.replace(year=start.year - 1, month=12) if start.month == 1 else start.replace(month=start.month - 1))
-        prev_end = start
-        label = f"\U0001F5D3 Bu oy ({start.strftime('%m.%Y')})"
-        prev_label = "o'tgan oyga nisbatan"
-    else:  # yearly
-        start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
-        end = start.replace(year=start.year + 1)
-        prev_start, prev_end = start.replace(year=start.year - 1), start
-        label = f"\U0001F4C8 Bu yil ({start.year})"
-        prev_label = "o'tgan yilga nisbatan"
-    fmt = "%Y-%m-%d %H:%M:%S"
-    return start.strftime(fmt), end.strftime(fmt), prev_start.strftime(fmt), prev_end.strftime(fmt), label, prev_label
-
-
-def percent_change(old: float, new: float) -> str:
-    if old == 0 and new == 0:
-        return "o'zgarishsiz"
-    if old == 0:
-        return "\U0001F195 yangi"
-    change = (new - old) / old * 100
-    arrow = "\U0001F53A" if change > 0 else ("\U0001F53B" if change < 0 else "\u27a1\ufe0f")
-    return f"{arrow} {change:+.0f}%"
-
-
-def render_period_stats(period: str) -> str:
-    start, end, prev_start, prev_end, label, prev_label = get_period_bounds(period)
-    cur = stats_for_period(start, end)
-    prev = stats_for_period(prev_start, prev_end)
-    new_users = count_new_users_in_period(start, end)
-    new_users_prev = count_new_users_in_period(prev_start, prev_end)
-
-    total_users_ever = cur["users_total"]  # stats_for_period bu yerda umriy jamini beradi
-    total_active_subs = count_active_subscribers()
-    total_revenue = cur["listings_income"] + cur["subs_income"]
-    prev_revenue = prev["listings_income"] + prev["subs_income"]
-
-    successful_reveals = count_reveals_in_period(start, end)
-    failed_attempts = count_paywall_hits_in_period(start, end)
-    total_attempts = successful_reveals + failed_attempts
-    conversion = f"{(successful_reveals / total_attempts * 100):.0f}%" if total_attempts else "\u2014"
-    phone_checks = count_phone_checks_in_period(start, end)
-    new_location_alerts = count_location_alerts_in_period(start, end)
-    source = count_listings_by_source_in_period(start, end)
-    listing_type = count_listings_by_type_in_period(start, end)
-    multi_location = get_multi_location_posters(2)
-
-    location_lines = [f"\U0001F4CD <b>JOYLASHUV BO'YICHA E'LON BERUVCHILAR</b> <i>(umumiy, davrga bog'liq emas)</i>\n"]
-    location_lines.append(f"2+ hududda e'lon bergan: {len(multi_location)} ta foydalanuvchi\n")
-    if multi_location:
-        for uid, cnt in multi_location[:5]:
-            u = get_user(uid) or {}
-            name = u.get("full_name") or f"ID:{uid}"
-            location_lines.append(f"\u2022 {esc(name)} \u2014 {cnt} ta hududda")
-    location_section = "\n".join(location_lines) + "\n\n"
-
-    text = (
-        f"\U0001F4CA <b>Statistika</b> \u2014 {label}\n"
-        f"<i>({prev_label} solishtirilgan)</i>\n\n"
-
-        f"\U0001F465 <b>FOYDALANUVCHILAR</b>\n"
-        f"Yangi qo'shilgan: {new_users} ta ({percent_change(new_users_prev, new_users)})\n"
-        f"Jami (botni ishlatgan): {total_users_ever} ta\n\n"
-
-        f"\U0001F4DD <b>E'LONLAR</b>\n"
-        f"Yangi: {cur['listings_total']} ta ({percent_change(prev['listings_total'], cur['listings_total'])})\n"
-        f"\u2705 Tasdiqlangan: {cur['listings_approved']} ta\n"
-        f"\u274c Rad etilgan: {cur['listings_rejected']} ta\n"
-        f"\U0001F553 Kutilmoqda: {cur['listings_pending']} ta\n"
-        f"\U0001F464 Foydalanuvchilar o'zi joyladi: {source['user']} ta\n"
-        f"\U0001F6E0 Admin/moderator joyladi: {source['staff']} ta\n"
-        f"\U0001F4B0 Pullik e'lon: {listing_type['paid']} ta\n"
-        f"\U0001F193 Bepul e'lon: {listing_type['free']} ta\n"
-        f"\U0001F4B0 Tushum: {cur['listings_income']:,} so'm ({percent_change(prev['listings_income'], cur['listings_income'])})\n\n"
-
-        f"\U0001F4B3 <b>LIMIT (OBUNA)</b>\n"
-        f"Yangi so'rov: {cur['subs_total']} ta ({percent_change(prev['subs_total'], cur['subs_total'])})\n"
-        f"\u2705 Tasdiqlangan: {cur['subs_approved']} ta\n"
-        f"\U0001F513 Hozir FAOL: {total_active_subs} ta\n"
-        f"\U0001F4B0 Tushum: {cur['subs_income']:,} so'm ({percent_change(prev['subs_income'], cur['subs_income'])})\n\n"
-
-        f"\U0001F3AF <b>RAQAM KO'RISH URINISHLARI</b>\n"
-        f"\u2705 Muvaffaqiyatli (raqam olishgan): {successful_reveals} ta\n"
-        f"\u274c Muvaffaqiyatsiz (limit/obunasiz): {failed_attempts} ta\n"
-        f"\U0001F4C8 Konversiya: {conversion}\n\n"
-
-        f"\U0001F527 <b>BOSHQA FUNKSIYALAR</b>\n"
-        f"\U0001F50D Raqam tekshirish: {phone_checks} marta\n"
-        f"\U0001F514 Yangi hudud-xabar: {new_location_alerts} ta\n\n"
-
-        f"{location_section}"
-
-        f"\U0001F4B5 <b>JAMI TUSHUM: {total_revenue:,} so'm</b> ({percent_change(prev_revenue, total_revenue)})"
-    )
-    return text
 
 
 def normalize_phone(raw: str):

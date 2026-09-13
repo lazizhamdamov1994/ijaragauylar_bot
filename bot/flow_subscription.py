@@ -33,6 +33,7 @@ from common.config import ADMIN_IDS, ADMIN_USERNAME, BOT_TOKEN as TOKEN, CARD_HO
 from bot.constants import *  # noqa: F401,F403
 from bot.db import *  # noqa: F401,F403
 from bot.helpers import *  # noqa: F401,F403
+from bot.fraud_detection import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
 
