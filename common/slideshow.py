@@ -148,27 +148,31 @@ def _draw_price_chip(draw, cy: int, text: str, font):
     draw.text((x0 + pad_x - bbox[0], y0 + pad_y - bbox[1]), text, font=font, fill=(255, 255, 255, 255))
 
 
-# Sarlavha kartasi joylashuvi (kanvasning o'rtasiga yaqin - reels'larda
-# ko'z avval shu joyga tushadi).
-CARD_TOP, CARD_BOTTOM = 690, 1260
-TITLE_Y = 760
-ACCENT_BAR_Y = 850
-ADDRESS_Y = 900
-PRICE_CY = 1050
-CTA_Y = 1160
+# Sarlavha kartasi joylashuvi - CANVAS_H // 2 (960px) atrofida ANIQ
+# markazlashtirilgan (Instagram Reels'da ko'z avval shu joyga tushadi;
+# pastki ~20% odatda Instagram'ning o'z sarlavha/tugmalari ostida qoladi,
+# shuning uchun markazni haqiqiy ekran o'rtasidan biroz YUQORIROQ emas,
+# balki AYNAN CANVAS_H//2'ga tenglashtiramiz).
+_CARD_CENTER = CANVAS_H // 2  # 960
+CARD_TOP, CARD_BOTTOM = _CARD_CENTER - 320, _CARD_CENTER + 320
+TITLE_Y = _CARD_CENTER - 250
+ACCENT_BAR_Y = _CARD_CENTER - 145
+ADDRESS_Y = _CARD_CENTER - 100
+PRICE_CY = _CARD_CENTER + 60
+CTA_Y = _CARD_CENTER + 175
 
 
 def _draw_intro_frame(canvas: Image.Image, step: int, manzil: str, narx: str) -> Image.Image:
     """BIRINCHI rasmning 3 ta bosqichli ("ochiluvchi") kadri:
     step 0 -> faqat sarlavha, step 1 -> + manzil, step 2 -> + narx va CTA."""
     canvas = canvas.convert("RGBA")
-    overlay = _vertical_gradient_scrim(CARD_TOP, CARD_BOTTOM, peak_alpha=210)
+    overlay = _vertical_gradient_scrim(CARD_TOP, CARD_BOTTOM, peak_alpha=215)
     draw = ImageDraw.Draw(overlay)
 
-    title_font = _load_font(84)
-    address_font = _load_font(46)
-    price_font = _load_font(56)
-    cta_font = _load_font(36)
+    title_font = _load_font(94)
+    address_font = _load_font(50)
+    price_font = _load_font(60)
+    cta_font = _load_font(38)
 
     _draw_spaced_text(draw, CANVAS_W // 2, TITLE_Y, "MAKLERSIZ UY", title_font, fill=(255, 255, 255, 255), tracking=8)
     bar_w = 130
