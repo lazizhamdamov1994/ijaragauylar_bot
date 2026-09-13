@@ -20,7 +20,10 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 logger = logging.getLogger(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
+# MUHIM: bu logo.png'DAN ALOHIDA - logo.png sayt (web/) uchun ishlatilishda
+# davom etadi, pechat_logo.png esa FAQAT e'lon rasmlariga bosiladigan
+# muhr uchun (repo ildiziga alohida yuklanadi).
+LOGO_PATH = os.path.join(BASE_DIR, "pechat_logo.png")
 WATERMARK_TEXT = "ijaragauylar.uz"
 
 _FONT_CANDIDATES = (
@@ -67,7 +70,7 @@ def apply_watermark(image_bytes: bytes) -> bytes:
 
         overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
         margin = max(int(min(w, h) * 0.025), 10)
-        logo_h = min(max(int(h * 0.09), 28), 100)
+        logo_h = min(max(int(h * 0.13), 40), 150)
 
         logo = _load_logo()
         right_edge = w - margin

@@ -154,17 +154,47 @@ def _draw_price_chip(draw, cy: int, text: str, font):
 # shuning uchun markazni haqiqiy ekran o'rtasidan biroz YUQORIROQ emas,
 # balki AYNAN CANVAS_H//2'ga tenglashtiramiz).
 _CARD_CENTER = CANVAS_H // 2  # 960
-CARD_TOP, CARD_BOTTOM = _CARD_CENTER - 320, _CARD_CENTER + 320
+CARD_TOP, CARD_BOTTOM = _CARD_CENTER - 320, _CARD_CENTER + 280
 TITLE_Y = _CARD_CENTER - 250
 ACCENT_BAR_Y = _CARD_CENTER - 145
 ADDRESS_Y = _CARD_CENTER - 100
 PRICE_CY = _CARD_CENTER + 60
-CTA_Y = _CARD_CENTER + 175
+
+# Pastki CTA banneri - Instagram'ning o'z pastki UI'si (izoh, like/share
+# ikonalari) odatda eng pastki ~220px'ni yopib qo'yadi, shuning uchun
+# banner ANIQ shu chegaradan yuqorida, "xavfsiz zona"da joylashadi.
+CTA_BANNER_TOP, CTA_BANNER_BOTTOM = 1560, 1750
+CTA_LINE1 = "UY EGASI RAQAMI"
+CTA_LINE2 = "TELEGRAM KANALIMIZDA"
+
+
+def _draw_cta_banner(canvas: Image.Image) -> Image.Image:
+    """ENG MUHIM tuzatish: bu banner HAR BIR kadrga (birinchi rasmning
+    sarlavha kartasidan tortib, oxirgi rasmgacha) qo'yiladi - shuning
+    uchun tomoshabin "Telegram kanalimizda" degan xabarni FAQAT 1 soniya
+    ko'rib qolib ketmaydi, balki VIDEO OXIRIGACHA (bir necha soniya davomida)
+    doimiy ko'rib boradi - Instagram reels'larda odam oqimini haydashning
+    asosiy omili shu."""
+    canvas = canvas.convert("RGBA")
+    overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    draw.rectangle([(0, CTA_BANNER_TOP - 6), (CANVAS_W, CTA_BANNER_TOP)], fill=(0, 0, 0, 60))  # yupqa "soya" chizig'i
+    draw.rectangle([(0, CTA_BANNER_TOP), (CANVAS_W, CTA_BANNER_BOTTOM)], fill=(*BRAND_ACCENT, 255))
+
+    line1_font = _load_font(52)
+    line2_font = _load_font(42)
+    _centered_text(draw, CTA_BANNER_TOP + 18, CTA_LINE1, line1_font, fill=(255, 255, 255, 255), shadow=False)
+    _centered_text(draw, CTA_BANNER_TOP + 88, CTA_LINE2, line2_font, fill=(255, 255, 255, 255), shadow=False)
+
+    return Image.alpha_composite(canvas, overlay).convert("RGB")
 
 
 def _draw_intro_frame(canvas: Image.Image, step: int, manzil: str, narx: str) -> Image.Image:
     """BIRINCHI rasmning 3 ta bosqichli ("ochiluvchi") kadri:
-    step 0 -> faqat sarlavha, step 1 -> + manzil, step 2 -> + narx va CTA."""
+    step 0 -> faqat sarlavha, step 1 -> + manzil, step 2 -> + narx.
+    Pastki CTA banneri ALOHIDA (_draw_cta_banner) - bu kadrga ham, qolgan
+    barcha rasmlarga ham qo'shiladi (build_slideshow_video ichida)."""
     canvas = canvas.convert("RGBA")
     overlay = _vertical_gradient_scrim(CARD_TOP, CARD_BOTTOM, peak_alpha=215)
     draw = ImageDraw.Draw(overlay)
@@ -172,7 +202,6 @@ def _draw_intro_frame(canvas: Image.Image, step: int, manzil: str, narx: str) ->
     title_font = _load_font(94)
     address_font = _load_font(50)
     price_font = _load_font(60)
-    cta_font = _load_font(38)
 
     _draw_spaced_text(draw, CANVAS_W // 2, TITLE_Y, "MAKLERSIZ UY", title_font, fill=(255, 255, 255, 255), tracking=8)
     bar_w = 130
@@ -186,7 +215,6 @@ def _draw_intro_frame(canvas: Image.Image, step: int, manzil: str, narx: str) ->
 
     if step >= 2:
         _draw_price_chip(draw, PRICE_CY, (narx or "").strip()[:24], price_font)
-        _centered_text(draw, CTA_Y, "Uy egasi raqami Telegram kanalimizda", cta_font, fill=(255, 214, 102, 255))
 
     return Image.alpha_composite(canvas, overlay).convert("RGB")
 
@@ -207,7 +235,7 @@ async def build_slideshow_video(photos: list[bytes], manzil: str, narx: str) -> 
                 try:
                     first = _fit_frame(photos[0])
                     for step in range(3):
-                        frame = _draw_intro_frame(first, step, manzil, narx)
+                        frame = _draw_cta_banner(_draw_intro_frame(first, step, manzil, narx))
                         path = os.path.join(tmpdir, f"frame_intro_{step}.jpg")
                         frame.save(path, format="JPEG", quality=92)
                         frame_paths.append((path, INTRO_STEP_SECONDS))
@@ -216,7 +244,7 @@ async def build_slideshow_video(photos: list[bytes], manzil: str, narx: str) -> 
 
                 for i, raw in enumerate(photos[1:], start=1):
                     try:
-                        frame = _fit_frame(raw)
+                        frame = _draw_cta_banner(_fit_frame(raw))
                     except Exception:
                         logger.exception("Slaydshov kadrini tayyorlashda xatolik (%s-rasm)", i)
                         continue
