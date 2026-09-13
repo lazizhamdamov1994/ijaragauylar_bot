@@ -121,6 +121,10 @@ def main():
                 MessageHandler(~filters.COMMAND, location_reminder),
             ],
             RASMLAR: [CallbackQueryHandler(rasm_back_to_location, pattern="^nav_back_to_location$"), nav_cb, CallbackQueryHandler(rasm_tayyor, pattern="^rasm_tayyor$"), MessageHandler(~filters.COMMAND, rasm_qabul)],
+            SLIDESHOW_CONFIRM: [
+                CallbackQueryHandler(slideshow_choice_router, pattern="^slideshow_(yes|no)$"),
+                MessageHandler(~filters.COMMAND, slideshow_reminder),
+            ],
             TASDIQLASH: [
                 CallbackQueryHandler(tasdiqlash_ok, pattern="^tasdiqlash_ok$"),
                 CallbackQueryHandler(tasdiqlash_nav_router, pattern="^(nav_back|nav_cancel)$"),

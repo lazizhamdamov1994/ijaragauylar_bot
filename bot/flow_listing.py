@@ -30,7 +30,8 @@ from telegram.ext import ContextTypes, ConversationHandler, filters
 
 from common.config import ADMIN_IDS, ADMIN_USERNAME, BOT_TOKEN as TOKEN, CARD_HOLDER, CHANNEL_ID, CHANNEL_USERNAME, DASHBOARD_URL, DB_PATH, DEFAULT_SETTINGS as INITIAL_SETTINGS, MAX_DAILY_LISTINGS, MOD_DAILY_LISTINGS, STALE_CHECK_DAYS
 
-from common.telegram_media import watermark_telegram_photo
+from common.telegram_media import download_photo_bytes, watermark_telegram_photo
+from common.slideshow import build_instagram_caption, build_slideshow_video
 
 from bot.constants import *  # noqa: F401,F403
 from bot.db import *  # noqa: F401,F403
@@ -412,6 +413,33 @@ async def rasm_tayyor(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception("E'lon matnini ko'rsatishda xatolik")
         await context.bot.send_message(chat_id, "\u26a0\ufe0f E'lon matnini ko'rsatishda tarmoq muammosi yuz berdi.")
 
+    slideshow_keyboard = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("\u2705 Ha", callback_data="slideshow_yes"),
+             InlineKeyboardButton("\u274c Yo'q", callback_data="slideshow_no")],
+        ]
+    )
+    await context.bot.send_message(
+        chat_id,
+        "\U0001F3AC Ushbu e'lon uchun Instagram'da joylash uchun qisqa slaydshov video ham tayyorlab beraylikmi?\n"
+        "(Video + tayyor post matni sizga alohida yuboriladi - Instagram'ga faqat o'zingiz joylaysiz.)",
+        reply_markup=slideshow_keyboard,
+    )
+    return SLIDESHOW_CONFIRM
+
+
+async def slideshow_choice_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_reply_markup(reply_markup=None)
+    context.user_data["want_slideshow"] = query.data == "slideshow_yes"
+    return await _show_tasdiqlash_keyboard(update, context)
+
+
+async def _show_tasdiqlash_keyboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    chat_id = update.effective_chat.id
+
     # Tugma matni narxga qarab DINAMIK: agar to'lov shart bo'lmasa (xodim yoki
     # foydalanuvchi "Bepul e'lon" tanlagan bo'lsa), "to'lov" so'zi umuman ko'rinmaydi.
     if is_staff(user.id) or not context.user_data.get("listing_is_paid"):
@@ -447,6 +475,60 @@ async def tasdiqlash_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE
     return await remind_buttons(update, context, TASDIQLASH)
 
 
+async def slideshow_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    return await remind_buttons(update, context, SLIDESHOW_CONFIRM)
+
+
+async def _generate_and_send_slideshow(
+    context: ContextTypes.DEFAULT_TYPE, listing_id: int, rasmlar: list,
+    manzil: str, narx: str, xona: str, kimlarga: str, qulaylik: str,
+) -> None:
+    """Fonda (bot javob berishini KUTMASDAN) slaydshov video yasab, tayyor
+    Instagram post matni bilan birga ADMINGA yuboradi. Xatolik bo'lsa ham
+    (ffmpeg yo'q, rasm yuklanmadi va h.k.) e'lonning o'zi allaqachon
+    saqlangan/joylangan - shuning uchun bu yerdagi xatolik hech narsani
+    buzmaydi, faqat log'ga yoziladi."""
+    if not ADMIN_IDS:
+        return
+    try:
+        photo_bytes = []
+        for file_id in rasmlar[:10]:
+            raw = await download_photo_bytes(file_id)
+            if raw:
+                photo_bytes.append(raw)
+        if not photo_bytes:
+            logger.warning("Slaydshov uchun rasm yuklab bo'lmadi (e'lon #%s)", listing_id)
+            return
+
+        video = await build_slideshow_video(photo_bytes, manzil, narx)
+        if video is None:
+            logger.warning("Slaydshov video yasalmadi (e'lon #%s)", listing_id)
+            return
+
+        caption = build_instagram_caption(manzil, narx, xona=xona, kimlarga=kimlarga, qulaylik=qulaylik)
+        for admin_id in ADMIN_IDS:
+            try:
+                await send_with_retry(
+                    context.bot.send_video, admin_id, video,
+                    caption=f"\U0001F3AC E'lon #{listing_id} uchun Instagram slaydshov video tayyor.\nInstagram'ga shu videoni joylang \U0001F447",
+                )
+                await send_with_retry(context.bot.send_message, admin_id, caption)
+            except Exception:
+                logger.exception("Slaydshov videoni adminga (%s) yuborishda xatolik", admin_id)
+    except Exception:
+        logger.exception("Slaydshov generatsiya jarayonida kutilmagan xatolik (e'lon #%s)", listing_id)
+
+
+def _maybe_start_slideshow(context: ContextTypes.DEFAULT_TYPE, data: dict, listing_id: int) -> None:
+    if not data.get("want_slideshow"):
+        return
+    asyncio.create_task(_generate_and_send_slideshow(
+        context, listing_id, list(data.get("rasmlar") or []),
+        data.get("manzil", ""), data.get("narx", ""),
+        data.get("xona", ""), data.get("kimlarga", ""), data.get("qulaylik", ""),
+    ))
+
+
 async def tasdiqlash_ok(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -463,6 +545,7 @@ async def tasdiqlash_ok(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data["payment_receipt"] = None
 
         listing_id = save_listing(data, 0)
+        _maybe_start_slideshow(context, data, listing_id)
         listing = get_listing(listing_id)
         channel_msg_id = await send_listing_to_channel(context, listing)
 
@@ -508,6 +591,7 @@ async def tasdiqlash_ok(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.clear()
             return ConversationHandler.END
 
+        _maybe_start_slideshow(context, data, listing_id)
         admin_notified = False
         try:
             admin_notified = await submit_listing_to_admin(context, listing_id, data, 0)
@@ -556,6 +640,7 @@ async def tolov_chek_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("\u26a0\ufe0f Texnik xatolik yuz berdi. Iltimos, chek rasmni QAYTA yuboring \u2014 ma'lumotlaringiz yo'qolmagan.")
         return TOLOV_CHEK
 
+    _maybe_start_slideshow(context, data, listing_id)
     admin_notified = False
     try:
         admin_notified = await submit_listing_to_admin(context, listing_id, data, price_charged)
