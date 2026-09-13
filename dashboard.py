@@ -35,40 +35,61 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
+
+from common.telegram_media import watermark_photo_bytes_list
+from common.config import (
+    ADMIN_IDS,
+    BOT_TOKEN,
+    BOT_USERNAME,
+    BRAND_SHORT,
+    CARD_HOLDER,
+    CARD_NUMBER,
+    CHANNEL_USERNAME,
+    DASH_PASS,
+    DASH_USER,
+    DB_PATH,
+    GOOGLE_SITE_VERIFICATION,
+    INSTAGRAM_URL,
+    PHOTO_CACHE_MAX_MB,
+    SESSION_COOKIE,
+    SESSION_MAX_AGE,
+    SESSION_SECRET,
+    SITE_NAME,
+    SITE_URL,
+    YANDEX_VERIFICATION,
+)
+from common.db import (
+    db,
+    now_str,
+    safe_parse_dt,
+    get_setting,
+    is_subscribed,
+    is_phone_blocked,
+    init_and_migrate,
+)
 
 load_dotenv()
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.getenv("DB_PATH", "elonlar.db")
-DASH_USER = os.getenv("DASHBOARD_USERNAME", "admin")
-DASH_PASS = os.getenv("DASHBOARD_PASSWORD", "")
-CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "")
-BOT_USERNAME = os.getenv("BOT_USERNAME", "")
-INSTAGRAM_URL = os.getenv("INSTAGRAM_URL", "https://www.instagram.com/ijaraga_uylar.uz/")
-BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-SITE_URL = os.getenv("DASHBOARD_URL", "").rstrip("/")
-SITE_NAME = "Ijaraga Uylar Maklersiz"
-BRAND_SHORT = "Ijaraga Uylar"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ADMIN_IDS = [int(x) for x in (os.getenv("ADMIN_IDS", "") or "").split(",") if x.strip().lstrip("-").isdigit()]
-CARD_NUMBER = os.getenv("CARD_NUMBER", "")
-CARD_HOLDER = os.getenv("CARD_HOLDER", "")
 MAX_WEB_LISTING_PHOTOS = 10
 MAX_WEB_SUBMISSIONS_PER_IP_PER_DAY = 3
 
-# Telegram orqali kirish (shaxsiy kabinet) uchun - sessiya cookie'sini
-# imzolash kaliti. Alohida .env o'zgaruvchisi shart emas: BOT_TOKEN allaqachon
-# sir sifatida saqlanadi, shundan chiqarilgan xesh yetarlicha bashorat
-# qilib bo'lmaydigan kalit beradi. Xohlasa, SESSION_SECRET orqali qayta yozish mumkin.
-SESSION_SECRET = os.getenv("SESSION_SECRET") or hashlib.sha256((BOT_TOKEN + ":session-v1").encode()).hexdigest()
-SESSION_COOKIE = "tg_session"
-SESSION_MAX_AGE = 90 * 24 * 3600
-
 app = FastAPI(title=SITE_NAME, docs_url=None, redoc_url=None, openapi_url=None)
 security = HTTPBasic()
+
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+try:
+    with open(os.path.join(STATIC_DIR, "site.css"), "rb") as _f:
+        CSS_VERSION = hashlib.md5(_f.read()).hexdigest()[:8]
+except Exception:
+    CSS_VERSION = "1"
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -119,24 +140,9 @@ def check_auth(request: Request, credentials: HTTPBasicCredentials = Depends(sec
     return credentials.username
 
 
-def db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def now_str():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def safe_parse_dt(s):
-    if not s:
-        return None
-    try:
-        return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
-    except (ValueError, TypeError):
-        return None
-
+# db(), now_str(), safe_parse_dt(), get_setting(), is_subscribed(),
+# is_phone_blocked() - endi common/db.py'da BITTA joyda (bot.py bilan
+# umumiy). Pastroqda import qilingan.
 
 # ============================= TELEGRAM ORQALI KIRISH (shaxsiy kabinet) =============================
 #
@@ -200,22 +206,9 @@ def get_current_tg_user(request: Request):
     return verify_session_token(token)
 
 
-def is_web_subscribed(uid: int):
-    """bot.py'dagi is_subscribed() bilan bir xil - 'subscriptions' jadvali
-    ikkalasi uchun ham umumiy, shuning uchun bot orqali sotib olingan Limit
-    saytda ham, aksincha ham darhol ko'rinadi."""
-    conn = db()
-    row = conn.execute(
-        "SELECT expire_at FROM subscriptions WHERE user_id = ? AND status = 'approved' ORDER BY expire_at DESC LIMIT 1",
-        (uid,),
-    ).fetchone()
-    conn.close()
-    if not row or not row["expire_at"]:
-        return False, None
-    expire = safe_parse_dt(row["expire_at"])
-    if expire is None:
-        return False, None
-    return expire > datetime.now(), row["expire_at"]
+# is_web_subscribed() nomi eskisi bilan qoldirilgan (ko'plab joyda
+# ishlatiladi), lekin endi common/db.py'dagi umumiy is_subscribed()ning o'zi.
+is_web_subscribed = is_subscribed
 
 
 def current_subscription_price() -> int:
@@ -261,34 +254,6 @@ def render_credit_card(lang: str, card_digits: str, amount_text: str = "", with_
   </div>
 </div>
 {copy_html}"""
-
-
-def init_tracking_tables():
-    """Faqat shu dashboard ishlatadigan, YANGI, MUSTAQIL jadvallar."""
-    conn = db()
-    conn.execute("""CREATE TABLE IF NOT EXISTS map_views (id INTEGER PRIMARY KEY AUTOINCREMENT, viewed_at TEXT)""")
-    conn.execute("""CREATE TABLE IF NOT EXISTS map_clicks (id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, clicked_at TEXT)""")
-    conn.execute("""CREATE TABLE IF NOT EXISTS site_visits (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT, ip TEXT, country TEXT, city TEXT,
-        device TEXT, browser TEXT, referrer TEXT, visited_at TEXT)""")
-    conn.execute("""CREATE TABLE IF NOT EXISTS subarenda_requests (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, full_name TEXT, phone TEXT,
-        manzil TEXT, xona TEXT, narx_talab TEXT, status TEXT DEFAULT 'yangi', created_at TEXT)""")
-    conn.execute("""CREATE TABLE IF NOT EXISTS listing_inquiries (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER, owner_user_id INTEGER,
-        name TEXT, phone TEXT, message TEXT, status TEXT DEFAULT 'yangi', created_at TEXT)""")
-    # Veb-saytdan yuborilgan e'lonlarni spamdan himoya qilish uchun (IP bo'yicha kunlik limit).
-    conn.execute("""CREATE TABLE IF NOT EXISTS web_listing_submissions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT, created_at TEXT)""")
-    # "listings" jadvali bot.py tomonidan yaratiladi — bu yerda faqat dashboard'ga
-    # kerak bo'lgan, botga zarar bermaydigan YANGI ustunni qo'shamiz (mavjud bo'lsa o'tkazib yuboriladi).
-    existing_cols = [r["name"] for r in conn.execute("PRAGMA table_info(listings)").fetchall()]
-    if existing_cols and "source" not in existing_cols:
-        conn.execute("ALTER TABLE listings ADD COLUMN source TEXT DEFAULT 'bot'")
-    if existing_cols and "rental_type" not in existing_cols:
-        conn.execute("ALTER TABLE listings ADD COLUMN rental_type TEXT DEFAULT 'uzoq_muddat'")
-    conn.commit()
-    conn.close()
 
 
 def detect_device(user_agent: str) -> str:
@@ -365,7 +330,7 @@ class VisitTrackingMiddleware(BaseHTTPMiddleware):
 app.add_middleware(VisitTrackingMiddleware)
 
 
-init_tracking_tables()
+init_and_migrate()
 
 
 def get_active_listings():
@@ -518,7 +483,6 @@ import hashlib
 
 PHOTO_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "photo_cache")
 os.makedirs(PHOTO_CACHE_DIR, exist_ok=True)
-PHOTO_CACHE_MAX_MB = int(os.getenv("PHOTO_CACHE_MAX_MB", "3072"))
 PHOTO_CACHE_CLEANUP_INTERVAL_SEC = 6 * 3600
 
 
@@ -604,479 +568,10 @@ async def get_photo(file_id: str):
 
 # ============================= OMMAVIY SAYT - DIZAYN YORDAMCHILARI =============================
 
-SITE_CSS = """
-  :root {
-    /* Premium mulk-brend palitrasi: chuqur zumrad (ishonch/o'sish) + issiq oltin (premium/TOP urg'u) */
-    --brand: #FF3B5C; --brand-dark: #E01E45; --brand-light: #FFEBEF;
-    --gold: #D6960B; --gold-light: #FDF3DE;
-    --ink: #101826; --ink-soft: #47526B; --muted: #6B7690; --line: #E7EAF0;
-    --bg: #ffffff; --bg-soft: #F6F8FA;
-    --radius-sm: 8px; --radius: 12px; --radius-lg: 20px; --radius-pill: 999px;
-    --shadow-sm: 0 1px 2px rgba(16,24,38,0.08);
-    --shadow: 0 6px 16px rgba(16,24,38,0.10);
-    --shadow-lg: 0 16px 36px rgba(16,24,38,0.14), 0 2px 8px rgba(16,24,38,0.06);
-    --font-display: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
-  h1, h2, h3, .brand, .footer-brand, .side-brand { font-family: var(--font-display); }
-  body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    color: var(--ink); background: var(--bg); line-height: 1.5; font-size: 15px;
-    -webkit-font-smoothing: antialiased;
-  }
-  img { max-width: 100%; display: block; }
-  a { color: inherit; text-decoration: none; }
-  .ico { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; vertical-align: middle; }
-  .ico svg { width: 100%; height: 100%; }
-  button, input, select { font-family: inherit; }
-
-  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
-  @media (max-width: 640px) { .wrap { padding: 0 16px; } }
-
-  /* ============ HEADER ============ */
-  header.site-header {
-    background: #fff; position: sticky; top: 0; z-index: 500;
-    border-bottom: 1px solid var(--line);
-  }
-  .header-inner {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 24px; max-width: 1280px; margin: 0 auto; gap: 16px;
-  }
-  .brand { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 800; letter-spacing: -0.4px; color: var(--ink); flex-shrink: 0; }
-  .brand img { width: 34px; height: 34px; border-radius: 9px; }
-  nav.main-nav { display: flex; gap: 4px; align-items: center; }
-  nav.main-nav a.nav-link {
-    font-size: 14px; font-weight: 600; color: var(--ink-soft); padding: 10px 14px;
-    border-radius: var(--radius-pill); transition: background .15s;
-  }
-  nav.main-nav a.nav-link:hover { background: var(--bg-soft); }
-  .btn-cta {
-    background: var(--brand); color: #fff !important; padding: 10px 20px; border-radius: var(--radius-pill);
-    font-weight: 700; font-size: 14px; transition: background .15s, transform .1s;
-    display: inline-flex; align-items: center; gap: 7px; border: none; cursor: pointer;
-  }
-  .btn-cta:hover { background: var(--brand-dark); }
-  .btn-cta:active { transform: scale(0.97); }
-  .nav-icon-link { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; padding: 0 !important; color: var(--ink-soft); }
-  .mobile-menu-btn {
-    display: none; width: 38px; height: 38px; border-radius: var(--radius-pill); border: none;
-    background: var(--bg-soft); color: var(--ink); align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0;
-  }
-  .mobile-menu {
-    display: none; flex-direction: column; padding: 8px 16px 14px; border-top: 1px solid var(--line); background: #fff;
-  }
-  .mobile-menu.open { display: flex; }
-  .mobile-menu a {
-    display: flex; align-items: center; gap: 12px; padding: 12px 6px; font-size: 14.5px; font-weight: 600;
-    color: var(--ink-soft); border-bottom: 1px solid var(--line);
-  }
-  .mobile-menu a:last-child { border-bottom: none; }
-  .mobile-menu a:hover { color: var(--brand); }
-
-  /* ============ TIL TANLAGICH (uz/ru/en) ============ */
-  .lang-switcher { display: flex; gap: 2px; background: var(--bg-soft); border-radius: var(--radius-pill); padding: 3px; flex-shrink: 0; }
-  .lang-pill { padding: 6px 10px; border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 800; color: var(--muted); letter-spacing: .3px; }
-  .lang-pill.active { background: #fff; color: var(--ink); box-shadow: var(--shadow-sm); }
-  .lang-pill:hover:not(.active) { color: var(--ink); }
-  /* Mobil menyuda - to'liq kenglikka cho'zilgan, teng bo'laklangan, barmoq bilan bosish uchun qulay */
-  .mobile-menu .lang-switcher { margin: 14px 6px 4px; padding: 4px; background: var(--bg-soft); }
-  .mobile-menu .lang-pill { flex: 1; text-align: center; padding: 11px 8px; font-size: 13px; }
-  .mobile-lang-label { padding: 0 6px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-top: 4px; }
-  @media (max-width: 640px) {
-    .header-inner { padding: 12px 16px; }
-    .brand { font-size: 15px; }
-    .brand img { width: 28px; height: 28px; }
-    nav.main-nav { display: none; }
-    .mobile-menu-btn { display: flex; }
-  }
-
-  /* ============ HERO + SEARCH ============ */
-  .hero {
-    background: linear-gradient(180deg, var(--brand-light) 0%, #fff 100%);
-    padding: 48px 20px 96px; text-align: center;
-  }
-  .hero h1 { font-size: 36px; font-weight: 800; letter-spacing: -1px; margin-bottom: 10px; color: var(--ink); }
-  .hero p.sub { font-size: 16.5px; color: var(--ink-soft); max-width: 520px; margin: 0 auto 32px; }
-  @media (max-width: 640px) { .hero { padding: 32px 16px 84px; } .hero h1 { font-size: 24px; } .hero p.sub { font-size: 14px; margin-bottom: 24px; } }
-
-  .search-pill {
-    background: #fff; border-radius: var(--radius-pill); padding: 8px; max-width: 720px; margin: 0 auto;
-    box-shadow: var(--shadow-lg); border: 1px solid var(--line);
-    display: grid; grid-template-columns: 1fr 1fr auto; align-items: stretch; gap: 0;
-  }
-  .search-pill .seg { padding: 10px 22px; border-right: 1px solid var(--line); text-align: left; }
-  .search-pill .seg:last-of-type { border-right: none; }
-  .search-pill label { display: block; font-size: 11px; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
-  .search-pill select {
-    border: none; outline: none; font-size: 13.5px; font-weight: 500; color: var(--ink-soft);
-    background: transparent; width: 100%; cursor: pointer;
-  }
-  .search-pill button {
-    background: var(--brand); color: #fff; border: none; border-radius: var(--radius-pill); padding: 0 26px;
-    font-weight: 700; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px;
-    transition: background .15s;
-  }
-  .search-pill button:hover { background: var(--brand-dark); }
-  @media (max-width: 640px) {
-    .search-pill { grid-template-columns: 1fr 1fr; border-radius: var(--radius-lg); padding: 10px; gap: 8px; }
-    .search-pill .seg { border-right: none; border-bottom: 1px solid var(--line); padding: 8px 12px; }
-    .search-pill button { grid-column: 1 / -1; padding: 13px; border-radius: var(--radius); justify-content: center; margin-top: 4px; }
-  }
-
-  /* ============ IJARA TURI TABLARI (kunlik/uzoq muddat/dacha/mehmonxona) ============ */
-  .rt-tabs { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
-  .rt-tab {
-    padding: 8px 16px; border-radius: var(--radius-pill); background: #fff; font-size: 12.5px; font-weight: 700;
-    color: var(--ink-soft); box-shadow: var(--shadow-sm); border: 1px solid transparent; white-space: nowrap;
-  }
-  .rt-tab:hover { border-color: var(--line); }
-  .rt-tab.active { background: var(--ink); color: #fff; }
-  @media (max-width: 640px) { .rt-tabs { gap: 6px; margin-top: 14px; } .rt-tab { padding: 7px 12px; font-size: 12px; } }
-
-  /* ============ STATS STRIP ============ */
-  .stats-strip { margin-top: -56px; position: relative; z-index: 10; }
-  .stats-strip .inner {
-    background: #fff; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); border: 1px solid var(--line);
-    padding: 22px 32px; display: flex; justify-content: space-around; gap: 20px; flex-wrap: wrap; max-width: 720px; margin: 0 auto;
-  }
-  .stat-item { text-align: center; }
-  .stat-item .num { font-size: 26px; font-weight: 800; color: var(--ink); }
-  .stat-item .lbl { font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 2px; }
-  @media (max-width: 640px) { .stats-strip .inner { padding: 16px 12px; gap: 8px; } .stat-item .num { font-size: 19px; } }
-
-  /* ============ MAIN CONTENT ============ */
-  main { padding: 56px 0 60px; }
-  @media (max-width: 640px) { main { padding: 36px 0 40px; } }
-  .section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 8px; }
-  .section-head h2 { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
-  .section-head .count { font-size: 13.5px; color: var(--muted); font-weight: 600; }
-
-  /* ============ LISTING CARDS ============ */
-  .listing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 28px 22px; }
-  @media (max-width: 640px) { .listing-grid { grid-template-columns: repeat(2, 1fr); gap: 18px 12px; } }
-  .listing-card { cursor: pointer; }
-  .lc-photo { position: relative; aspect-ratio: 1/1; background: var(--bg-soft); overflow: hidden; border-radius: var(--radius); margin-bottom: 10px; }
-  .listing-card:hover .lc-photo img { transform: scale(1.06); }
-  .lc-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .35s ease; }
-  .lc-photo .lc-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 44px; background: linear-gradient(135deg,#FFEBEF,#FFF6F2); }
-  .lc-badge {
-    position: absolute; top: 10px; left: 10px; background: #fff; color: var(--ink);
-    padding: 4px 11px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 700; box-shadow: var(--shadow-sm);
-    display: inline-flex; align-items: center; gap: 4px;
-  }
-  .lc-badge-fire { background: var(--gold); color: #fff; }
-  .lc-badge .ico, .badge .ico { width: 13px; height: 13px; }
-  .cat-verified { background: #E7F6EC; color: #1A7A3C; }
-  .cat-subarenda { background: #EAF1FE; color: #1D4ED8; }
-  .cat-premium { background: #FDF3E3; color: #B8860B; }
-  .rt-kunlik { background: #FDF3E3; color: #B8860B; }
-  .rt-uzoq { background: #EAF1FE; color: #1D4ED8; }
-  .rt-dacha { background: #E7F6EC; color: #1A7A3C; }
-  .rt-mehmon { background: #F3E8FE; color: #7E22CE; }
-  .badge-quick { background: #FFF3CD; color: #92600B; }
-  .lc-body { padding: 0 2px; }
-  .lc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
-  .lc-title { font-size: 14.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-  .lc-meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
-  .lc-price { font-size: 14.5px; font-weight: 800; margin-top: 4px; }
-  @media (max-width: 640px) { .lc-title { font-size: 13px; } .lc-meta { font-size: 11.5px; } .lc-price { font-size: 13px; } }
-
-  .pagination { display: flex; justify-content: center; gap: 8px; margin-top: 40px; }
-  .pagination a, .pagination span {
-    width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
-    border-radius: 50%; font-size: 13.5px; font-weight: 700;
-  }
-  .pagination a { background: #fff; color: var(--ink); border: 1px solid var(--line); }
-  .pagination a:hover { border-color: var(--ink); }
-  .pagination .active { background: var(--ink); color: #fff; }
-
-  /* ============ WHY SECTION ============ */
-  .why-section { background: var(--bg-soft); padding: 64px 0; margin-top: 24px; }
-  .why-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 28px; margin-top: 32px; }
-  .why-item { text-align: center; padding: 12px; }
-  .why-item .icon {
-    width: 56px; height: 56px; border-radius: 50%; background: var(--brand-light); display: flex;
-    align-items: center; justify-content: center; margin: 0 auto 14px; color: var(--brand);
-  }
-  .why-item .icon .ico { width: 26px; height: 26px; }
-  .why-item h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
-  .why-item p { font-size: 13.5px; color: var(--muted); }
-
-  /* ============ FOOTER ============ */
-  footer.site-footer { background: #fff; border-top: 1px solid var(--line); padding: 40px 0 24px; }
-  .footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 24px; margin-bottom: 24px; }
-  .footer-brand { display: flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 800; font-size: 16px; margin-bottom: 8px; }
-  .footer-brand img { width: 26px; height: 26px; border-radius: 7px; }
-  .footer-links { display: flex; gap: 22px; flex-wrap: wrap; }
-  .footer-links a { font-size: 13.5px; font-weight: 600; color: var(--ink-soft); }
-  .footer-links a:hover { color: var(--ink); text-decoration: underline; }
-  .footer-bottom { border-top: 1px solid var(--line); padding-top: 18px; font-size: 12.5px; text-align: center; color: var(--muted); }
-
-  .empty-state { text-align: center; padding: 70px 20px; color: var(--muted); }
-  .empty-state .icon { color: var(--muted); margin-bottom: 16px; display: flex; justify-content: center; }
-
-  /* ============ BATAFSIL SAHIFA ============ */
-  .breadcrumb { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
-  .breadcrumb a:hover { color: var(--ink); text-decoration: underline; }
-  .detail-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 40px; align-items: start; }
-  @media (max-width: 900px) { .detail-grid { grid-template-columns: 1fr; gap: 24px; } }
-
-  .gallery-wrap { position: relative; margin-bottom: 22px; }
-  .gallery-scroll {
-    display: flex; overflow-x: auto; scroll-snap-type: x mandatory; border-radius: var(--radius-lg);
-    aspect-ratio: 4/3; background: var(--bg-soft); scrollbar-width: none; -webkit-overflow-scrolling: touch;
-  }
-  .gallery-scroll::-webkit-scrollbar { display: none; }
-  .gallery-scroll.gs-empty { display: flex; align-items: center; justify-content: center; flex-direction: column; color: var(--muted); }
-  .gs-slide { flex: 0 0 100%; scroll-snap-align: start; width: 100%; height: 100%; }
-  .gs-slide img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
-  .gs-dots { position: absolute; bottom: 14px; left: 0; right: 0; display: flex; justify-content: center; gap: 6px; }
-  .gs-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.55); transition: all .2s; }
-  .gs-dot.active { background: #fff; width: 18px; border-radius: 3px; }
-  .gs-counter { position: absolute; top: 14px; right: 14px; background: rgba(0,0,0,0.55); color: #fff; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: var(--radius-pill); }
-  .gs-arrow {
-    position: absolute; top: 50%; transform: translateY(-50%); width: 38px; height: 38px; border-radius: 50%;
-    background: rgba(255,255,255,0.9); border: none; cursor: pointer; display: none; align-items: center; justify-content: center;
-    color: var(--ink); box-shadow: var(--shadow); transition: background .15s;
-  }
-  .gs-arrow:hover { background: #fff; }
-  .gs-arrow-left { left: 12px; }
-  .gs-arrow-right { right: 12px; }
-  .gs-expand {
-    position: absolute; bottom: 14px; right: 14px; width: 34px; height: 34px; border-radius: 50%;
-    background: rgba(0,0,0,0.55); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #fff;
-  }
-  @media (min-width: 901px) { .gs-arrow { display: flex; } }
-
-  .lightbox {
-    display: none; position: fixed; inset: 0; background: rgba(10,10,10,0.96); z-index: 2000;
-    align-items: center; justify-content: center;
-  }
-  .lightbox.open { display: flex; }
-  .lb-track { display: flex; width: 100%; height: 100%; transition: transform .3s ease; }
-  .lb-slide { flex: 0 0 100%; display: flex; align-items: center; justify-content: center; padding: 40px; }
-  .lb-slide img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
-  .lb-close {
-    position: absolute; top: 18px; right: 18px; width: 42px; height: 42px; border-radius: 50%;
-    background: rgba(255,255,255,0.12); border: none; cursor: pointer; color: #fff; display: flex; align-items: center; justify-content: center;
-    z-index: 2001;
-  }
-  .lb-close:hover { background: rgba(255,255,255,0.22); }
-  .lb-arrow {
-    position: absolute; top: 50%; transform: translateY(-50%); width: 46px; height: 46px; border-radius: 50%;
-    background: rgba(255,255,255,0.12); border: none; cursor: pointer; color: #fff; display: flex; align-items: center; justify-content: center;
-    z-index: 2001;
-  }
-  .lb-arrow:hover { background: rgba(255,255,255,0.22); }
-  .lb-arrow-left { left: 16px; }
-  .lb-arrow-right { right: 16px; }
-  @media (max-width: 640px) { .lb-slide { padding: 12px; } .lb-arrow { width: 38px; height: 38px; } }
-
-  .detail-title { font-size: 26px; font-weight: 800; letter-spacing: -0.6px; margin: 24px 0 6px; }
-  .detail-addr { font-size: 15px; color: var(--muted); margin-bottom: 16px; }
-  .detail-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
-  .badge { font-size: 12px; font-weight: 700; padding: 5px 12px; border-radius: var(--radius-pill); display: inline-flex; align-items: center; gap: 5px; }
-  .badge.trust { background: #E7F6EC; color: #1A7A3C; }
-  .badge.paid { background: var(--gold-light); color: var(--gold); }
-
-  .detail-facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 22px 0; }
-  .fact-box { background: var(--bg-soft); border-radius: var(--radius); padding: 16px; }
-  .fact-box .fl { font-size: 11.5px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
-  .fact-box .fv { font-size: 15px; font-weight: 700; }
-
-  .desc-block { border-top: 1px solid var(--line); padding: 24px 0; margin: 8px 0; }
-  .desc-block h3 { font-size: 16px; font-weight: 700; margin-bottom: 10px; }
-  .desc-block p { font-size: 14.5px; color: var(--ink-soft); white-space: pre-line; }
-
-  .sidebar-card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 24px; position: sticky; top: 90px; box-shadow: var(--shadow); }
-  @media (max-width: 900px) { .sidebar-card { position: static; margin-top: 8px; } }
-  .sidebar-price { font-size: 30px; font-weight: 800; color: var(--ink); }
-  .sidebar-cta {
-    display: flex; align-items: center; justify-content: center; gap: 8px; text-align: center; background: var(--brand); color: #fff; padding: 16px;
-    border-radius: var(--radius-pill); font-weight: 700; font-size: 15.5px; margin: 18px 0 10px; transition: background .15s;
-  }
-  .sidebar-cta:hover { background: var(--brand-dark); }
-  .sidebar-note { font-size: 12.5px; color: var(--muted); text-align: center; }
-
-  .phone-lock { display: none; margin: 16px 0 4px; }
-  .phone-lock.open { display: block; animation: phoneLockIn .25s ease; }
-  @keyframes phoneLockIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
-  .phone-lock-text { font-size: 13px; color: var(--ink-soft); text-align: center; margin-bottom: 14px; line-height: 1.5; }
-  .credit-card {
-    background: linear-gradient(135deg, #1B2436 0%, #101826 60%, #2A2117 100%);
-    border-radius: 16px; padding: 18px 20px; color: #fff; box-shadow: var(--shadow-lg);
-    position: relative; overflow: hidden;
-  }
-  .credit-card::after {
-    content: ""; position: absolute; top: -40%; right: -20%; width: 180px; height: 180px; border-radius: 50%;
-    background: radial-gradient(circle, rgba(214,150,11,0.28) 0%, transparent 70%);
-  }
-  .credit-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; position: relative; z-index: 1; }
-  .credit-card-chip { width: 34px; height: 24px; border-radius: 5px; background: linear-gradient(135deg, #E8C766, #B8912E); display: block; }
-  .credit-card-brand { font-size: 10.5px; font-weight: 800; letter-spacing: 1.2px; color: #C9CDD8; }
-  .credit-card-number {
-    font-family: 'Courier New', monospace; font-size: 18px; font-weight: 700; letter-spacing: 2.5px;
-    margin-bottom: 20px; position: relative; z-index: 1;
-  }
-  .credit-card-bottom { display: flex; align-items: flex-end; justify-content: space-between; position: relative; z-index: 1; }
-  .credit-card-label { font-size: 9px; font-weight: 700; letter-spacing: .8px; color: #8890A0; text-transform: uppercase; margin-bottom: 3px; }
-  .credit-card-holder { font-size: 13px; font-weight: 700; letter-spacing: .4px; }
-  .credit-card-amount { font-size: 15px; font-weight: 800; color: var(--gold); }
-  .paywall-cta {
-    display: block; text-align: center; margin-top: 14px; padding: 13px; border-radius: var(--radius-pill);
-    background: var(--brand); color: #fff; font-weight: 700; font-size: 14px; transition: background .15s;
-  }
-  .paywall-cta:hover { background: var(--brand-dark); }
-  .card-copy-btn {
-    display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 10px;
-    padding: 10px; border-radius: var(--radius); border: 1px solid var(--line); background: #fff;
-    font-size: 12.5px; font-weight: 700; color: var(--ink); cursor: pointer; transition: border-color .15s;
-  }
-  .card-copy-btn:hover { border-color: var(--ink); }
-  .sidebar-share { display: flex; gap: 8px; margin-top: 18px; }
-  .sidebar-share button {
-    flex: 1; padding: 11px; border-radius: var(--radius); border: 1px solid var(--line); background: #fff;
-    font-size: 12.5px; font-weight: 700; cursor: pointer; color: var(--ink); transition: border-color .15s;
-    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  }
-  .sidebar-share button:hover { border-color: var(--ink); }
-
-  .inquiry-toggle {
-    display: flex; align-items: center; gap: 8px; margin-top: 16px; padding-top: 16px;
-    border-top: 1px solid var(--line); font-size: 13.5px; font-weight: 700; color: var(--ink);
-    cursor: pointer; user-select: none;
-  }
-  .inquiry-toggle:hover { color: var(--brand); }
-  .inquiry-form { display: none; flex-direction: column; gap: 8px; margin-top: 12px; }
-  .inquiry-form.open { display: flex; }
-  .inquiry-form input, .inquiry-form textarea {
-    padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; font-size: 13.5px;
-    font-family: inherit; resize: vertical;
-  }
-  .inquiry-form input:focus, .inquiry-form textarea:focus { outline: none; border-color: var(--brand); }
-  .inquiry-submit {
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    background: var(--ink); color: #fff; border: none; padding: 11px; border-radius: 10px;
-    font-weight: 700; font-size: 13.5px; cursor: pointer; transition: opacity .15s;
-  }
-  .inquiry-submit:hover { opacity: 0.85; }
-  .inquiry-submit:disabled { opacity: 0.5; cursor: default; }
-  .inquiry-success {
-    display: none; align-items: center; gap: 6px; color: #1A7A3C; font-size: 13.5px; font-weight: 700;
-    justify-content: center; padding: 6px 0;
-  }
-
-  #detail-map { height: 270px; border-radius: var(--radius-lg); margin-top: 22px; }
-  .related-strip { margin-top: 56px; }
-
-  /* ============ SHAXSIY KABINET (/kabinet, /login) ============ */
-  .kb-card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 22px; box-shadow: var(--shadow-sm); margin-bottom: 18px; }
-  .kb-card-title { font-size: 15px; font-weight: 800; margin-bottom: 14px; }
-  .kb-limit-active { display: flex; align-items: center; gap: 8px; color: #1A7A3C; font-weight: 700; font-size: 14.5px; background: #EAF7EE; border-radius: var(--radius); padding: 12px 14px; }
-  .kb-table-wrap { overflow-x: auto; }
-  .kb-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-  .kb-table th { text-align: left; color: var(--muted); font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .3px; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  .kb-table td { padding: 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  .kb-table td a { color: var(--brand); font-weight: 700; }
-  .kb-status { display: inline-block; padding: 3px 10px; border-radius: var(--radius-pill); font-size: 11.5px; font-weight: 700; }
-  .kb-status.st-pending { background: var(--gold-light); color: var(--gold); }
-  .kb-status.st-approved { background: #EAF7EE; color: #1A7A3C; }
-  .kb-status.st-rejected { background: var(--brand-light); color: var(--brand-dark); }
-  .kb-status.st-expired { background: var(--bg-soft); color: var(--muted); }
-  .kb-empty { color: var(--muted); font-size: 13.5px; }
-  .kb-pay-box { background: var(--bg-soft); border-radius: var(--radius); padding: 18px; text-align: center; margin-bottom: 18px; }
-  .kb-pay-price { font-size: 22px; font-weight: 800; }
-  .kb-pay-price span { font-size: 13px; font-weight: 600; color: var(--muted); }
-  .kb-pay-card { margin-top: 10px; font-size: 15px; font-weight: 700; letter-spacing: .5px; display: flex; align-items: center; justify-content: center; gap: 6px; }
-  .kb-pay-hint { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
-  .kb-file-label { display: flex; align-items: center; gap: 8px; border: 1.5px dashed var(--line); border-radius: var(--radius); padding: 14px; font-size: 13.5px; font-weight: 600; cursor: pointer; color: var(--ink-soft); }
-  .kb-file-label:hover { border-color: var(--brand); }
-  .kb-file-label input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-  .kb-limit-success { display: none; align-items: center; gap: 6px; color: #1A7A3C; font-size: 13.5px; font-weight: 700; justify-content: center; padding: 10px 0; }
-  .kb-limit-error { display: none; color: var(--brand-dark); font-size: 13px; font-weight: 600; text-align: center; margin-top: 8px; }
-
-  /* ============ E'LON JOYLASH FORMASI (/elon-joylash) ============ */
-  .form-page-hero { background: linear-gradient(180deg, var(--brand-light) 0%, #fff 100%); padding: 40px 20px 60px; text-align: center; }
-  .form-page-hero h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.6px; margin-bottom: 8px; }
-  .form-page-hero p { font-size: 15px; color: var(--ink-soft); max-width: 560px; margin: 0 auto; }
-  @media (max-width: 640px) { .form-page-hero h1 { font-size: 22px; } .form-page-hero { padding: 28px 16px 44px; } }
-
-  .form-shell { max-width: 720px; margin: -32px auto 0; position: relative; z-index: 5; }
-  .form-card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: 28px; }
-  @media (max-width: 640px) { .form-card { padding: 18px; border-radius: var(--radius); } }
-
-  .fstep-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--brand); background: var(--brand-light); padding: 4px 12px; border-radius: var(--radius-pill); margin-bottom: 14px; }
-  .form-section-title { font-size: 17px; font-weight: 800; margin: 26px 0 14px; display: flex; align-items: center; gap: 8px; }
-  .form-section-title:first-child { margin-top: 0; }
-  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  @media (max-width: 560px) { .form-row { grid-template-columns: 1fr; } }
-  .form-group { margin-bottom: 14px; }
-  .form-group label { display: block; font-size: 12.5px; font-weight: 700; color: var(--ink-soft); margin-bottom: 6px; }
-  .form-group .req { color: var(--brand); }
-  .form-input, .form-textarea, .form-select {
-    width: 100%; padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 10px;
-    font-size: 14px; font-family: inherit; background: #fff; color: var(--ink); transition: border-color .15s;
-  }
-  .form-input:focus, .form-textarea:focus, .form-select:focus { outline: none; border-color: var(--brand); }
-  .form-textarea { resize: vertical; min-height: 84px; }
-  .form-hint { font-size: 11.5px; color: var(--muted); margin-top: 5px; }
-  .form-error-box { background: #FDEDEB; color: #C0362C; border: 1px solid #F6C6C0; border-radius: 10px; padding: 11px 14px; font-size: 13px; font-weight: 600; margin-bottom: 16px; display: none; }
-  .form-error-box.show { display: block; }
-
-  .type-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 6px; }
-  .type-option { position: relative; border: 2px solid var(--line); border-radius: 14px; padding: 14px; cursor: pointer; transition: border-color .15s, background .15s; }
-  .type-option input { position: absolute; opacity: 0; }
-  .type-option .to-title { font-weight: 800; font-size: 14.5px; display: flex; align-items: center; gap: 6px; }
-  .type-option .to-desc { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
-  .type-option.active { border-color: var(--brand); background: var(--brand-light); }
-  @media (max-width: 560px) { .type-toggle { grid-template-columns: 1fr; } }
-
-  .pay-panel { display: none; margin-top: 14px; background: var(--bg-soft); border-radius: 14px; padding: 16px; }
-  .pay-panel.show { display: block; }
-  .card-box { background: #fff; border: 1.5px dashed var(--line); border-radius: 12px; padding: 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
-  .card-box .cb-num { font-family: 'Courier New', monospace; font-size: 16px; font-weight: 800; letter-spacing: 1px; }
-  .card-box button { background: var(--ink); color: #fff; border: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
-
-  .photo-drop {
-    border: 2px dashed var(--line); border-radius: 14px; padding: 26px 16px; text-align: center; cursor: pointer;
-    transition: border-color .15s, background .15s; color: var(--muted);
-  }
-  .photo-drop:hover, .photo-drop.dragover { border-color: var(--brand); background: var(--brand-light); }
-  .photo-drop .pd-title { font-weight: 700; color: var(--ink); font-size: 14px; margin-top: 8px; }
-  .photo-drop .pd-sub { font-size: 12px; margin-top: 3px; }
-  .photo-preview { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; margin-top: 12px; }
-  .photo-thumb { position: relative; aspect-ratio: 1/1; border-radius: 10px; overflow: hidden; background: var(--bg-soft); }
-  .photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .photo-thumb .pt-remove {
-    position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,0.6);
-    color: #fff; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 12px; line-height: 1;
-  }
-
-  #locationMap { height: 240px; border-radius: 14px; margin-top: 10px; display: none; }
-  #locationMap.show { display: block; }
-  .loc-toggle-row { display: flex; align-items: center; justify-content: space-between; background: var(--bg-soft); border-radius: 12px; padding: 12px 14px; }
-  .loc-toggle-row .lt-label { font-size: 13.5px; font-weight: 700; display: flex; align-items: center; gap: 7px; }
-  .switch { position: relative; display: inline-block; width: 42px; height: 24px; flex-shrink: 0; }
-  .switch input { opacity: 0; width: 0; height: 0; }
-  .switch .slider { position: absolute; inset: 0; background: var(--line); border-radius: 24px; transition: .2s; cursor: pointer; }
-  .switch .slider::before { content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
-  .switch input:checked + .slider { background: var(--brand); }
-  .switch input:checked + .slider::before { transform: translateX(18px); }
-
-  .form-submit-btn {
-    width: 100%; background: var(--brand); color: #fff; border: none; padding: 15px; border-radius: 14px;
-    font-weight: 800; font-size: 15.5px; cursor: pointer; margin-top: 22px; display: flex; align-items: center;
-    justify-content: center; gap: 8px; transition: background .15s, opacity .15s;
-  }
-  .form-submit-btn:hover { background: var(--brand-dark); }
-  .form-submit-btn:disabled { opacity: 0.6; cursor: default; }
-
-  .form-success-screen { text-align: center; padding: 50px 20px; }
-  .form-success-screen .fs-icon { width: 74px; height: 74px; border-radius: 50%; background: #E7F6EC; color: #1A7A3C; display: flex; align-items: center; justify-content: center; margin: 0 auto 18px; }
-  .form-success-screen h2 { font-size: 21px; font-weight: 800; margin-bottom: 8px; }
-  .form-success-screen p { font-size: 14px; color: var(--muted); max-width: 400px; margin: 0 auto; }
-"""
+# SITE_CSS endi Python satrida emas - static/site.css haqiqiy fayl sifatida
+# saqlanadi (mobil-moslashuvchanlik CSS'i shu yerda tekshirilib, tuzatilgan).
+# Fayl BASE_DIR/static/site.css'da, /static/site.css orqali xizmat qiladi
+# (pastroqda StaticFiles orqali ulangan).
 
 
 # ============================= 3 TILLI QO'LLAB-QUVVATLASH (o'zbek / rus / ingliz) =============================
@@ -1425,10 +920,6 @@ def set_lang(lang: str, next: str = "/"):
     return resp
 
 
-GOOGLE_SITE_VERIFICATION = os.getenv("GOOGLE_SITE_VERIFICATION", "")
-YANDEX_VERIFICATION = os.getenv("YANDEX_VERIFICATION", "")
-
-
 def render_head(title: str, description: str, canonical_path: str, og_image: str = "", lang: str = DEFAULT_LANG, noindex: bool = False) -> str:
     canonical = f"{SITE_URL}{canonical_path}" if SITE_URL else canonical_path
     if not og_image and SITE_URL:
@@ -1465,7 +956,7 @@ def render_head(title: str, description: str, canonical_path: str, og_image: str
 <meta name="theme-color" content="#FF3B5C">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
-<style>{SITE_CSS}</style>"""
+<link rel="stylesheet" href="/static/site.css?v={CSS_VERSION}">"""
 
 
 def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
@@ -2556,13 +2047,6 @@ async def notify_telegram(chat_id: int, text: str, reply_markup: dict = None):
 #      lekin bir xil token bilan long-polling qilib turadi) avtomatik qabul qiladi
 #      va tasdiqlansa - kanalga ham, shu tufayli saytga ham chiqadi.
 
-def get_setting(key: str, default: str = "") -> str:
-    conn = db()
-    row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-    conn.close()
-    return row["value"] if row and row["value"] is not None else default
-
-
 def current_listing_price() -> int:
     try:
         return int(get_setting("listing_price", "20000"))
@@ -2585,13 +2069,6 @@ def normalize_phone_web(raw: str):
     if not re.fullmatch(r"998\d{9}", digits):
         return None
     return "+" + digits
-
-
-def is_phone_blocked(phone: str) -> bool:
-    conn = db()
-    row = conn.execute("SELECT 1 FROM blocked_phones WHERE phone = ?", (phone,)).fetchone()
-    conn.close()
-    return row is not None
 
 
 def web_submissions_today(ip: str) -> int:
@@ -2769,6 +2246,10 @@ async def submit_web_listing(
 
     if not ADMIN_IDS or not BOT_TOKEN:
         raise HTTPException(status_code=503, detail="Tizim vaqtincha sozlanmoqda. Iltimos, birozdan so'ng qaytadan urinib ko'ring.")
+
+    # Kanal/saytda faqat BIZNING logotipimiz bilan chiqishi uchun - to'lov
+    # cheki EMAS, faqat uy rasmlariga watermark bosiladi.
+    photo_bytes = watermark_photo_bytes_list(photo_bytes)
 
     upload_chat_id = ADMIN_IDS[0]
     try:
