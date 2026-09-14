@@ -194,8 +194,8 @@ async def expire_listing(context: ContextTypes.DEFAULT_TYPE, listing_id: int, no
     if listing and listing.get("channel_msg_id"):
         try:
             caption = "\u274c <b>BAND QILINDI / TOPSHIRILDI</b>\n\n" + build_caption(listing, context.bot.username)
-            await context.bot.edit_message_caption(
-                chat_id=CHANNEL_ID, message_id=listing["channel_msg_id"], caption=caption, parse_mode=ParseMode.HTML,
+            await context.bot.edit_message_text(
+                chat_id=CHANNEL_ID, message_id=listing["channel_msg_id"], text=caption, parse_mode=ParseMode.HTML,
             )
         except Exception:
             logger.exception("Kanaldagi postni \u00abband qilindi\u00bb deb belgilashda xatolik (listing_id=%s)", listing_id)

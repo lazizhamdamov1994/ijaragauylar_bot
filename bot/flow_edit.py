@@ -39,8 +39,8 @@ async def _sync_channel_caption(context: ContextTypes.DEFAULT_TYPE, listing_id: 
     try:
         caption = build_caption(listing, context.bot.username)
         keyboard = channel_keyboard(listing_id, context.bot.username, listing.get("latitude"), listing.get("longitude"))
-        await context.bot.edit_message_caption(
-            chat_id=CHANNEL_ID, message_id=listing["channel_msg_id"], caption=caption,
+        await context.bot.edit_message_text(
+            chat_id=CHANNEL_ID, message_id=listing["channel_msg_id"], text=caption,
             parse_mode=ParseMode.HTML, reply_markup=keyboard,
         )
     except Exception:

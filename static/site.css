@@ -465,6 +465,14 @@
   .kb-status.st-rejected { background: var(--brand-light); color: var(--brand-dark); }
   .kb-status.st-expired { background: var(--bg-soft); color: var(--muted); }
   .kb-empty { color: var(--muted); font-size: 13.5px; }
+  .kb-actions { white-space: nowrap; display: flex; gap: 4px; }
+  .kb-action-btn { border: 1px solid var(--line); background: #fff; border-radius: var(--radius-sm); width: 30px; height: 30px; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+  .kb-action-btn.kb-danger { border-color: var(--brand-light); }
+  .kb-edit-row td { white-space: normal; background: var(--bg-soft); }
+  .kb-edit-form { display: flex; flex-direction: column; gap: 8px; max-width: 420px; }
+  .kb-edit-form input, .kb-edit-form textarea { width: 100%; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; font-size: 13.5px; font-family: inherit; }
+  .kb-edit-actions { display: flex; gap: 8px; }
+  .kb-edit-actions button[type="button"] { background: none; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 14px; font-size: 13px; cursor: pointer; }
   .kb-notif-list { display: flex; flex-direction: column; gap: 10px; }
   .kb-notif { padding: 12px 14px; border-radius: var(--radius); background: var(--bg-soft); border-left: 3px solid var(--line); }
   .kb-notif.unread { border-left-color: var(--brand); background: var(--brand-light); }
