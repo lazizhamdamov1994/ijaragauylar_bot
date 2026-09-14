@@ -1026,7 +1026,7 @@ async function sendChannelPost() {
       document.getElementById('channelpost-text').value = '';
       photoInput.value = '';
     } else {
-      resultEl.textContent = '❌ Xatolik: ' + (data.detail || 'noma\'lum xatolik');
+      resultEl.textContent = '❌ Xatolik: ' + (data.detail || "noma'lum xatolik");
       resultEl.style.color = '#DC2626';
     }
   } catch (err) {
