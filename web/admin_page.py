@@ -245,6 +245,23 @@ ADMIN_HTML = """<!DOCTYPE html>
 
   <div id="tab-overview" class="tab-page active">
     <div class="page-head"><h1>\U0001F4CA Umumiy ko'rinish</h1></div>
+
+    <div class="panel" style="margin-bottom:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div>
+          <h2 id="period-stats-label">\U0001F4CA Davr statistikasi</h2>
+          <div class="panel-sub" id="period-stats-sublabel"></div>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn btn-primary period-btn" data-period="daily" onclick="loadPeriodStats('daily')">Kunlik</button>
+          <button class="btn btn-secondary period-btn" data-period="weekly" onclick="loadPeriodStats('weekly')">Haftalik</button>
+          <button class="btn btn-secondary period-btn" data-period="monthly" onclick="loadPeriodStats('monthly')">Oylik</button>
+          <button class="btn btn-secondary period-btn" data-period="yearly" onclick="loadPeriodStats('yearly')">Yillik</button>
+        </div>
+      </div>
+      <div class="kpi-grid" id="period-kpi-grid" style="margin-top:16px;"><div class="empty-note">Yuklanmoqda...</div></div>
+    </div>
+
     <div class="kpi-grid" id="kpi-main"><div class="empty-note">Yuklanmoqda...</div></div>
     <div class="kpi-grid" id="kpi-secondary"></div>
     <div class="charts-grid">
@@ -472,6 +489,33 @@ function trendBadge(pct) {
   if (pct < 0) return `<span class="trend down">\u2193 ${Math.abs(pct)}%</span>`;
   return `<span class="trend flat">\u2192 0%</span>`;
 }
+function periodTrendHtml(oldVal, newVal) {
+  if (oldVal === 0 && newVal === 0) return `<span class="trend flat">o'zgarishsiz</span>`;
+  if (oldVal === 0) return `<span class="trend up">\U0001F195 yangi</span>`;
+  return trendBadge(Math.round((newVal - oldVal) / oldVal * 100));
+}
+
+async function loadPeriodStats(period) {
+  document.querySelectorAll('.period-btn').forEach(b => {
+    const active = b.dataset.period === period;
+    b.classList.toggle('btn-primary', active);
+    b.classList.toggle('btn-secondary', !active);
+  });
+  const res = await fetch(`/api/admin/period-stats?period=${period}`);
+  const s = await res.json();
+  document.getElementById('period-stats-label').textContent = `\U0001F4CA Davr statistikasi — ${s.label}`;
+  document.getElementById('period-stats-sublabel').textContent = s.prev_label;
+  const c = s.current, p = s.previous;
+  const revenueCur = c.listings_income + c.subs_income;
+  const revenuePrev = p.listings_income + p.subs_income;
+  document.getElementById('period-kpi-grid').innerHTML = `
+    <div class="kpi-card"><div class="icon-badge icon-blue">\U0001F465</div><div class="label">Yangi foydalanuvchilar</div><div class="value">${s.new_users}</div>${periodTrendHtml(s.new_users_prev, s.new_users)}</div>
+    <div class="kpi-card"><div class="icon-badge icon-green">\U0001F4DD</div><div class="label">Yangi e'lonlar</div><div class="value">${c.listings_total}</div>${periodTrendHtml(p.listings_total, c.listings_total)}<div style="font-size:11px;color:var(--muted);margin-top:8px;">✅ ${c.listings_approved} · ❌ ${c.listings_rejected} · ⏱ ${c.listings_pending}</div></div>
+    <div class="kpi-card"><div class="icon-badge icon-pink">\U0001F4B0</div><div class="label">Jami tushum</div><div class="value">${fmtMoney(revenueCur)}</div>${periodTrendHtml(revenuePrev, revenueCur)}<div style="font-size:11px;color:var(--muted);margin-top:4px;">so'm</div></div>
+    <div class="kpi-card"><div class="icon-badge icon-purple">\U0001F4B3</div><div class="label">Yangi Limit sotib olishlar</div><div class="value">${c.subs_total}</div>${periodTrendHtml(p.subs_total, c.subs_total)}<div style="font-size:11px;color:var(--muted);margin-top:8px;">${c.subs_approved} tasdiqlangan</div></div>
+  `;
+}
+
 function barsHtml(items, keyField, maxItems) {
   const top = items.slice(0, maxItems || 6);
   const max = Math.max(...top.map(i => i.c), 1);
@@ -982,6 +1026,7 @@ async function loadMap() {
 }
 
 loadStats();
+loadPeriodStats('daily');
 loadSubarenda();
 loadInquiries();
 loadModerators();

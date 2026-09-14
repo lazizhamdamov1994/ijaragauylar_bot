@@ -47,6 +47,7 @@ from bot.db import (
     block_phone,
     cancel_subscription,
     count_active_subscribers,
+    count_new_users_in_period,
     get_active_subscription_id,
     get_listing,
     get_pending_listings,
@@ -55,6 +56,7 @@ from bot.db import (
     get_user,
     list_blocked_phones_page,
     reject_subscription,
+    stats_for_period,
     unblock_phone,
     update_listing_status,
 )
@@ -65,6 +67,7 @@ from bot.fraud_detection import (
     count_reports_made,
     count_reports_received,
     get_flagged_users,
+    get_period_bounds,
     is_banned,
     unban_user,
 )
@@ -379,6 +382,29 @@ def pct_change(old, new):
     if not old:
         return None if not new else 100.0
     return round(((new - old) / old) * 100, 1)
+
+
+@router.get("/api/admin/period-stats")
+def api_admin_period_stats(period: str = Query("daily"), user: str = Depends(check_auth)):
+    """Kunlik/haftalik/oylik/yillik statistika - bot ichidagi "Statistika"
+    tugmasi (bot/menu.py:show_stats, bot/fraud_detection.py:render_period_stats)
+    bilan BIR XIL davr hisoblash mantig'i (get_period_bounds/stats_for_period),
+    faqat web admin panelda kartochkalar shaklida."""
+    if period not in ("daily", "weekly", "monthly", "yearly"):
+        raise HTTPException(status_code=400, detail="invalid_period")
+    start, end, prev_start, prev_end, label, prev_label = get_period_bounds(period)
+    current = stats_for_period(start, end)
+    previous = stats_for_period(prev_start, prev_end)
+    new_users = count_new_users_in_period(start, end)
+    new_users_prev = count_new_users_in_period(prev_start, prev_end)
+    return {
+        "label": label,
+        "prev_label": prev_label,
+        "new_users": new_users,
+        "new_users_prev": new_users_prev,
+        "current": current,
+        "previous": previous,
+    }
 
 
 @router.get("/api/moderator-stats")
