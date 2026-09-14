@@ -411,7 +411,7 @@
     border-radius: var(--radius-pill); font-weight: 700; font-size: 14.5px; cursor: pointer; transition: border-color .15s;
   }
   .sidebar-cta-secondary:hover { border-color: var(--ink); }
-  .sidebar-note { font-size: 12.5px; color: var(--muted); text-align: center; }
+  .sidebar-note { font-size: 12.5px; color: var(--muted); text-align: center; margin-top: 10px; }
 
   .phone-lock { display: none; margin: 16px 0 4px; }
   .phone-lock.open { display: block; animation: phoneLockIn .25s ease; }
