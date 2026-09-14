@@ -9,7 +9,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 
 from common.config import ADMIN_IDS, BOT_TOKEN, BOT_USERNAME, CHANNEL_ID, CHANNEL_USERNAME
 from common.db import (
@@ -105,6 +105,15 @@ def update_listing_inquiry(inquiry_id: int, status: str = Query(...), user: str 
     return {"ok": True}
 
 
+@router.post("/api/listing-inquiries/{inquiry_id}/delete")
+def delete_listing_inquiry(inquiry_id: int, user: str = Depends(check_auth)):
+    conn = db()
+    conn.execute("DELETE FROM listing_inquiries WHERE id = ?", (inquiry_id,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
 @router.post("/api/subarenda-lead")
 async def submit_subarenda_lead(request: Request):
     data = await request.json()
@@ -115,10 +124,14 @@ async def submit_subarenda_lead(request: Request):
     narx_talab = (data.get("narx_talab") or "").strip()[:50]
     if not full_name or not phone or not manzil:
         raise HTTPException(status_code=400, detail="Majburiy maydonlar to'ldirilmagan")
+    # Kirgan foydalanuvchi bo'lsa, so'rov uning kabinetidagi "Mening
+    # so'rovlarim"da ko'rinishi uchun user_id yozib qo'yiladi.
+    tg_user = get_current_tg_user(request)
+    sender_uid = tg_user["uid"] if tg_user else None
     conn = db()
     conn.execute(
-        "INSERT INTO subarenda_requests (full_name, phone, manzil, xona, narx_talab, status, created_at) VALUES (?,?,?,?,?,'yangi',?)",
-        (full_name, phone, manzil, xona, narx_talab, now_str()),
+        "INSERT INTO subarenda_requests (user_id, full_name, phone, manzil, xona, narx_talab, status, created_at) VALUES (?,?,?,?,?,?,'yangi',?)",
+        (sender_uid, full_name, phone, manzil, xona, narx_talab, now_str()),
     )
     conn.commit()
     conn.close()
@@ -139,6 +152,15 @@ def update_subarenda_request(req_id: int, status: str = Query(...), user: str = 
         raise HTTPException(status_code=400)
     conn = db()
     conn.execute("UPDATE subarenda_requests SET status = ? WHERE id = ?", (status, req_id))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+@router.post("/api/subarenda-requests/{req_id}/delete")
+def delete_subarenda_request(req_id: int, user: str = Depends(check_auth)):
+    conn = db()
+    conn.execute("DELETE FROM subarenda_requests WHERE id = ?", (req_id,))
     conn.commit()
     conn.close()
     return {"ok": True}
@@ -861,6 +883,53 @@ async def api_admin_reply_support_request(request_id: int, reply: str = Query(..
     if not row:
         raise HTTPException(status_code=404, detail="not_found")
     await notify_telegram(row["user_id"], f"\U0001F4AC Qo'llab-quvvatlash so'rovingizga javob keldi:\n\n{html.escape(reply)}")
+    return {"ok": True}
+
+
+@router.post("/api/admin/support-requests/{request_id}/delete")
+def api_admin_delete_support_request(request_id: int, user: str = Depends(check_auth)):
+    conn = db()
+    conn.execute("DELETE FROM support_requests WHERE id = ?", (request_id,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+# ============================= ADMIN: KANALGA TO'G'RIDAN-TO'G'RI POST YUBORISH =============================
+# Botdagi tasdiqlash oqimidan tashqari - admin muhim e'lonlarni (aksiya,
+# e'lon, ogohlantirish) veb admin paneldan to'g'ridan-to'g'ri kanalga
+# yuborishi uchun (masalan, listingga bog'liq bo'lmagan e'lonlar).
+
+@router.post("/api/admin/channel-post")
+async def api_admin_channel_post(
+    user: str = Depends(check_auth), text: str = Form(...), photo: UploadFile = File(None)
+):
+    text = text.strip()[:4000]
+    if not text:
+        raise HTTPException(status_code=400, detail="empty_text")
+    if not BOT_TOKEN or not CHANNEL_ID:
+        raise HTTPException(status_code=503, detail="not_configured")
+    async with httpx.AsyncClient(timeout=30) as client:
+        try:
+            if photo and photo.filename:
+                content = await photo.read()
+                resp = await client.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
+                    data={"chat_id": str(CHANNEL_ID), "caption": text, "parse_mode": "HTML"},
+                    files={"photo": (photo.filename, content)},
+                )
+            else:
+                resp = await client.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                    json={"chat_id": CHANNEL_ID, "text": text, "parse_mode": "HTML"},
+                )
+        except Exception:
+            logger.exception("Kanalga to'g'ridan-to'g'ri post yuborishda xatolik")
+            raise HTTPException(status_code=502, detail="send_failed")
+    data = resp.json()
+    if not data.get("ok"):
+        logger.error("Kanalga post yuborishda Telegram xatoligi: %s", data)
+        raise HTTPException(status_code=502, detail=data.get("description", "Telegram xatoligi"))
     return {"ok": True}
 
 

@@ -162,6 +162,7 @@ ADMIN_HTML = """<!DOCTYPE html>
   .sr-actions { display: flex; gap: 8px; }
   .sr-actions button { flex: 1; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; font-size: 12.5px; font-weight: 700; cursor: pointer; }
   .sr-actions button.approve { background: #16A34A; color: #fff; border: none; }
+  .sr-actions button.reject { color: #DC2626; border-color: #FCA5A5; }
   .sr-status { font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 7px; text-transform: uppercase; }
   .sr-status.yangi { background: var(--brand-light); color: var(--brand); }
   .sr-status.bogl { background: #E8F1FE; color: #2563EB; }
@@ -450,6 +451,14 @@ ADMIN_HTML = """<!DOCTYPE html>
       <div class="form-row"><label>Matn</label><textarea id="broadcast-body" rows="3" maxlength="1000"></textarea></div>
       <button class="btn btn-primary" onclick="sendBroadcast()">Yuborish</button>
     </div>
+    <div class="panel" style="margin-top:16px;">
+      <h2>\U0001F4E2 Kanalga to'g'ridan-to'g'ri post yuborish</h2>
+      <div class="panel-sub">Muhim e'lon/ogohlantirishlar uchun - moderatsiya navbatidan tashqari, darhol kanalga chiqadi</div>
+      <div class="form-row" style="margin-top:12px;"><label>Matn (HTML formatlashga ruxsat: &lt;b&gt;, &lt;i&gt;)</label><textarea id="channelpost-text" rows="4" maxlength="4000"></textarea></div>
+      <div class="form-row"><label>Rasm (ixtiyoriy)</label><input id="channelpost-photo" type="file" accept="image/*"></div>
+      <button class="btn btn-primary" onclick="sendChannelPost()">\U0001F4E2 Kanalga yuborish</button>
+      <div id="channelpost-result" style="margin-top:10px;font-size:13px;"></div>
+    </div>
   </div>
 
   <div id="tab-support" class="tab-page">
@@ -716,12 +725,18 @@ async function loadSubarenda() {
       <div class="sr-actions">
         <button onclick="updateSubarenda(${r.id}, 'bogl')">\U0001F4DE Bog'lanildi</button>
         <button class="approve" onclick="updateSubarenda(${r.id}, 'yopiq')">\u2705 Yakunlandi</button>
+        <button class="reject" onclick="deleteSubarenda(${r.id})">\U0001F5D1 O'chirish</button>
       </div>
     </div>
   `).join('');
 }
 async function updateSubarenda(id, status) {
   await fetch(`/api/subarenda-requests/${id}?status=${status}`, { method: 'POST' });
+  loadSubarenda();
+}
+async function deleteSubarenda(id) {
+  if (!confirm("So'rovni butunlay o'chirasizmi?")) return;
+  await fetch(`/api/subarenda-requests/${id}/delete`, { method: 'POST' });
   loadSubarenda();
 }
 
@@ -747,12 +762,18 @@ async function loadInquiries() {
       <div class="sr-actions">
         <a href="/uy/${r.listing_id}" target="_blank" style="flex:1;"><button style="width:100%;">\U0001F3E0 E'lonni ko'rish</button></a>
         <button class="approve" onclick="updateInquiry(${r.id})">\u2705 Ko'rib chiqildi</button>
+        <button class="reject" onclick="deleteInquiry(${r.id})">\U0001F5D1 O'chirish</button>
       </div>
     </div>
   `).join('');
 }
 async function updateInquiry(id) {
   await fetch(`/api/listing-inquiries/${id}?status=yopiq`, { method: 'POST' });
+  loadInquiries();
+}
+async function deleteInquiry(id) {
+  if (!confirm("So'rovni butunlay o'chirasizmi?")) return;
+  await fetch(`/api/listing-inquiries/${id}/delete`, { method: 'POST' });
   loadInquiries();
 }
 
@@ -985,6 +1006,35 @@ async function sendBroadcast() {
   alert(`Xabar ${data.sent || 0} ta foydalanuvchiga yuborildi.`);
 }
 
+async function sendChannelPost() {
+  const text = document.getElementById('channelpost-text').value.trim();
+  const photoInput = document.getElementById('channelpost-photo');
+  const resultEl = document.getElementById('channelpost-result');
+  if (!text) { alert('Matnni kiriting.'); return; }
+  if (!confirm('Bu post DARHOL kanalga chiqadi. Davom etamizmi?')) return;
+  const form = new FormData();
+  form.append('text', text);
+  if (photoInput.files[0]) form.append('photo', photoInput.files[0]);
+  resultEl.textContent = 'Yuborilmoqda...';
+  resultEl.style.color = 'var(--muted)';
+  try {
+    const res = await fetch('/api/admin/channel-post', { method: 'POST', body: form });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      resultEl.textContent = '✅ Kanalga yuborildi.';
+      resultEl.style.color = '#16A34A';
+      document.getElementById('channelpost-text').value = '';
+      photoInput.value = '';
+    } else {
+      resultEl.textContent = '❌ Xatolik: ' + (data.detail || 'noma\'lum xatolik');
+      resultEl.style.color = '#DC2626';
+    }
+  } catch (err) {
+    resultEl.textContent = '❌ Tarmoq xatoligi.';
+    resultEl.style.color = '#DC2626';
+  }
+}
+
 async function loadSupport() {
   const res = await fetch('/api/admin/support-requests');
   const rows = await res.json();
@@ -1000,6 +1050,7 @@ async function loadSupport() {
       <div class="inline-form" style="margin-top:8px;">
         <div class="form-row"><input type="text" id="support-reply-${r.id}" placeholder="Javob yozing..."></div>
         <button class="btn btn-primary" onclick="replySupportRequest(${r.id})">Yuborish</button>
+        <button class="btn btn-danger" onclick="deleteSupportRequest(${r.id})">\U0001F5D1 O'chirish</button>
       </div>
     </div>
   `).join('') : `<div class="empty-note">Hozircha so'rov yo'q</div>`;
@@ -1009,6 +1060,11 @@ async function replySupportRequest(id) {
   const reply = input.value.trim();
   if (!reply) return;
   await fetch(`/api/admin/support-requests/${id}/reply?reply=${encodeURIComponent(reply)}`, { method: 'POST' });
+  loadSupport();
+}
+async function deleteSupportRequest(id) {
+  if (!confirm("So'rovni butunlay o'chirasizmi?")) return;
+  await fetch(`/api/admin/support-requests/${id}/delete`, { method: 'POST' });
   loadSupport();
 }
 
