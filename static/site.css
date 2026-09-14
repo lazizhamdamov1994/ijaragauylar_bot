@@ -24,8 +24,14 @@
   .ico svg { width: 100%; height: 100%; }
   button, input, select { font-family: inherit; }
 
-  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
-  @media (max-width: 640px) { .wrap { padding: 0 16px; } }
+  /* MUHIM: faqat chap-o'ng (padding-left/right) - to'liq "padding"
+     shorthand YOZILMAYDI, chunki bu ".wrap" ko'plab joyda <main>ning
+     ichida ham ishlatiladi va shorthand "main { padding: 56px 0 60px; }"
+     qoidasining tepa/pastini 0'ga tushirib, "O'xshash e'lonlar" kabi
+     bo'limlarni footer'ga yopishtirib qo'yardi (klass elementdan ko'ra
+     ko'proq aniq bo'lgani uchun ustun chiqadi). */
+  .wrap { max-width: 1280px; margin: 0 auto; padding-left: 24px; padding-right: 24px; }
+  @media (max-width: 640px) { .wrap { padding-left: 16px; padding-right: 16px; } }
 
   /* ============ HEADER ============ */
   header.site-header {
