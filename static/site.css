@@ -135,10 +135,16 @@
      ga qarang) ============ */
   .cs-wrap { position: relative; }
   .cs-wrap.cs-enhanced select { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
-  .cs-trigger {
+  /* MUHIM: bu yerda oddiy ".cs-trigger" emas, ".cs-wrap .cs-trigger" ishlatiladi -
+     chunki trigger ham <button>, va masalan ".search-pill button" kabi joyning
+     o'zidagi umumiy tugma qoidalari (qizil fon va h.k.) aynan shu elementga ham
+     tegib, uni qidiruv tugmasidek qizil pillga aylantirib qo'yishi mumkin edi -
+     bu yerdagi ikki klassli selektor ko'proq aniq (specificity) bo'lgani uchun ustun chiqadi. */
+  .cs-wrap .cs-trigger {
     display: none; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
-    background: none; border: none; outline: none; cursor: pointer; font: inherit;
-    font-size: 13.5px; font-weight: 500; color: var(--ink-soft); padding: 0; text-align: left;
+    background: none !important; color: var(--ink-soft) !important; border: none !important; outline: none;
+    cursor: pointer; font: inherit; border-radius: 0 !important;
+    font-size: 13.5px; font-weight: 500; padding: 0 !important; text-align: left;
   }
   .cs-wrap.cs-enhanced .cs-trigger { display: flex; }
   .cs-arrow {
