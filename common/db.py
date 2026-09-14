@@ -136,6 +136,12 @@ def init_schema() -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS user_notifications (
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, title TEXT, body TEXT,
         is_read INTEGER DEFAULT 0, created_at TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS listing_price_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL,
+        old_narx TEXT, new_narx TEXT, changed_at TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS viewing_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+        requested_time TEXT, status TEXT DEFAULT 'pending', created_at TEXT)""")
     conn.commit()
     conn.close()
 
@@ -156,6 +162,7 @@ def migrate_schema() -> None:
         }),
         ("subscriptions", {"months": "INTEGER DEFAULT 1", "price_charged": "INTEGER", "target_listing_id": "INTEGER", "receipt_warning": "TEXT"}),
         ("users", {"free_views_used": "INTEGER DEFAULT 0", "bonus_views": "INTEGER DEFAULT 0", "referred_by": "INTEGER", "referral_bonus_given": "INTEGER DEFAULT 0"}),
+        ("listing_inquiries", {"sender_user_id": "INTEGER"}),
     ):
         existing = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
         for col, coltype in needed.items():
@@ -279,6 +286,140 @@ def get_favorite_listings_full(user_id: int) -> list:
             d["photos"] = []
         result.append(d)
     return result
+
+
+# ============================= E'LONNI TAHRIRLASH / YOPISH / O'CHIRISH (bot va sayt UMUMIY) =============================
+
+LISTING_EDITABLE_FIELDS = ("manzil", "moljal", "kimlarga", "xona", "qulaylik", "narx")
+
+
+def update_listing_fields(listing_id: int, updates: dict) -> None:
+    """E'lonning ba'zi maydonlarini yangilaydi (FAQAT ruxsat etilgan
+    maydonlar - telefon va rasmlar bu yerdan o'zgartirilmaydi). Narx
+    o'zgarsa, `listing_price_history`ga eski/yangi qiymat yozib qo'yiladi -
+    e'lon sahifasidagi "Narx tarixi" shundan o'qiladi."""
+    updates = {k: v for k, v in updates.items() if k in LISTING_EDITABLE_FIELDS and v is not None}
+    if not updates:
+        return
+    conn = db()
+    if "narx" in updates:
+        row = conn.execute("SELECT narx FROM listings WHERE id = ?", (listing_id,)).fetchone()
+        old_narx = row["narx"] if row else None
+        if old_narx is not None and old_narx != updates["narx"]:
+            conn.execute(
+                "INSERT INTO listing_price_history (listing_id, old_narx, new_narx, changed_at) VALUES (?, ?, ?, ?)",
+                (listing_id, old_narx, updates["narx"], now_str()),
+            )
+    set_clause = ", ".join(f"{k} = ?" for k in updates)
+    conn.execute(f"UPDATE listings SET {set_clause} WHERE id = ?", (*updates.values(), listing_id))
+    conn.commit()
+    conn.close()
+
+
+def get_price_history(listing_id: int) -> list:
+    conn = db()
+    rows = conn.execute(
+        "SELECT * FROM listing_price_history WHERE listing_id = ? ORDER BY changed_at ASC", (listing_id,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def delete_listing_row(listing_id: int) -> None:
+    conn = db()
+    conn.execute("DELETE FROM listings WHERE id = ?", (listing_id,))
+    conn.commit()
+    conn.close()
+
+
+def mark_listing_expired(listing_id: int) -> None:
+    """Foydalanuvchi o'zining e'lonini "topshirildi" deb belgilashi -
+    (bot/db.py'da AVVAL shu yerda edi, endi web ham ishlatgani uchun
+    umumiy joyga ko'chirildi; bot/db.py hozir buni faqat qayta eksport
+    qiladi)."""
+    conn = db()
+    conn.execute("UPDATE listings SET expired = 1 WHERE id = ?", (listing_id,))
+    conn.commit()
+    conn.close()
+
+
+# ============================= KO'RISH VAQTINI BRON QILISH (bot va sayt UMUMIY) =============================
+# MUHIM: bu yerdagi funksiyalar faqat SO'ROVNI SAQLAYDI. Kimga ruxsat
+# berish (Limit obunasi yoki bepul ko'rish bor-yo'qligi) - chaqiruvchi kod
+# tomonidan, bu yerga yozishdan OLDIN, xuddi telefon ko'rsatishdagi BILAN
+# AYNAN BIR XIL qoida bilan tekshiriladi (bot/menu.py:reveal_phone_core,
+# web/pages.py'dagi is_web_subscribed tekshiruvi) - shu orqali bu funksiya
+# to'lov devorini (paywall) aylanib o'tish yo'liga aylanib qolmaydi.
+
+def create_viewing_request(listing_id: int, user_id: int, requested_time: str) -> int:
+    conn = db()
+    conn.execute(
+        "INSERT INTO viewing_requests (listing_id, user_id, requested_time, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
+        (listing_id, user_id, requested_time, now_str()),
+    )
+    conn.commit()
+    req_id = conn.execute("SELECT last_insert_rowid() id").fetchone()["id"]
+    conn.close()
+    return req_id
+
+
+def get_viewing_request(request_id: int):
+    conn = db()
+    row = conn.execute("SELECT * FROM viewing_requests WHERE id = ?", (request_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_viewing_request_status(request_id: int, status: str) -> None:
+    conn = db()
+    conn.execute("UPDATE viewing_requests SET status = ? WHERE id = ?", (status, request_id))
+    conn.commit()
+    conn.close()
+
+
+def count_viewing_requests_today(user_id: int) -> int:
+    today = datetime.now().strftime("%Y-%m-%d")
+    conn = db()
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM viewing_requests WHERE user_id = ? AND substr(created_at,1,10) = ?", (user_id, today)
+    ).fetchone()["c"]
+    conn.close()
+    return n
+
+
+# ============================= "MENING SO'ROVLARIM" (kabinet - foydalanuvchi o'zi yuborgan so'rovlar) =============================
+
+def get_sent_inquiries(user_id: int) -> list:
+    conn = db()
+    rows = conn.execute(
+        """SELECT li.*, l.manzil AS listing_manzil FROM listing_inquiries li
+           LEFT JOIN listings l ON l.id = li.listing_id
+           WHERE li.sender_user_id = ? ORDER BY li.created_at DESC""",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_sent_subarenda_requests(user_id: int) -> list:
+    conn = db()
+    rows = conn.execute(
+        "SELECT * FROM subarenda_requests WHERE user_id = ? ORDER BY created_at DESC", (user_id,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_sent_viewing_requests(user_id: int) -> list:
+    conn = db()
+    rows = conn.execute(
+        """SELECT vr.*, l.manzil AS listing_manzil FROM viewing_requests vr
+           LEFT JOIN listings l ON l.id = vr.listing_id
+           WHERE vr.user_id = ? ORDER BY vr.created_at DESC""",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 # ============================= QO'LLAB-QUVVATLASH SO'ROVLARI (foydalanuvchi -> admin) =============================

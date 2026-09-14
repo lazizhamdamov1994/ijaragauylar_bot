@@ -26,6 +26,14 @@ from common.db import (  # noqa: E402
     get_blocked_phone,
     is_phone_blocked,
     init_and_migrate,
+    mark_listing_expired,
+    update_listing_fields,
+    get_price_history,
+    delete_listing_row,
+    create_viewing_request,
+    get_viewing_request,
+    update_viewing_request_status,
+    count_viewing_requests_today,
 )
 
 
@@ -182,13 +190,6 @@ def set_listing_receipt_warning(listing_id: int, warning: str) -> None:
 def confirm_listing_still_available(listing_id: int) -> None:
     conn = db()
     conn.execute("UPDATE listings SET last_confirmed_at = ? WHERE id = ?", (now_str(), listing_id))
-    conn.commit()
-    conn.close()
-
-
-def mark_listing_expired(listing_id: int) -> None:
-    conn = db()
-    conn.execute("UPDATE listings SET expired = 1 WHERE id = ?", (listing_id,))
     conn.commit()
     conn.close()
 
