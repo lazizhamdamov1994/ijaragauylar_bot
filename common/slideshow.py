@@ -26,6 +26,8 @@ import tempfile
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
+from common.watermark import load_logo
+
 logger = logging.getLogger(__name__)
 
 CANVAS_W, CANVAS_H = 1080, 1920  # Instagram Reels/Stories uchun tik (9:16) format
@@ -71,45 +73,27 @@ def _fit_frame(image_bytes: bytes) -> Image.Image:
     return bg
 
 
-def _vertical_gradient_scrim(y0: int, y1: int, peak_alpha: int) -> Image.Image:
-    """y0..y1 oralig'ida yumshoq (qattiq chiziqsiz) qorong'ilashtiruvchi
-    qatlam - kinematik "caption card" ko'rinishi uchun (qattiq to'rtburchak
-    emas, yuqori/pastki chetlari asta so'nadi)."""
-    band_h = y1 - y0
-    gradient = Image.new("L", (1, band_h), 0)
-    half = band_h // 2
-    for y in range(band_h):
-        dist_from_edge = min(y, band_h - 1 - y)
-        alpha = min(peak_alpha, int(peak_alpha * (dist_from_edge / max(half * 0.5, 1))))
-        gradient.putpixel((0, y), alpha)
-    gradient = gradient.resize((CANVAS_W, band_h))
-    layer = Image.new("RGBA", (CANVAS_W, CANVAS_H), (0, 0, 0, 0))
-    black = Image.new("RGBA", (CANVAS_W, band_h), (10, 8, 14, 255))
-    black.putalpha(gradient)
-    layer.paste(black, (0, y0), black)
-    return layer
-
-
-def _draw_spaced_text(draw, cx: int, y: int, text: str, font, fill, tracking: int = 6):
+def _draw_spaced_text(draw, cx: int, y: int, text: str, font, fill, tracking: int = 6, shadow=True):
     """Harflar orasiga qo'shimcha bo'shliq (tracking) qo'yib, markazlashtirib
-    chizadi - katta sarlavhalarni "premium" ko'rinishga keltiradi."""
+    chizadi - katta sarlavhalarni "premium" ko'rinishga keltiradi. Karta endi
+    QATTIQ (opaque) fonga ega bo'lgani uchun og'ir ko'p yo'nalishli soya
+    SHART emas - bitta yumshoq soya yetarli va toza chiqadi."""
     widths = [draw.textbbox((0, 0), ch, font=font)[2] for ch in text]
     total_w = sum(widths) + tracking * (len(text) - 1)
     x = cx - total_w // 2
     for ch, w in zip(text, widths):
-        for dx, dy in ((2, 2), (-2, 2), (0, 3)):
-            draw.text((x + dx, y + dy), ch, font=font, fill=(0, 0, 0, 160))
+        if shadow:
+            draw.text((x + 2, y + 3), ch, font=font, fill=(0, 0, 0, 110))
         draw.text((x, y), ch, font=font, fill=fill)
         x += w + tracking
 
 
-def _centered_text(draw, y, text, font, fill=(255, 255, 255, 255), shadow=True):
+def _centered_text(draw, y, text, font, fill=(255, 255, 255, 255), shadow=False):
     bbox = draw.textbbox((0, 0), text, font=font)
     w = bbox[2] - bbox[0]
     x = (CANVAS_W - w) // 2
     if shadow:
-        for dx, dy in ((2, 2), (-1, 2), (0, 3)):
-            draw.text((x + dx, y + dy), text, font=font, fill=(0, 0, 0, 170))
+        draw.text((x + 2, y + 3), text, font=font, fill=(0, 0, 0, 110))
     draw.text((x, y), text, font=font, fill=fill)
     return w
 
@@ -127,8 +111,6 @@ def _centered_text_with_dot(draw, y, text, font, fill, dot_color):
     dot_cy = y - bbox[1] + text_h // 2
     draw.ellipse([x0, dot_cy - dot_r, x0 + dot_r * 2, dot_cy + dot_r], fill=(*dot_color, 255))
     tx = x0 + dot_r * 2 + gap
-    for dx, dy in ((2, 2), (-1, 2), (0, 3)):
-        draw.text((tx + dx, y + dy), text, font=font, fill=(0, 0, 0, 170))
     draw.text((tx, y), text, font=font, fill=fill)
 
 
@@ -140,7 +122,7 @@ def _draw_price_chip(draw, cy: int, text: str, font):
     x0 = (CANVAS_W - chip_w) // 2
     y0 = cy - chip_h // 2
     draw.rounded_rectangle(
-        [x0 + 4, y0 + 6, x0 + chip_w + 4, y0 + chip_h + 6], radius=chip_h // 2, fill=(0, 0, 0, 90),
+        [x0, y0 + 5, x0 + chip_w, y0 + chip_h + 5], radius=chip_h // 2, fill=(0, 0, 0, 70),
     )
     draw.rounded_rectangle(
         [x0, y0, x0 + chip_w, y0 + chip_h], radius=chip_h // 2, fill=(*BRAND_ACCENT, 255),
@@ -148,17 +130,26 @@ def _draw_price_chip(draw, cy: int, text: str, font):
     draw.text((x0 + pad_x - bbox[0], y0 + pad_y - bbox[1]), text, font=font, fill=(255, 255, 255, 255))
 
 
-# Sarlavha kartasi joylashuvi - CANVAS_H // 2 (960px) atrofida ANIQ
-# markazlashtirilgan (Instagram Reels'da ko'z avval shu joyga tushadi;
-# pastki ~20% odatda Instagram'ning o'z sarlavha/tugmalari ostida qoladi,
-# shuning uchun markazni haqiqiy ekran o'rtasidan biroz YUQORIROQ emas,
-# balki AYNAN CANVAS_H//2'ga tenglashtiramiz).
-_CARD_CENTER = CANVAS_H // 2  # 960
-CARD_TOP, CARD_BOTTOM = _CARD_CENTER - 320, _CARD_CENTER + 280
-TITLE_Y = _CARD_CENTER - 250
-ACCENT_BAR_Y = _CARD_CENTER - 145
-ADDRESS_Y = _CARD_CENTER - 100
-PRICE_CY = _CARD_CENTER + 60
+# ===== Sarlavha kartasi ("branded card") =====
+# ENG MUHIM tuzatish: avvalgi versiya matnni faqat yumshoq gradient ustiga
+# chizardi - shuning uchun rasm och/och-bo'lakli bo'lsa, matn deyarli
+# o'qilmas darajada aralashib ketardi (kontrast rasmga bog'liq bo'lib
+# qolgan edi). Endi matn HAR DOIM QATTIQ (deyarli to'liq xira) yumaloq
+# burchakli karta ustiga chiziladi - ostidagi rasm nima bo'lishidan qat'iy
+# nazar, kontrast har doim bir xil va professional ko'rinadi.
+CARD_W, CARD_H = 860, 620
+_CARD_CENTER = CANVAS_H // 2  # 960 - Instagram Reels'da ko'z avval shu joyga tushadi
+CARD_X0, CARD_X1 = (CANVAS_W - CARD_W) // 2, (CANVAS_W + CARD_W) // 2
+CARD_TOP, CARD_BOTTOM = _CARD_CENTER - CARD_H // 2, _CARD_CENTER + CARD_H // 2
+CARD_RADIUS = 40
+CARD_FILL = (13, 12, 22, 232)
+
+LOGO_TOP = CARD_TOP + 46
+LOGO_MAX_H = 96
+TITLE_Y = LOGO_TOP + LOGO_MAX_H + 30
+ACCENT_BAR_Y = TITLE_Y + 84
+ADDRESS_Y = ACCENT_BAR_Y + 42
+PRICE_CY = ADDRESS_Y + 150
 
 # Pastki CTA banneri - Instagram'ning o'z pastki UI'si (izoh, like/share
 # ikonalari) odatda eng pastki ~220px'ni yopib qo'yadi, shuning uchun
@@ -166,6 +157,44 @@ PRICE_CY = _CARD_CENTER + 60
 CTA_BANNER_TOP, CTA_BANNER_BOTTOM = 1560, 1750
 CTA_LINE1 = "UY EGASI RAQAMI"
 CTA_LINE2 = "TELEGRAM KANALIMIZDA"
+
+
+def _paste_logo_centered(overlay: Image.Image, cy_top: int, max_h: int, opacity: float = 1.0) -> int:
+    """Logotipni (agar topilsa) markazlashtirib, berilgan balandlikda
+    joylaydi - qaysi balandlikda tugaganini (pastki chegara y) qaytaradi,
+    shundan keyingi elementlar shu asosda joylashtiriladi. Logo topilmasa,
+    hech narsa chizmay, faqat max_h'ni pastki chegara sifatida qaytaradi
+    (joylashuv barqaror qoladi, logo bor-yo'qligidan qat'iy nazar)."""
+    logo = load_logo()
+    if logo is None:
+        return cy_top + max_h
+    ratio = max_h / logo.height
+    logo_w = max(int(logo.width * ratio), 1)
+    resized = logo.resize((logo_w, max_h), Image.LANCZOS)
+    if opacity < 1.0:
+        alpha = resized.split()[-1].point(lambda p: int(p * opacity))
+        resized.putalpha(alpha)
+    overlay.alpha_composite(resized, ((CANVAS_W - logo_w) // 2, cy_top))
+    return cy_top + max_h
+
+
+def _draw_branded_card(canvas: Image.Image) -> Image.Image:
+    """Qattiq (opaque), yumaloq burchakli, yumshoq soyali karta - sarlavha
+    matni doim shu karta ustiga chiziladi (_draw_intro_frame)."""
+    canvas = canvas.convert("RGBA")
+    overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    # Karta ortidagi yumshoq soya (biroz pastroq va kattaroq, xira qora).
+    draw.rounded_rectangle(
+        [CARD_X0 - 6, CARD_TOP + 10, CARD_X1 + 6, CARD_BOTTOM + 16], radius=CARD_RADIUS + 6, fill=(0, 0, 0, 60),
+    )
+    draw.rounded_rectangle([CARD_X0, CARD_TOP, CARD_X1, CARD_BOTTOM], radius=CARD_RADIUS, fill=CARD_FILL)
+    # Brend rangidagi yupqa chekka chiziq - kartaning "dizayn qilingan"
+    # ekanini ta'kidlaydi (tasodifiy quti emas).
+    draw.rounded_rectangle(
+        [CARD_X0, CARD_TOP, CARD_X1, CARD_BOTTOM], radius=CARD_RADIUS, outline=(*BRAND_ACCENT, 140), width=2,
+    )
+    return Image.alpha_composite(canvas, overlay)
 
 
 def _draw_cta_banner(canvas: Image.Image) -> Image.Image:
@@ -184,8 +213,8 @@ def _draw_cta_banner(canvas: Image.Image) -> Image.Image:
 
     line1_font = _load_font(52)
     line2_font = _load_font(42)
-    _centered_text(draw, CTA_BANNER_TOP + 18, CTA_LINE1, line1_font, fill=(255, 255, 255, 255), shadow=False)
-    _centered_text(draw, CTA_BANNER_TOP + 88, CTA_LINE2, line2_font, fill=(255, 255, 255, 255), shadow=False)
+    _centered_text(draw, CTA_BANNER_TOP + 18, CTA_LINE1, line1_font, fill=(255, 255, 255, 255))
+    _centered_text(draw, CTA_BANNER_TOP + 88, CTA_LINE2, line2_font, fill=(255, 255, 255, 255))
 
     return Image.alpha_composite(canvas, overlay).convert("RGB")
 
@@ -195,23 +224,25 @@ def _draw_intro_frame(canvas: Image.Image, step: int, manzil: str, narx: str) ->
     step 0 -> faqat sarlavha, step 1 -> + manzil, step 2 -> + narx.
     Pastki CTA banneri ALOHIDA (_draw_cta_banner) - bu kadrga ham, qolgan
     barcha rasmlarga ham qo'shiladi (build_slideshow_video ichida)."""
-    canvas = canvas.convert("RGBA")
-    overlay = _vertical_gradient_scrim(CARD_TOP, CARD_BOTTOM, peak_alpha=215)
+    canvas = _draw_branded_card(canvas)
+    overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    title_font = _load_font(94)
-    address_font = _load_font(50)
-    price_font = _load_font(60)
+    _paste_logo_centered(overlay, LOGO_TOP, LOGO_MAX_H)
 
-    _draw_spaced_text(draw, CANVAS_W // 2, TITLE_Y, "MAKLERSIZ UY", title_font, fill=(255, 255, 255, 255), tracking=8)
-    bar_w = 130
+    title_font = _load_font(74)
+    address_font = _load_font(48)
+    price_font = _load_font(58)
+
+    _draw_spaced_text(draw, CANVAS_W // 2, TITLE_Y, "MAKLERSIZ UY", title_font, fill=(255, 255, 255, 255), tracking=7)
+    bar_w = 110
     draw.rounded_rectangle(
-        [(CANVAS_W - bar_w) // 2, ACCENT_BAR_Y, (CANVAS_W + bar_w) // 2, ACCENT_BAR_Y + 6],
+        [(CANVAS_W - bar_w) // 2, ACCENT_BAR_Y, (CANVAS_W + bar_w) // 2, ACCENT_BAR_Y + 5],
         radius=3, fill=(*BRAND_ACCENT, 255),
     )
 
     if step >= 1:
-        _centered_text_with_dot(draw, ADDRESS_Y, (manzil or "").strip()[:42], address_font, fill=(235, 238, 245, 255), dot_color=BRAND_ACCENT)
+        _centered_text_with_dot(draw, ADDRESS_Y, (manzil or "").strip()[:42], address_font, fill=(225, 228, 238, 255), dot_color=BRAND_ACCENT)
 
     if step >= 2:
         _draw_price_chip(draw, PRICE_CY, (narx or "").strip()[:24], price_font)
