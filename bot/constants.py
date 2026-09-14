@@ -62,7 +62,9 @@ logger = logging.getLogger(__name__)
     ADMIN_ADD_WAIT,
     LOCATION_OPTIONAL,
     SLIDESHOW_CONFIRM,
-) = range(35)
+    EDIT_LISTING_VALUE,
+    VIEWING_TIME_WAIT,
+) = range(37)
 
 BTN_ELON = "\U0001F4DD E'lon berish"
 BTN_LISTINGS = "\U0001F4CB Mening e'lonlarim"

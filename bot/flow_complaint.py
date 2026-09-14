@@ -183,17 +183,27 @@ async def complain_reason_router(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def expire_listing(context: ContextTypes.DEFAULT_TYPE, listing_id: int, notify_owner: bool = False) -> None:
-    """E'lonni \"topshirilgan\" deb belgilaydi. KANALDAGI POST HECH QACHON
-    o'chirilmaydi/tahrirlanmaydi - faqat bazada belgi qo'yiladi. \"Uy egasi
-    raqami\" tugmasi bosilganda shu belgi tekshiriladi."""
+    """E'lonni \"topshirilgan\" deb belgilaydi. Kanaldagi post O'CHIRILMAYDI
+    (kanal statistikasi/tarixi saqlanadi uchun), lekin MATNI (caption)
+    \u00ab\u274c BAND QILINDI\u00bb deb YANGILANADI - shu orqali tomoshabinlar buni
+    darhol ko'radi (tugmalar o'zgarmaydi - \"Uy egasi raqami\" tugmasi
+    bosilsa ham, `expired` belgisi allaqachon tekshirilib, raqam
+    ko'rsatilmaydi)."""
     mark_listing_expired(listing_id)
-    if notify_owner:
-        listing = get_listing(listing_id)
-        if listing:
-            try:
-                await context.bot.send_message(listing["user_id"], f"\u2139\ufe0f E'loningiz (#{listing_id}) \u00abtopshirilgan\u00bb deb belgilandi.")
-            except Exception:
-                logger.exception("Egasiga xabar yuborib bo'lmadi")
+    listing = get_listing(listing_id)
+    if listing and listing.get("channel_msg_id"):
+        try:
+            caption = "\u274c <b>BAND QILINDI / TOPSHIRILDI</b>\n\n" + build_caption(listing, context.bot.username)
+            await context.bot.edit_message_caption(
+                chat_id=CHANNEL_ID, message_id=listing["channel_msg_id"], caption=caption, parse_mode=ParseMode.HTML,
+            )
+        except Exception:
+            logger.exception("Kanaldagi postni \u00abband qilindi\u00bb deb belgilashda xatolik (listing_id=%s)", listing_id)
+    if notify_owner and listing:
+        try:
+            await context.bot.send_message(listing["user_id"], f"\u2139\ufe0f E'loningiz (#{listing_id}) \u00abtopshirilgan\u00bb deb belgilandi.")
+        except Exception:
+            logger.exception("Egasiga xabar yuborib bo'lmadi")
 
 
 async def selfexpire_router(update: Update, context: ContextTypes.DEFAULT_TYPE):

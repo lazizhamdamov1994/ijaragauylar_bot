@@ -55,6 +55,7 @@ from bot.flow_listing import *  # noqa: F401,F403
 from bot.flow_subscription import *  # noqa: F401,F403
 from bot.admin_moderation import *  # noqa: F401,F403
 from bot.flow_complaint import *  # noqa: F401,F403
+from bot.flow_edit import *  # noqa: F401,F403
 from bot.jobs import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
@@ -236,6 +237,14 @@ def main():
         persistent=False,
     )
 
+    edit_field_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(editfield_router, pattern=r"^editfield_\d+_\w+$")],
+        states={EDIT_LISTING_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, editfield_value_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(EDIT_LISTING_VALUE))]},
+        fallbacks=[CommandHandler("bekor", editfield_cancel)],
+        name="edit_field_conv",
+        persistent=False,
+    )
+
     app.add_handler(elon_conv)
     register_conv("elon_conv", elon_conv)  # force_reset_conversation funksiyasi buni topa olishi uchun
     app.add_handler(sub_conv)
@@ -254,6 +263,8 @@ def main():
     app.add_handler(admin_add_conv)
     app.add_handler(usersearch_conv)
     app.add_handler(addloc_conv)
+    app.add_handler(edit_field_conv)
+    register_conv("edit_field_conv", edit_field_conv)
     app.add_handler(MessageHandler(
         filters.Regex(f"^({re.escape(BTN_LISTINGS)}|{re.escape(BTN_HELP)}|{re.escape(BTN_LOCATION_ALERT)}|{re.escape(BTN_MY_LOCATIONS)}|{re.escape(BTN_CHANNEL)}|{re.escape(BTN_STATS)}|{re.escape(BTN_SUBSCRIBERS)}|{re.escape(BTN_SETTINGS)}|{re.escape(BTN_PENDING)}|{re.escape(BTN_BLOCKED)}|{re.escape(BTN_MODERATORS)}|{re.escape(BTN_FLAGGED)}|{re.escape(BTN_LISTINGS_MAP)}|{re.escape(BTN_ADMIN_PANEL)}|{re.escape(BTN_SUBARENDA)})$"),
         text_menu_router,
@@ -285,6 +296,10 @@ def main():
     app.add_handler(CallbackQueryHandler(staleignore_router, pattern=r"^staleignore_\d+$"))
     app.add_handler(CallbackQueryHandler(fraudblock_router, pattern=r"^fraudblock_\d+$"))
     app.add_handler(CallbackQueryHandler(selfexpire_router, pattern=r"^selfexpire_\d+$"))
+    app.add_handler(CallbackQueryHandler(editlisting_entry, pattern=r"^editlisting_\d+$"))
+    app.add_handler(CallbackQueryHandler(editcancelmenu_router, pattern=r"^editcancelmenu_\d+$"))
+    app.add_handler(CallbackQueryHandler(deletelisting_entry, pattern=r"^deletelisting_\d+$"))
+    app.add_handler(CallbackQueryHandler(deletelisting_confirm_router, pattern=r"^deletelistingyes_\d+$"))
     app.add_handler(CallbackQueryHandler(delloc_router, pattern=r"^delloc_\d+$"))
     app.add_handler(CallbackQueryHandler(help_topic_router, pattern=r"^help_(elon|limit|check|mening|hudud)$"))
     app.add_handler(CallbackQueryHandler(help_back_router, pattern="^help_back$"))

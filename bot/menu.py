@@ -254,9 +254,16 @@ async def text_menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("\U0001F4CB <b>Sizning e'lonlaringiz:</b>\n\n" + "\n".join(lines), parse_mode=ParseMode.HTML)
 
         if active_listings:
-            kb_rows = [[InlineKeyboardButton(f"\u2705 #{lst['id']} topshirildi deb belgilash", callback_data=f"selfexpire_{lst['id']}")] for lst in active_listings]
+            kb_rows = []
+            for lst in active_listings:
+                kb_rows.append([InlineKeyboardButton(f"\u2705 #{lst['id']} topshirildi deb belgilash", callback_data=f"selfexpire_{lst['id']}")])
+                kb_rows.append([
+                    InlineKeyboardButton(f"\u270f\ufe0f #{lst['id']} tahrirlash", callback_data=f"editlisting_{lst['id']}"),
+                    InlineKeyboardButton(f"\U0001F5D1 #{lst['id']} o'chirish", callback_data=f"deletelisting_{lst['id']}"),
+                ])
             await update.message.reply_text(
-                "Uy ijaraga berilgan bo'lsa, shu yerdan belgilab qo'ying \u2014 kanaldan avtomatik olib tashlaymiz:",
+                "Uy ijaraga berilgan bo'lsa, shu yerdan belgilab qo'ying \u2014 kanaldan avtomatik olib tashlaymiz. "
+                "Narx yoki boshqa ma'lumotni o'zgartirish/o'chirish uchun ham shu yerdan foydalaning:",
                 reply_markup=InlineKeyboardMarkup(kb_rows),
             )
 
