@@ -60,6 +60,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await reveal_phone(update, context, payload)
         return
 
+    if payload and payload.startswith("viewing_"):
+        # Odatiy holatda bu chuqur-havola viewing_conv'ning O'Z kirish nuqtasi
+        # orqali ushlanadi (u shu generik start()dan OLDIN ro'yxatdan
+        # o'tkazilgan) - bu yerga faqat "qaytgan foydalanuvchi" noyob holatida
+        # tushadi, xuddi elon/buysub/checkphone kabi.
+        await update.message.reply_text(
+            "\U0001F4C5 Ko'rish vaqtini so'rash uchun, iltimos, kanaldagi shu e'londagi tugmani QAYTA bosing.",
+            reply_markup=main_menu_keyboard(user.id),
+        )
+        return
+
     if payload and payload.startswith("complain_"):
         try:
             listing_id = int(payload.split("_", 1)[1])

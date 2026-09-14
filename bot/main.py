@@ -56,6 +56,7 @@ from bot.flow_subscription import *  # noqa: F401,F403
 from bot.admin_moderation import *  # noqa: F401,F403
 from bot.flow_complaint import *  # noqa: F401,F403
 from bot.flow_edit import *  # noqa: F401,F403
+from bot.flow_viewing import *  # noqa: F401,F403
 from bot.jobs import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
@@ -245,12 +246,26 @@ def main():
         persistent=False,
     )
 
+    viewing_conv = ConversationHandler(
+        entry_points=[CommandHandler("start", viewing_deeplink_entry, filters=filters.Regex(r"^/start viewing_\d+$"))],
+        states={VIEWING_TIME_WAIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, viewing_time_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(VIEWING_TIME_WAIT))]},
+        fallbacks=[CommandHandler("bekor", viewing_time_cancel)],
+        name="viewing_conv",
+        persistent=False,
+    )
+
     app.add_handler(elon_conv)
     register_conv("elon_conv", elon_conv)  # force_reset_conversation funksiyasi buni topa olishi uchun
     app.add_handler(sub_conv)
     register_conv("sub_conv", sub_conv)
     app.add_handler(check_phone_conv)
     register_conv("check_phone_conv", check_phone_conv)
+    # MUHIM: viewing_conv o'zining "/start viewing_<id>" kirish nuqtasiga ega
+    # (elon_conv/sub_conv/check_phone_conv kabi) - shuning uchun bu yerda,
+    # GENERIK "start" handleridan (pastroqda) OLDIN ro'yxatdan o'tkazilishi
+    # SHART, aks holda generik handler uni hech qachon ko'rmaydi.
+    app.add_handler(viewing_conv)
+    register_conv("viewing_conv", viewing_conv)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("fixbuttons", fixbuttons_command))
     app.add_handler(CommandHandler("setcategory", setcategory_command))
@@ -300,6 +315,8 @@ def main():
     app.add_handler(CallbackQueryHandler(editcancelmenu_router, pattern=r"^editcancelmenu_\d+$"))
     app.add_handler(CallbackQueryHandler(deletelisting_entry, pattern=r"^deletelisting_\d+$"))
     app.add_handler(CallbackQueryHandler(deletelisting_confirm_router, pattern=r"^deletelistingyes_\d+$"))
+    app.add_handler(CallbackQueryHandler(viewingaccept_router, pattern=r"^viewingaccept_\d+$"))
+    app.add_handler(CallbackQueryHandler(viewingdecline_router, pattern=r"^viewingdecline_\d+$"))
     app.add_handler(CallbackQueryHandler(delloc_router, pattern=r"^delloc_\d+$"))
     app.add_handler(CallbackQueryHandler(help_topic_router, pattern=r"^help_(elon|limit|check|mening|hudud)$"))
     app.add_handler(CallbackQueryHandler(help_back_router, pattern="^help_back$"))

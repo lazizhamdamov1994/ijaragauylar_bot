@@ -148,8 +148,10 @@ def channel_keyboard(listing_id: int, bot_username: str, latitude: float = None,
     call_link = f"https://t.me/{bot_username}?start=phone_{listing_id}"
     post_link = f"https://t.me/{bot_username}?start=elon"
     complain_link = f"https://t.me/{bot_username}?start=complain_{listing_id}"
+    viewing_link = f"https://t.me/{bot_username}?start=viewing_{listing_id}"
     rows = [
         [InlineKeyboardButton("\U0001F4DE Uy egasi raqami", url=call_link)],
+        [InlineKeyboardButton("\U0001F4C5 Ko'rish vaqtini so'rash", url=viewing_link)],
     ]
     if DASHBOARD_URL and DASHBOARD_URL.startswith("https://"):
         rows.append([InlineKeyboardButton("\U0001F310 Saytda batafsil ko'rish", url=f"{DASHBOARD_URL}/uy/{listing_id}")])
