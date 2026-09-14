@@ -205,14 +205,14 @@ def _listings_page(
     <p class="sub">{t(lang,'hero_sub')}</p>
     <form class="search-pill" method="get" action="/">
       <input type="hidden" name="lang" value="{lang}">
-      <div class="seg">
+      <div class="seg cs-wrap">
         <label>{t(lang,'search_district_label')}</label>
         <select name="hudud">
           <option value="">{t(lang,'search_all_districts')}</option>
           {district_options}
         </select>
       </div>
-      <div class="seg">
+      <div class="seg cs-wrap">
         <label>{t(lang,'search_rooms_label')}</label>
         <select name="xona">
           <option value="">{t(lang,'search_rooms_any')}</option>
@@ -290,6 +290,64 @@ async function checkPhoneNumber() {{
     resultEl.textContent = "{t(lang,'phone_check_error')}";
   }}
 }}
+
+// Native <select> ochilganda brauzerning "arzon" standart dropdown
+// ro'yxati o'rniga, saytning o'zi dizaynidagi moslashuvchan ro'yxatni
+// ko'rsatadi (native select ekranda saqlanadi - JS o'chirilsa ham forma
+// ishlayveradi, faqat vizual jihatdan yashiriladi).
+function enhanceSelect(select) {{
+  const wrap = select.closest('.cs-wrap');
+  if (!wrap || wrap.dataset.csDone) return;
+  wrap.dataset.csDone = '1';
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'cs-trigger';
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'cs-label';
+  const arrow = document.createElement('span');
+  arrow.className = 'cs-arrow';
+  trigger.appendChild(labelSpan);
+  trigger.appendChild(arrow);
+
+  const menu = document.createElement('div');
+  menu.className = 'cs-menu';
+
+  function updateLabel() {{
+    const sel = select.options[select.selectedIndex];
+    labelSpan.textContent = sel ? sel.textContent : '';
+  }}
+
+  Array.from(select.options).forEach(opt => {{
+    const item = document.createElement('div');
+    item.className = 'cs-option' + (opt.selected ? ' selected' : '');
+    item.textContent = opt.textContent;
+    item.addEventListener('click', () => {{
+      select.value = opt.value;
+      select.dispatchEvent(new Event('change', {{ bubbles: true }}));
+      updateLabel();
+      menu.querySelectorAll('.cs-option').forEach(c => c.classList.remove('selected'));
+      item.classList.add('selected');
+      wrap.classList.remove('open');
+    }});
+    menu.appendChild(item);
+  }});
+
+  trigger.addEventListener('click', (e) => {{
+    e.stopPropagation();
+    document.querySelectorAll('.cs-wrap.open').forEach(w => {{ if (w !== wrap) w.classList.remove('open'); }});
+    wrap.classList.toggle('open');
+  }});
+
+  updateLabel();
+  wrap.classList.add('cs-enhanced');
+  wrap.insertBefore(trigger, select);
+  wrap.appendChild(menu);
+}}
+document.addEventListener('click', () => {{
+  document.querySelectorAll('.cs-wrap.open').forEach(w => w.classList.remove('open'));
+}});
+document.querySelectorAll('.cs-wrap select').forEach(enhanceSelect);
 </script>
 
 <section class="why-section">
