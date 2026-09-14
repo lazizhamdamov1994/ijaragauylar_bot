@@ -41,6 +41,8 @@ from web.listings_data import (
 )
 from web.render import (
     CATEGORY_LABELS,
+    DISTRICT_SLUGS,
+    DISTRICT_TO_SLUG,
     ICONS,
     RENTAL_TYPE_LABELS,
     TASHKENT_DISTRICTS,
@@ -67,6 +69,39 @@ MAX_WEB_SUBMISSIONS_PER_IP_PER_DAY = 3
 
 @router.get("/", response_class=HTMLResponse)
 def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), page: int = Query(1, ge=1), rental_type: str = Query("")):
+    return _listings_page(request, hudud, xona, page, rental_type, "/")
+
+
+@router.get("/toshkent/{slug}", response_class=HTMLResponse)
+def district_page(request: Request, slug: str, xona: str = Query(""), page: int = Query(1, ge=1), rental_type: str = Query("")):
+    """Har bir tuman uchun alohida, doimiy URL (SEO uchun) - masalan
+    /toshkent/chilonzor. Homepage bilan BIR XIL shablon (_listings_page),
+    faqat hudud oldindan tanlangan va sarlavha/tavsif/H1 shu tumanga mos."""
+    district_name = DISTRICT_SLUGS.get(slug.lower())
+    if not district_name:
+        raise HTTPException(status_code=404)
+    return _listings_page(request, district_name, xona, page, rental_type, f"/toshkent/{slug}", district_name=district_name)
+
+
+_ROOM_SLUG_RE = re.compile(r"^([1-9])-xonali$")
+
+
+@router.get("/toshkent/{slug}/{room_slug}", response_class=HTMLResponse)
+def district_rooms_page(request: Request, slug: str, room_slug: str, page: int = Query(1, ge=1), rental_type: str = Query("")):
+    """Tuman + xonalar soni bo'yicha alohida URL - masalan
+    /toshkent/yunusobod/2-xonali."""
+    district_name = DISTRICT_SLUGS.get(slug.lower())
+    room_match = _ROOM_SLUG_RE.match(room_slug)
+    if not district_name or not room_match:
+        raise HTTPException(status_code=404)
+    xona = room_match.group(1)
+    return _listings_page(request, district_name, xona, page, rental_type, f"/toshkent/{slug}/{room_slug}", district_name=district_name)
+
+
+def _listings_page(
+    request: Request, hudud: str, xona: str, page: int, rental_type: str,
+    canonical_path: str, district_name: str = "",
+) -> HTMLResponse:
     lang = get_lang(request)
     listings, total = get_site_listings(hudud=hudud, xona=xona, page=page, rental_type=rental_type)
     stats = site_stats_summary()
@@ -82,7 +117,7 @@ def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), pa
 
     def rt_url(rt):
         parts = []
-        if hudud:
+        if canonical_path == "/" and hudud:
             parts.append(f"hudud={urllib.parse.quote(hudud)}")
         if xona:
             parts.append(f"xona={xona}")
@@ -90,7 +125,7 @@ def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), pa
             parts.append(f"rental_type={rt}")
         if lang != DEFAULT_LANG:
             parts.append(f"lang={lang}")
-        return "/?" + "&".join(parts) if parts else "/"
+        return f"{canonical_path}?{'&'.join(parts)}" if parts else canonical_path
 
     rt_tabs_html = "".join(
         f'<a href="{rt_url(key)}" class="rt-tab{" active" if rental_type == key else ""}">{icon(ikey, 15) if ikey else ""}{t(lang, tkey)}</a>'
@@ -131,8 +166,18 @@ def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), pa
             links.append(f'<a href="{page_url(page+1)}" class="pg-arrow">{icon("chevron_right", 15)}</a>')
         pag_html = f'<div class="pagination">{"".join(links)}</div>'
 
-    title = t(lang, "seo_home_title")
-    description = t(lang, "seo_home_desc", active=stats['active'])
+    if district_name and xona:
+        title = t(lang, "seo_district_rooms_title", district=district_name, xona=xona)
+        description = t(lang, "seo_district_rooms_desc", district=district_name, xona=xona, active=total)
+        hero_title_text = t(lang, "district_hero_title", district=district_name)
+    elif district_name:
+        title = t(lang, "seo_district_title", district=district_name)
+        description = t(lang, "seo_district_desc", district=district_name, active=total)
+        hero_title_text = t(lang, "district_hero_title", district=district_name)
+    else:
+        title = t(lang, "seo_home_title")
+        description = t(lang, "seo_home_desc", active=stats['active'])
+        hero_title_text = t(lang, "hero_title")
     same_as = [u for u in (f"https://t.me/{CHANNEL_USERNAME}" if CHANNEL_USERNAME else "", INSTAGRAM_URL) if u]
     org_data = {
         "@context": "https://schema.org",
@@ -148,15 +193,15 @@ def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), pa
     html = f"""<!DOCTYPE html>
 <html lang="{lang}">
 <head>
-{render_head(title, description, "/", lang=lang)}
+{render_head(title, description, canonical_path, lang=lang)}
 {org_json_ld}
 </head>
 <body>
-{render_header(lang, "/")}
+{render_header(lang, canonical_path)}
 
 <section class="hero">
   <div class="wrap">
-    <h1>{t(lang,'hero_title')}</h1>
+    <h1>{hero_title_text}</h1>
     <p class="sub">{t(lang,'hero_sub')}</p>
     <form class="search-pill" method="get" action="/">
       <input type="hidden" name="lang" value="{lang}">
@@ -255,6 +300,15 @@ async function checkPhoneNumber() {{
       <div class="why-item"><div class="icon">{icon('shield', 26)}</div><h3>{t(lang,'why2_title')}</h3><p>{t(lang,'why2_desc')}</p></div>
       <div class="why-item"><div class="icon">{icon('bolt', 26)}</div><h3>{t(lang,'why3_title')}</h3><p>{t(lang,'why3_desc')}</p></div>
       <div class="why-item"><div class="icon">{icon('map', 26)}</div><h3>{t(lang,'why4_title')}</h3><p>{t(lang,'why4_desc')}</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="districts-section">
+  <div class="wrap">
+    <div class="section-head"><h2>{t(lang,'browse_districts_title')}</h2></div>
+    <div class="districts-grid">
+      {"".join(f'<a href="/toshkent/{DISTRICT_TO_SLUG[d]}" class="district-chip">{d}</a>' for d in TASHKENT_DISTRICTS)}
     </div>
   </div>
 </section>

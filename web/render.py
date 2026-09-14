@@ -4,6 +4,7 @@ head/header/footer, e'lon kartochkasi, to'lov kartasi vizuali, ikonalar.
 """
 import hashlib
 import os
+import re
 import urllib.parse
 from datetime import datetime
 
@@ -73,6 +74,13 @@ TASHKENT_DISTRICTS = [
     "Olmazor", "Bektemir", "Uchtepa", "Yashnobod", "Yakkasaroy",
     "Mirobod", "Yangihayot",
 ]
+
+# Tuman -> SEO-do'stona URL bo'lagi ("Mirzo Ulug'bek" -> "mirzo-ulugbek") va
+# teskarisi - /toshkent/{slug} sahifalari (web/pages.py) va sitemap.xml
+# (web/seo.py) BITTA shu manbadan foydalanadi (ikki joyda alohida-alohida
+# slug hisoblash - va ikkalasi orasida moslik yo'qolishi - xavfini yo'q qiladi).
+DISTRICT_SLUGS = {re.sub(r"[^a-z0-9]+", "", d.lower()): d for d in TASHKENT_DISTRICTS}
+DISTRICT_TO_SLUG = {name: slug for slug, name in DISTRICT_SLUGS.items()}
 
 _DISTRICT_ALIASES = {
     "Yunusobod": ["yunusobod", "yunusabad", "юнусобод", "юнусабад"],
@@ -432,6 +440,32 @@ TRANSLATIONS = {
         "ru": "\u0410\u0440\u0435\u043d\u0434\u0430 \u043a\u0432\u0430\u0440\u0442\u0438\u0440 \u0438 \u0434\u043e\u043c\u043e\u0432 \u0432 \u0422\u0430\u0448\u043a\u0435\u043d\u0442\u0435 \u043d\u0430\u043f\u0440\u044f\u043c\u0443\u044e \u043e\u0442 \u0441\u043e\u0431\u0441\u0442\u0432\u0435\u043d\u043d\u0438\u043a\u0430, \u0431\u0435\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438. \u0421\u0435\u0439\u0447\u0430\u0441 {active} \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439: \u043f\u043e\u0441\u0443\u0442\u043e\u0447\u043d\u043e, \u0434\u043e\u043b\u0433\u043e\u0441\u0440\u043e\u0447\u043d\u043e, \u0434\u0430\u0447\u0438 \u0438 \u0433\u043e\u0441\u0442\u0435\u0432\u044b\u0435 \u043a\u043e\u043c\u043d\u0430\u0442\u044b.",
         "en": "Rent apartments and houses in Tashkent directly from the owner \u2014 zero agent commission. {active} active listings now: daily, long-term, cottages and guest rooms.",
     },
+    "seo_district_title": {
+        "uz": "{district}da ijaraga uylar \u2014 arzon va maklersiz kvartiralar | Ijaraga Uylar",
+        "ru": "\u0410\u0440\u0435\u043d\u0434\u0430 \u0436\u0438\u043b\u044c\u044f \u0432 \u0440\u0430\u0439\u043e\u043d\u0435 {district} \u2014 \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432 | Ijaraga Uylar",
+        "en": "Apartments for Rent in {district}, Tashkent \u2014 No Agent Fees | Ijaraga Uylar",
+    },
+    "seo_district_desc": {
+        "uz": "Toshkent {district} tumanida ijaraga beriladigan uy va kvartiralar \u2014 to'g'ridan-to'g'ri uy egasidan, maklersiz. Hozirda {active} ta faol e'lon.",
+        "ru": "\u0410\u0440\u0435\u043d\u0434\u0430 \u043a\u0432\u0430\u0440\u0442\u0438\u0440 \u0438 \u0434\u043e\u043c\u043e\u0432 \u0432 \u0440\u0430\u0439\u043e\u043d\u0435 {district} (\u0422\u0430\u0448\u043a\u0435\u043d\u0442) \u043d\u0430\u043f\u0440\u044f\u043c\u0443\u044e \u043e\u0442 \u0441\u043e\u0431\u0441\u0442\u0432\u0435\u043d\u043d\u0438\u043a\u0430, \u0431\u0435\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438. \u0421\u0435\u0439\u0447\u0430\u0441 {active} \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439.",
+        "en": "Rent apartments and houses in {district}, Tashkent \u2014 directly from the owner, zero agent commission. {active} active listings now.",
+    },
+    "seo_district_rooms_title": {
+        "uz": "{district}da {xona} xonali ijaraga uylar | Ijaraga Uylar",
+        "ru": "{xona}-\u043a\u043e\u043c\u043d\u0430\u0442\u043d\u044b\u0435 \u043a\u0432\u0430\u0440\u0442\u0438\u0440\u044b \u0432 \u0430\u0440\u0435\u043d\u0434\u0443 \u0432 \u0440\u0430\u0439\u043e\u043d\u0435 {district} | Ijaraga Uylar",
+        "en": "{xona}-Room Apartments for Rent in {district}, Tashkent | Ijaraga Uylar",
+    },
+    "seo_district_rooms_desc": {
+        "uz": "Toshkent {district} tumanida {xona} xonali ijaraga beriladigan uy va kvartiralar \u2014 maklersiz, to'g'ridan-to'g'ri uy egasidan. Hozirda {active} ta faol e'lon.",
+        "ru": "{xona}-\u043a\u043e\u043c\u043d\u0430\u0442\u043d\u044b\u0435 \u043a\u0432\u0430\u0440\u0442\u0438\u0440\u044b \u0432 \u0430\u0440\u0435\u043d\u0434\u0443 \u0432 \u0440\u0430\u0439\u043e\u043d\u0435 {district} \u2014 \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432. \u0421\u0435\u0439\u0447\u0430\u0441 {active} \u0430\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439.",
+        "en": "{xona}-room apartments for rent in {district}, Tashkent \u2014 no agent fees, directly from the owner. {active} active listings now.",
+    },
+    "district_hero_title": {
+        "uz": "{district}da ijaraga uylar va kvartiralar",
+        "ru": "\u0410\u0440\u0435\u043d\u0434\u0430 \u0436\u0438\u043b\u044c\u044f \u0432 \u0440\u0430\u0439\u043e\u043d\u0435 {district}",
+        "en": "Apartments for Rent in {district}",
+    },
+    "browse_districts_title": {"uz": "Tumanlar bo'yicha", "ru": "\u041f\u043e \u0440\u0430\u0439\u043e\u043d\u0430\u043c", "en": "Browse by district"},
     "seo_listing_title": {"uz": "{addr} \u2014 ijaraga, {price} | Ijaraga Uylar", "ru": "{addr} \u2014 \u0430\u0440\u0435\u043d\u0434\u0430, {price} | Ijaraga Uylar", "en": "{addr} \u2014 for rent, {price} | Ijaraga Uylar"},
     "seo_listing_desc": {
         "uz": "{xona}. Narxi: {price}. Toshkentda maklersiz ijara \u2014 to'g'ridan-to'g'ri uy egasi bilan bog'laning, komissiya yo'q.",

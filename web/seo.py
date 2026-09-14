@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response
 
 from common.config import SITE_URL
 from common.db import db
-from web.render import SUPPORTED_LANGS
+from web.render import DISTRICT_TO_SLUG, SUPPORTED_LANGS, TASHKENT_DISTRICTS
 
 router = APIRouter()
 
@@ -35,6 +35,12 @@ def sitemap():
         f"<url><loc>{base}/elon-joylash</loc>{_sitemap_alt_links(base, '/elon-joylash')}<changefreq>weekly</changefreq><priority>0.6</priority></url>",
         f"<url><loc>{base}/subarenda</loc>{_sitemap_alt_links(base, '/subarenda')}<changefreq>weekly</changefreq><priority>0.6</priority></url>",
     ]
+    for district in TASHKENT_DISTRICTS:
+        district_path = f"/toshkent/{DISTRICT_TO_SLUG[district]}"
+        urls.append(
+            f"<url><loc>{base}{district_path}</loc>{_sitemap_alt_links(base, district_path)}"
+            f"<changefreq>daily</changefreq><priority>0.7</priority></url>"
+        )
     for r in rows:
         lastmod = (r["created_at"] or "")[:10]
         listing_path = f"/uy/{r['id']}"
