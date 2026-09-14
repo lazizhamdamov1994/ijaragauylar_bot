@@ -272,11 +272,27 @@ def listing_detail(request: Request, listing_id: int):
     lang = get_lang(request)
     l = get_site_listing(listing_id)
     if not l:
+        # MUHIM (SEO): muddati o'tgan/olib tashlangan e'lon uchun "quruq"
+        # 404 sahifasi o'rniga - shu sahifaga kelgan tashrifchi (va Google)
+        # hozirgi FAOL e'lonlardan bir nechtasini ko'radi. Shu orqali
+        # sahifa "o'lik tugash" bo'lmaydi va sayt ichidagi havola qiymati
+        # (link equity) yo'qolmaydi.
+        tg_user = get_current_tg_user(request)
+        favorited_ids = get_favorite_listing_ids(tg_user["uid"]) if tg_user else frozenset()
+        fallback_listings, _ = get_site_listings(page=1)
+        fallback_html = ""
+        if fallback_listings:
+            fallback_cards = "".join(render_listing_card(r, favorited_ids) for r in fallback_listings[:6])
+            fallback_html = f"""<div class="related-strip">
+  <div class="section-head"><h2>{t(lang,'related_title')}</h2></div>
+  <div class="listing-grid">{fallback_cards}</div>
+</div>"""
         not_found_head = render_head(t(lang,'not_found_title'), t(lang,'not_found_desc'), f"/uy/{listing_id}", lang=lang)
         not_found_body = (
             f"<body>{render_header(lang, f'/uy/{listing_id}')}<main class='wrap'><div class='empty-state'>{icon('sad', 46)}"
             f"<div style='margin-top:10px;'>{t(lang,'not_found_body')}</div><br>"
-            f"<a href='/' class='btn-cta' style='background:#0f1b2e;'>{t(lang,'back_home_btn')}</a></div></main>{render_footer(lang)}</body>"
+            f"<a href='/' class='btn-cta' style='background:#0f1b2e;'>{t(lang,'back_home_btn')}</a></div>"
+            f"{fallback_html}</main>{render_footer(lang)}</body>"
         )
         return HTMLResponse(
             f"<!DOCTYPE html><html lang=\"{lang}\"><head>{not_found_head}</head>{not_found_body}</html>",
