@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, PlainTextResponse, Response
 
 from common.config import SITE_URL
-from common.db import db
+from common.db import db, safe_parse_dt
 from web.render import DISTRICT_TO_SLUG, SUPPORTED_LANGS, TASHKENT_DISTRICTS
 
 router = APIRouter()
@@ -42,11 +42,17 @@ def sitemap():
             f"<changefreq>daily</changefreq><priority>0.7</priority></url>"
         )
     for r in rows:
-        lastmod = (r["created_at"] or "")[:10]
+        # MUHIM: created_at bazada har doim ham to'g'ri/standart formatda
+        # bo'lavermaydi (eski/qo'lda tuzatilgan yozuvlar) - shuning uchun
+        # xom matnni to'g'ridan-to'g'ri kesib olish o'rniga safe_parse_dt
+        # bilan tekshiriladi; noto'g'ri/bo'sh bo'lsa, Google "Invalid date"
+        # xatosi bermasligi uchun <lastmod> UMUMAN qo'shilmaydi (ixtiyoriy teg).
+        parsed = safe_parse_dt(r["created_at"])
+        lastmod_tag = f"<lastmod>{parsed.strftime('%Y-%m-%d')}</lastmod>" if parsed else ""
         listing_path = f"/uy/{r['id']}"
         urls.append(
             f"<url><loc>{base}{listing_path}</loc>{_sitemap_alt_links(base, listing_path)}"
-            f"<lastmod>{lastmod}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>"
+            f"{lastmod_tag}<changefreq>daily</changefreq><priority>0.8</priority></url>"
         )
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
