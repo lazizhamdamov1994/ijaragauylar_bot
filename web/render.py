@@ -205,6 +205,11 @@ TRANSLATIONS = {
     "inquiry_send": {"uz": "Yuborish", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c", "en": "Send"},
     "inquiry_success": {"uz": "So'rovingiz yuborildi!", "ru": "\u0412\u0430\u0448 \u0437\u0430\u043f\u0440\u043e\u0441 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d!", "en": "Your request has been sent!"},
     "inquiry_error": {"uz": "Xatolik yuz berdi, qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Something went wrong, please try again."},
+    "price_history_title": {"uz": "Narx tarixi", "ru": "\u0418\u0441\u0442\u043e\u0440\u0438\u044f \u0446\u0435\u043d", "en": "Price history"},
+    "viewing_request_btn": {"uz": "Ko'rish vaqtini so'rash", "ru": "\u0417\u0430\u043f\u0440\u043e\u0441\u0438\u0442\u044c \u0432\u0440\u0435\u043c\u044f \u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u0430", "en": "Request a viewing"},
+    "viewing_time_ph": {"uz": "Masalan: Ertaga soat 15:00", "ru": "\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u0417\u0430\u0432\u0442\u0440\u0430 \u0432 15:00", "en": "E.g. Tomorrow at 3 PM"},
+    "viewing_send": {"uz": "So'rov yuborish", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043f\u0440\u043e\u0441", "en": "Send request"},
+    "viewing_success": {"uz": "So'rovingiz uy egasiga yuborildi!", "ru": "\u0412\u0430\u0448 \u0437\u0430\u043f\u0440\u043e\u0441 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d \u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0443!", "en": "Your request has been sent to the owner!"},
     "related_title": {"uz": "O'xshash e'lonlar", "ru": "\u041f\u043e\u0445\u043e\u0436\u0438\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", "en": "Similar listings"},
     "not_found_title": {"uz": "E'lon topilmadi", "ru": "\u041e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u043e", "en": "Listing not found"},
     "not_found_desc": {

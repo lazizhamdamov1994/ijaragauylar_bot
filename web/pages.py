@@ -23,7 +23,7 @@ from common.config import (
     SITE_NAME,
     SITE_URL,
 )
-from common.db import db, get_favorite_listing_ids, is_phone_blocked, now_str
+from common.db import db, get_favorite_listing_ids, get_price_history, is_phone_blocked, now_str
 from common.telegram_media import watermark_photo_bytes_list
 
 from web.auth import _client_ip, get_current_tg_user, is_web_subscribed
@@ -365,6 +365,19 @@ def listing_detail(request: Request, listing_id: int):
     qulaylik = (l.get("qulaylik") or "").strip()
     description_text = qulaylik or (l.get("raw_text") or "").strip() or t(lang,'no_desc')
 
+    # Narx tarixi - agar e'lon egasi narxni tahrirlash orqali o'zgartirgan
+    # bo'lsa (/kabinet yoki bot), shu yerda ko'rinadi - tashrifchiga narx
+    # o'zgarishi shaffof bo'ladi.
+    price_hist = get_price_history(l["id"])
+    price_history_html = ""
+    if price_hist:
+        hist_items = "".join(
+            f'<div class="price-history-item"><span class="ph-date">{(h["changed_at"] or "")[:10]}</span>'
+            f'<span class="ph-old">{esc_html(h["old_narx"] or "")}</span> → <span class="ph-new">{esc_html(h["new_narx"] or "")}</span></div>'
+            for h in price_hist
+        )
+        price_history_html = f'<div class="price-history"><h3>{icon("coin",16)} {t(lang,"price_history_title")}</h3>{hist_items}</div>'
+
     # ---- Svayp qilinadigan (mobil uchun tabiiy touch-swipe) rasm galereyasi + Lightbox ----
     if photo_urls:
         slides = "".join(f'<div class="gs-slide"><img src="{u}" alt="{esc_html(addr)}" loading="{"eager" if i==0 else "lazy"}" onclick="openLightbox({i})"></div>' for i, u in enumerate(photo_urls))
@@ -429,6 +442,26 @@ def listing_detail(request: Request, listing_id: int):
             f'</div>'
         )
         sidebar_note_html = ""
+
+    # Ko'rish vaqtini so'rash - telefon ko'rsatish BILAN AYNAN BIR XIL
+    # to'lov devori (paywall) qoidasi (has_limit) orqali tekshiriladi, shu
+    # orqali bu Limit sotib olish funksiyasini aylanib o'tish yo'liga
+    # aylanib qolmaydi (bot/flow_viewing.py'dagi bilan bir xil g'oya).
+    if has_limit:
+        viewing_cta_html = f"""<button type="button" class="sidebar-cta-secondary" style="margin-bottom:10px;" onclick="document.getElementById('viewingForm').classList.toggle('open')">
+          {icon('calendar', 15)} {t(lang,'viewing_request_btn')}
+        </button>
+        <form id="viewingForm" class="inquiry-form" onsubmit="return submitViewing(event)">
+          <input required name="requested_time" placeholder="{t(lang,'viewing_time_ph')}" maxlength="200">
+          <button type="submit" class="inquiry-submit">{icon("send", 14)} {t(lang,'viewing_send')}</button>
+          <div id="viewingSuccess" class="inquiry-success">{icon('check_circle',15)} {t(lang,'viewing_success')}</div>
+        </form>"""
+    else:
+        viewing_cta_html = (
+            f'<button type="button" class="sidebar-cta-secondary" style="margin-bottom:10px;" '
+            f'onclick="document.getElementById(\'phoneLock\').classList.add(\'open\');">'
+            f'{icon("calendar", 15)} {t(lang,"viewing_request_btn")}</button>'
+        )
 
     paid_badge = f'<span class="badge paid">{icon("bolt", 13)} {t(lang,"badge_top")}</span>' if (l.get("price_charged") or 0) > 0 else ""
     cat = l.get("category")
@@ -542,6 +575,7 @@ def listing_detail(request: Request, listing_id: int):
         <p>{esc_html(description_text)}</p>
       </div>
 
+      {price_history_html}
       {map_html}
     </div>
 
@@ -549,6 +583,7 @@ def listing_detail(request: Request, listing_id: int):
       <div class="sidebar-card">
         <div class="sidebar-price">{esc_html(l['narx'])}</div>
         {phone_cta_html}
+        {viewing_cta_html}
         {sidebar_note_html}
         <div class="sidebar-share">
           <button onclick="shareListing()">{icon("share", 14)} {t(lang,'share_btn')}</button>
@@ -590,6 +625,29 @@ async function submitInquiry(e) {{
     if (res.ok) {{
       form.querySelectorAll('input, textarea, button').forEach(el => el.style.display = 'none');
       document.getElementById('inquirySuccess').style.display = 'flex';
+    }} else {{
+      alert("{t(lang,'inquiry_error')}");
+      btn.disabled = false;
+    }}
+  }} catch (err) {{
+    alert("{t(lang,'inquiry_error')}");
+    btn.disabled = false;
+  }}
+  return false;
+}}
+async function submitViewing(e) {{
+  e.preventDefault();
+  const form = e.target;
+  const btn = form.querySelector('.inquiry-submit');
+  btn.disabled = true;
+  try {{
+    const res = await fetch('/api/kabinet/viewing-request', {{
+      method: 'POST', headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{listing_id: {l['id']}, requested_time: form.requested_time.value}})
+    }});
+    if (res.ok) {{
+      form.querySelectorAll('input, button').forEach(el => el.style.display = 'none');
+      document.getElementById('viewingSuccess').style.display = 'flex';
     }} else {{
       alert("{t(lang,'inquiry_error')}");
       btn.disabled = false;
@@ -1322,13 +1380,19 @@ async def submit_listing_inquiry(request: Request):
     if not listing_id or not name or not phone:
         raise HTTPException(status_code=400, detail="Majburiy maydonlar to'ldirilmagan")
 
+    # Kirgan foydalanuvchi bo'lsa, so'rov uning kabinetidagi "Mening
+    # so'rovlarim"da ko'rinishi uchun sender_user_id yozib qo'yiladi -
+    # kirmagan (anonim) foydalanuvchi ham so'rov yuborishda davom etadi.
+    tg_user = get_current_tg_user(request)
+    sender_user_id = tg_user["uid"] if tg_user else None
+
     conn = db()
     row = conn.execute("SELECT user_id, manzil, raw_text, channel_msg_id FROM listings WHERE id = ?", (listing_id,)).fetchone()
     owner_id = row["user_id"] if row else None
     addr = (row["manzil"] if row and row["manzil"] else extract_district(row["raw_text"] if row else "")) if row else "e'lon"
     conn.execute(
-        "INSERT INTO listing_inquiries (listing_id, owner_user_id, name, phone, message, status, created_at) VALUES (?,?,?,?,?,'yangi',?)",
-        (listing_id, owner_id, name, phone, message, now_str()),
+        "INSERT INTO listing_inquiries (listing_id, owner_user_id, name, phone, message, status, created_at, sender_user_id) VALUES (?,?,?,?,?,'yangi',?,?)",
+        (listing_id, owner_id, name, phone, message, now_str(), sender_user_id),
     )
     conn.commit()
     conn.close()

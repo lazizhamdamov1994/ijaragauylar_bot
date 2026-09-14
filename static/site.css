@@ -356,6 +356,13 @@
   .desc-block h3 { font-size: 16px; font-weight: 700; margin-bottom: 10px; }
   .desc-block p { font-size: 14.5px; color: var(--ink-soft); white-space: pre-line; }
 
+  .price-history { border-top: 1px solid var(--line); padding: 20px 0; }
+  .price-history h3 { font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+  .price-history-item { display: flex; align-items: baseline; gap: 10px; font-size: 13.5px; padding: 4px 0; }
+  .price-history-item .ph-date { color: var(--muted); font-size: 12px; min-width: 66px; }
+  .price-history-item .ph-old { text-decoration: line-through; color: var(--muted); }
+  .price-history-item .ph-new { font-weight: 700; color: var(--ink); }
+
   .sidebar-card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 24px; position: sticky; top: 90px; box-shadow: var(--shadow); }
   @media (max-width: 900px) { .sidebar-card { position: static; margin-top: 8px; } }
   @media (max-width: 400px) { .sidebar-card { padding: 16px; } .credit-card { padding: 16px; } }
@@ -365,6 +372,12 @@
     border-radius: var(--radius-pill); font-weight: 700; font-size: 15.5px; margin: 18px 0 10px; transition: background .15s;
   }
   .sidebar-cta:hover { background: var(--brand-dark); }
+  .sidebar-cta-secondary {
+    display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; text-align: center;
+    background: #fff; color: var(--ink); border: 1.5px solid var(--line); padding: 14px;
+    border-radius: var(--radius-pill); font-weight: 700; font-size: 14.5px; cursor: pointer; transition: border-color .15s;
+  }
+  .sidebar-cta-secondary:hover { border-color: var(--ink); }
   .sidebar-note { font-size: 12.5px; color: var(--muted); text-align: center; }
 
   .phone-lock { display: none; margin: 16px 0 4px; }
