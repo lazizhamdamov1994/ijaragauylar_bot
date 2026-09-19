@@ -144,17 +144,21 @@ def phone_reveal_text(listing: dict, expire=None) -> str:
     return text
 
 
+def viewing_request_keyboard(listing_id: int, bot_username: str) -> InlineKeyboardMarkup:
+    """Uy egasi raqami ko'rsatilgan xabar TAGIDA chiqadigan tugma - kanal
+    postining o'zida EMAS (raqamni ko'rgan, ya'ni haqiqatan qiziqqan
+    foydalanuvchigagina taklif qilinadi)."""
+    viewing_link = f"https://t.me/{bot_username}?start=viewing_{listing_id}"
+    return InlineKeyboardMarkup([[InlineKeyboardButton("\U0001F5D3 Ko'rish vaqtini band qilish", url=viewing_link)]])
+
+
 def channel_keyboard(listing_id: int, bot_username: str, latitude: float = None, longitude: float = None) -> InlineKeyboardMarkup:
     call_link = f"https://t.me/{bot_username}?start=phone_{listing_id}"
     post_link = f"https://t.me/{bot_username}?start=elon"
     complain_link = f"https://t.me/{bot_username}?start=complain_{listing_id}"
-    viewing_link = f"https://t.me/{bot_username}?start=viewing_{listing_id}"
     rows = [
         [InlineKeyboardButton("\U0001F4DE Uy egasi raqami", url=call_link)],
-        [InlineKeyboardButton("\U0001F4C5 Ko'rish vaqtini so'rash", url=viewing_link)],
     ]
-    if DASHBOARD_URL and DASHBOARD_URL.startswith("https://"):
-        rows.append([InlineKeyboardButton("\U0001F310 Saytda batafsil ko'rish", url=f"{DASHBOARD_URL}/uy/{listing_id}")])
     if latitude and longitude:
         map_link = f"https://www.google.com/maps/search/?api=1&query={latitude},{longitude}"
         rows.append([InlineKeyboardButton("\U0001F5FA Lokatsiya", url=map_link),
@@ -163,6 +167,9 @@ def channel_keyboard(listing_id: int, bot_username: str, latitude: float = None,
         rows.append([InlineKeyboardButton("\U0001F4DD E'lon berish", url=post_link)])
     rows.append([InlineKeyboardButton("\U0001F4AC Adminga", url=f"https://t.me/{ADMIN_USERNAME}"),
                  InlineKeyboardButton("\u26A0\uFE0F Etiroz", url=complain_link)])
+    # MUHIM: "Web sahifaga o'tish" har doim ENG PASTKI qator bo'lib qoladi.
+    if DASHBOARD_URL and DASHBOARD_URL.startswith("https://"):
+        rows.append([InlineKeyboardButton("\U0001F310 Web sahifaga o'tish", url=f"{DASHBOARD_URL}/uy/{listing_id}")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -285,6 +292,25 @@ def is_moderator(user_id: int) -> bool:
 def is_staff(user_id: int) -> bool:
     """Admin YOKI moderator - kunlik moderatsiya ishlarini bajara oladiganlar."""
     return is_admin(user_id) or is_moderator(user_id)
+
+
+def is_super_moderator(user_id: int) -> bool:
+    """Admin YOKI "super moderator" belgisi qo'yilgan moderator - oddiy
+    moderatordan farqli, PUL bilan bog'liq (to'lov cheklarini
+    tasdiqlash/rad etish) amallarni ham bajara oladi."""
+    if is_admin(user_id):
+        return True
+    conn = db()
+    row = conn.execute("SELECT 1 FROM moderators WHERE user_id = ? AND is_super = 1", (user_id,)).fetchone()
+    conn.close()
+    return row is not None
+
+
+def set_moderator_super(user_id: int, is_super: bool) -> None:
+    conn = db()
+    conn.execute("UPDATE moderators SET is_super = ? WHERE user_id = ?", (1 if is_super else 0, user_id))
+    conn.commit()
+    conn.close()
 
 
 def add_moderator(user_id: int, added_by: int) -> None:

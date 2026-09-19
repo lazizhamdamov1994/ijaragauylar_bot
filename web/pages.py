@@ -1217,10 +1217,19 @@ async def notify_telegram(chat_id: int, text: str, reply_markup: dict = None):
 async def telegram_upload_photos(chat_id: int, contents: list, filenames: list) -> list:
     """Rasm baytlarini BIR MARTA Telegram'ga yuklab, file_id ro'yxatini qaytaradi.
     Shu file_id'lar keyin boshqa istalgan chatga (boshqa adminlar, kanal) QAYTA
-    yuklamasdan, faqat ID orqali yuborilishi mumkin - tezkor va tejamkor."""
+    yuklamasdan, faqat ID orqali yuborilishi mumkin - tezkor va tejamkor.
+
+    MUHIM: file_id olish uchun rasm biror chatga (odatda ADMIN_IDS[0]) haqiqatan
+    YUBORILISHI kerak (Telegram Bot API'da boshqa yo'l yo'q) - lekin bu shunchaki
+    ICHKI mexanizm, chatdagi haqiqiy xabar emas. Shu sabab, file_id olingandan
+    so'ng bu "vaqtinchalik" xabar(lar) DARHOL o'chiriladi - aks holda o'sha admin
+    keyinroq (notify_admins_new_web_listing/buy_limit orqali) YUBORILADIGAN,
+    tugmali/sarlavhali "haqiqiy" nusxadan TASHQARI, ortiqcha "yalang'och"
+    nusxasini ham ko'rib, rasm/chek IKKI MARTA kelayotgandek bo'lib qolardi."""
     if not BOT_TOKEN:
         raise RuntimeError("BOT_TOKEN sozlanmagan")
     file_ids = []
+    sent_message_ids = []
     async with httpx.AsyncClient(timeout=60) as client:
         if len(contents) == 1:
             resp = await client.post(
@@ -1232,6 +1241,7 @@ async def telegram_upload_photos(chat_id: int, contents: list, filenames: list) 
             if not data.get("ok"):
                 raise RuntimeError(data.get("description", "Telegram xatoligi"))
             file_ids.append(data["result"]["photo"][-1]["file_id"])
+            sent_message_ids.append(data["result"].get("message_id"))
         else:
             media, files = [], {}
             for i, (content, name) in enumerate(zip(contents, filenames)):
@@ -1250,6 +1260,14 @@ async def telegram_upload_photos(chat_id: int, contents: list, filenames: list) 
                 photos = msg.get("photo") or []
                 if photos:
                     file_ids.append(photos[-1]["file_id"])
+                sent_message_ids.append(msg.get("message_id"))
+        for mid in sent_message_ids:
+            if not mid:
+                continue
+            try:
+                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage", json={"chat_id": chat_id, "message_id": mid})
+            except Exception:
+                logger.exception("Vaqtinchalik yuklash xabarini o'chirib bo'lmadi (chat_id=%s, message_id=%s)", chat_id, mid)
     return file_ids
 
 

@@ -66,7 +66,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # o'tkazilgan) - bu yerga faqat "qaytgan foydalanuvchi" noyob holatida
         # tushadi, xuddi elon/buysub/checkphone kabi.
         await update.message.reply_text(
-            "\U0001F4C5 Ko'rish vaqtini so'rash uchun, iltimos, kanaldagi shu e'londagi tugmani QAYTA bosing.",
+            "\U0001F5D3 Ko'rish vaqtini band qilish uchun, iltimos, \"Uy egasi raqami\" tugmasini qayta bosib, "
+            "chiqqan xabar tagidagi tugmani bosing.",
             reply_markup=main_menu_keyboard(user.id),
         )
         return
@@ -199,8 +200,12 @@ async def reveal_phone_core(context: ContextTypes.DEFAULT_TYPE, user_id: int, li
 
     log_phone_reveal(user_id, listing_id)
 
+    # "Ko'rish vaqtini band qilish" tugmasi ENDI kanal postida emas, balki
+    # aynan shu yerda - raqamni ko'rgan (haqiqatan qiziqqan) foydalanuvchiga
+    # taklif qilinadi.
     await context.bot.send_message(
-        user_id, phone_reveal_text(listing) + free_note, parse_mode=ParseMode.HTML, reply_markup=main_menu_keyboard(user_id), disable_web_page_preview=True
+        user_id, phone_reveal_text(listing) + free_note, parse_mode=ParseMode.HTML,
+        reply_markup=viewing_request_keyboard(listing_id, context.bot.username), disable_web_page_preview=True,
     )
 
 

@@ -78,6 +78,7 @@ from bot.helpers import (
     channel_keyboard,
     remove_extra_admin,
     remove_moderator,
+    set_moderator_super,
 )
 
 logger = logging.getLogger(__name__)
@@ -436,7 +437,7 @@ def api_moderator_stats(user: str = Depends(check_auth)):
     natijasini ko'radi - bu yerda esa admin BARCHASINI bir joyda ko'radi."""
     conn = db()
     mods = conn.execute(
-        """SELECT m.user_id, m.added_at, u.username, u.full_name
+        """SELECT m.user_id, m.added_at, m.is_super, u.username, u.full_name
            FROM moderators m LEFT JOIN users u ON u.user_id = m.user_id
            ORDER BY m.added_at DESC"""
     ).fetchall()
@@ -452,6 +453,7 @@ def api_moderator_stats(user: str = Depends(check_auth)):
             "username": m["username"],
             "full_name": m["full_name"] or f"ID:{uid}",
             "added_at": m["added_at"],
+            "is_super": bool(m["is_super"]),
             "total": total, "approved": approved, "rejected": rejected,
             "last_activity": last["created_at"] if last else None,
         })
@@ -685,6 +687,12 @@ def api_admin_add_moderator(target_user_id: int = Query(...), user: str = Depend
 @router.post("/api/admin/moderators/{mod_user_id}/remove")
 def api_admin_remove_moderator(mod_user_id: int, user: str = Depends(check_auth)):
     remove_moderator(mod_user_id)
+    return {"ok": True}
+
+
+@router.post("/api/admin/moderators/{mod_user_id}/set-super")
+def api_admin_set_moderator_super(mod_user_id: int, is_super: bool = Query(...), user: str = Depends(check_auth)):
+    set_moderator_super(mod_user_id, is_super)
     return {"ok": True}
 
 

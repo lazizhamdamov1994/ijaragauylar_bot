@@ -381,7 +381,7 @@ ADMIN_HTML = """<!DOCTYPE html>
     </div>
     <div class="panel" style="margin-bottom:16px;">
       <h2>➕ Moderator qo'shish</h2>
-      <div class="panel-sub">Moderator e'lonlarni tasdiqlash/rad etish huquqiga ega, admin sozlamalariga kira olmaydi</div>
+      <div class="panel-sub">Moderator e'lonlarni tasdiqlash/rad etish huquqiga ega, admin sozlamalariga kira olmaydi. \U0001F31F Super moderator - bundan tashqari, to'lov cheklarini (Limit so'rovlarini) ham tasdiqlay/rad eta oladi</div>
       <div class="inline-form" style="margin-top:12px;">
         <div class="form-row"><label>Telegram user_id</label><input id="mod-add-input" type="text" placeholder="Masalan: 123456789"></div>
         <button class="btn btn-primary" onclick="addModeratorAction()">Qo'shish</button>
@@ -784,16 +784,23 @@ async function loadModerators() {
   if (!items.length) { tbody.innerHTML = `<tr><td colspan="7" class="empty-note">Hali moderator qo'shilmagan</td></tr>`; return; }
   tbody.innerHTML = items.map(m => `
     <tr>
-      <td><b>${m.full_name}</b>${m.username ? ' &middot; @' + m.username : ''}<br><span style="color:var(--muted);font-size:11px;">ID: ${m.user_id}</span></td>
+      <td><b>${m.full_name}</b>${m.username ? ' &middot; @' + m.username : ''}${m.is_super ? ' <span style="background:#FDF3DE;color:#D6960B;font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:7px;">\U0001F31F SUPER</span>' : ''}<br><span style="color:var(--muted);font-size:11px;">ID: ${m.user_id}</span></td>
       <td>${(m.added_at || '-').slice(0, 10)}</td>
       <td>${m.total}</td>
       <td style="color:#16A34A;font-weight:700;">${m.approved}</td>
       <td style="color:#C0362C;font-weight:700;">${m.rejected}</td>
       <td>${m.last_activity ? m.last_activity.slice(0, 16) : '—'}</td>
-      <td><button class="btn btn-danger" style="padding:5px 10px;font-size:11.5px;" onclick="removeModeratorAction(${m.user_id})">O'chirish</button></td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-secondary" style="padding:5px 10px;font-size:11.5px;" onclick="toggleModeratorSuperAction(${m.user_id}, ${!m.is_super})">${m.is_super ? "⬇️ Oddiy qilish" : "\U0001F31F Super qilish"}</button>
+        <button class="btn btn-danger" style="padding:5px 10px;font-size:11.5px;" onclick="removeModeratorAction(${m.user_id})">O'chirish</button>
+      </td>
     </tr>
   `).join('');
   loadExtraAdmins();
+}
+async function toggleModeratorSuperAction(userId, makeSuper) {
+  await fetch(`/api/admin/moderators/${userId}/set-super?is_super=${makeSuper}`, { method: 'POST' });
+  loadModerators();
 }
 async function addModeratorAction() {
   const input = document.getElementById('mod-add-input');

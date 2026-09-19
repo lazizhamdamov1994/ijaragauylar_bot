@@ -163,6 +163,7 @@ def migrate_schema() -> None:
         ("subscriptions", {"months": "INTEGER DEFAULT 1", "price_charged": "INTEGER", "target_listing_id": "INTEGER", "receipt_warning": "TEXT"}),
         ("users", {"free_views_used": "INTEGER DEFAULT 0", "bonus_views": "INTEGER DEFAULT 0", "referred_by": "INTEGER", "referral_bonus_given": "INTEGER DEFAULT 0"}),
         ("listing_inquiries", {"sender_user_id": "INTEGER"}),
+        ("moderators", {"is_super": "INTEGER DEFAULT 0"}),
     ):
         existing = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
         for col, coltype in needed.items():

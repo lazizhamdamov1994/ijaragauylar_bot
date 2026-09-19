@@ -50,7 +50,11 @@ def render_moderators() -> tuple:
         u = get_user(m["user_id"]) or {}
         name = esc(u.get("full_name") or "noma'lum")
         uname = f"@{esc(u['username'])}" if u.get("username") else f"ID: {m['user_id']}"
-        lines.append(f"\u2022 {name} ({uname})  \u2014  {m['added_at'][:10]}")
+        is_super = bool(m.get("is_super"))
+        super_badge = " \U0001F31F <b>Super</b>" if is_super else ""
+        lines.append(f"\u2022 {name} ({uname}){super_badge}  \u2014  {m['added_at'][:10]}")
+        toggle_label = "\u2b07\ufe0f Oddiy moderator qilish" if is_super else "\U0001F31F Super moderator qilish (to'lov cheklarini ham tasdiqlaydi)"
+        kb_rows.append([InlineKeyboardButton(toggle_label, callback_data=f"modsuper_{m['user_id']}")])
         kb_rows.append([InlineKeyboardButton(f"\u274c Olib tashlash: {name}", callback_data=f"modremove_{m['user_id']}")])
 
     lines.append("\n\U0001F451 <b>Adminlar</b>\n")
@@ -88,6 +92,36 @@ async def mod_remove_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         logger.exception("Moderatorlikdan olib tashlanganlik xabarini yuborib bo'lmadi")
     await query.answer("Olib tashlandi \u2705")
+    await show_moderators(update, context)
+
+
+async def mod_toggle_super_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if not is_admin(query.from_user.id):
+        await query.answer("Sizda ruxsat yo'q.", show_alert=True)
+        return
+    target_id = int(query.data.rsplit("_", 1)[1])
+    mods = {m["user_id"]: m for m in list_moderators()}
+    mod = mods.get(target_id)
+    if not mod:
+        await query.answer("Moderator topilmadi.", show_alert=True)
+        return
+    new_super = not bool(mod.get("is_super"))
+    set_moderator_super(target_id, new_super)
+    try:
+        if new_super:
+            await context.bot.send_message(
+                target_id,
+                "\U0001F31F <b>Siz endi SUPER MODERATORSIZ!</b>\n\nEndi to'lov cheklarini "
+                "(Limit obuna so'rovlarini) ham tasdiqlash/rad etish huquqingiz bor.",
+                parse_mode=ParseMode.HTML,
+            )
+        else:
+            await context.bot.send_message(target_id, "\u2139\ufe0f Sizning super moderator huquqingiz olib tashlandi.")
+    except Exception:
+        logger.exception("Super moderator holati haqida xabar yuborib bo'lmadi")
+    await query.answer("Yangilandi \u2705")
     await show_moderators(update, context)
 
 

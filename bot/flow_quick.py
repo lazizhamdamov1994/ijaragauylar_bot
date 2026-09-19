@@ -31,6 +31,7 @@ from telegram.ext import ContextTypes, ConversationHandler, filters
 from common.config import ADMIN_IDS, ADMIN_USERNAME, BOT_TOKEN as TOKEN, CARD_HOLDER, CHANNEL_ID, CHANNEL_USERNAME, DASHBOARD_URL, DB_PATH, DEFAULT_SETTINGS as INITIAL_SETTINGS, MAX_DAILY_LISTINGS, MOD_DAILY_LISTINGS, STALE_CHECK_DAYS
 
 from common.telegram_media import watermark_telegram_photo
+from common.districts import detect_district, detect_price
 
 from bot.constants import *  # noqa: F401,F403
 from bot.db import *  # noqa: F401,F403
@@ -60,9 +61,7 @@ async def quick_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
     await update.message.reply_text(
-        "\u26a1 <b>Tezkor e'lon</b>\n\n"
-        "OLX'dan (yoki boshqa joydan) nusxalagan TO'LIQ matnni shu yerga joylashtiring \u2014 "
-        "hech qanday o'zgartirishsiz, aynan shu holicha kanalga chiqadi.",
+        "\u26a1 <b>Tezkor e'lon</b>\n\nE'lon matnini kiriting:",
         parse_mode=ParseMode.HTML, reply_markup=keyboard,
     )
     return QUICK_TEXT
@@ -89,7 +88,7 @@ async def quick_text_received(update: Update, context: ContextTypes.DEFAULT_TYPE
     context.user_data["quick_text"] = raw
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_totext"),
                                        InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
-    await update.message.reply_text("\U0001F4DE Endi uy egasi telefon raqamini yozing (+998...):", reply_markup=keyboard)
+    await update.message.reply_text("\U0001F4DE Telefon raqamni yozing (+998...):", reply_markup=keyboard)
     return QUICK_PHONE
 
 
@@ -98,9 +97,7 @@ async def quick_back_to_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer()
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
     await query.edit_message_text(
-        "\u26a1 <b>Tezkor e'lon</b>\n\n"
-        "OLX'dan (yoki boshqa joydan) nusxalagan TO'LIQ matnni shu yerga joylashtiring \u2014 "
-        "hech qanday o'zgartirishsiz, aynan shu holicha kanalga chiqadi.",
+        "\u26a1 <b>Tezkor e'lon</b>\n\nE'lon matnini kiriting:",
         parse_mode=ParseMode.HTML, reply_markup=keyboard,
     )
     return QUICK_TEXT
@@ -123,12 +120,8 @@ async def quick_phone_received(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return QUICK_PHONE
     context.user_data["telefon"] = phone
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tophone"),
-                                       InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
-    await update.message.reply_text(
-        "\U0001F4CD Endi uyning manzilini yozing (tuman, mahalla) \u2014 bu saytda va xaritada ko'rsatiladi:",
-        reply_markup=keyboard,
-    )
+    text, keyboard, parse_mode = _build_manzil_prompt(context.user_data.get("quick_text", ""))
+    await update.message.reply_text(text, parse_mode=parse_mode, reply_markup=keyboard)
     return QUICK_MANZIL
 
 
@@ -137,8 +130,63 @@ async def quick_back_to_phone(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_totext"),
                                        InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
-    await query.edit_message_text("\U0001F4DE Endi uy egasi telefon raqamini yozing (+998...):", reply_markup=keyboard)
+    await query.edit_message_text("\U0001F4DE Telefon raqamni yozing (+998...):", reply_markup=keyboard)
     return QUICK_PHONE
+
+
+# ============================= MANZIL (avtomatik aniqlash bilan) =============================
+# Matndan tuman nomi aniqlansa, foydalanuvchiga qo'lda yozish o'rniga
+# "Ha, to'g'ri" / "O'zim yozaman" tanlovi beriladi - aniqlanmasa, odatdagidek
+# qo'lda so'raladi.
+
+def _build_manzil_prompt(quick_text: str) -> tuple:
+    detected = detect_district(quick_text)
+    if detected:
+        text = f"\U0001F4CD Matndan manzil (tuman) aniqlandi: <b>{esc(detected)}</b>\n\nShu to'g'rimi?"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("\u2705 Ha, to'g'ri", callback_data="quick_manzil_auto")],
+            [InlineKeyboardButton("\u270f\ufe0f O'zim yozaman", callback_data="quick_manzil_write")],
+            [InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tophone"),
+             InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")],
+        ])
+        return text, keyboard, ParseMode.HTML
+    text = "\U0001F4CD Manzilni yozing (tuman, mahalla) \u2014 bu saytda va xaritada ko'rsatiladi:"
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tophone"),
+                                       InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
+    return text, keyboard, None
+
+
+async def _advance_to_narx_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE, edit_query: bool = False) -> int:
+    text, keyboard, parse_mode = _build_narx_prompt(context.user_data.get("quick_text", ""))
+    if edit_query:
+        await update.callback_query.edit_message_text(text, parse_mode=parse_mode, reply_markup=keyboard)
+    else:
+        await update.message.reply_text(text, parse_mode=parse_mode, reply_markup=keyboard)
+    return QUICK_NARX
+
+
+async def quick_manzil_auto_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    detected = detect_district(context.user_data.get("quick_text", ""))
+    if not detected:
+        # Matn shu oraliqda o'zgarmagan bo'lsa, bu holat yuzaga kelmaydi -
+        # ehtiyot chorasi sifatida qo'lda yozishga o'tkaziladi.
+        return await quick_manzil_manual_router(update, context)
+    context.user_data["quick_manzil"] = detected
+    return await _advance_to_narx_prompt(update, context, edit_query=True)
+
+
+async def quick_manzil_manual_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tophone"),
+                                       InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
+    await query.edit_message_text(
+        "\U0001F4CD Manzilni yozing (tuman, mahalla) \u2014 bu saytda va xaritada ko'rsatiladi:",
+        reply_markup=keyboard,
+    )
+    return QUICK_MANZIL
 
 
 async def quick_manzil_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -152,22 +200,61 @@ async def quick_manzil_received(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text(f"\u26a0\ufe0f Manzil juda uzun ({len(raw)} belgi). 250 belgidan qisqaroq yozing:")
         return QUICK_MANZIL
     context.user_data["quick_manzil"] = raw
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tomanzil"),
-                                       InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
-    await update.message.reply_text("\U0001F4B0 Endi narxini yozing (masalan: 150$, 1.2 mln, kelishiladi):", reply_markup=keyboard)
-    return QUICK_NARX
+    return await _advance_to_narx_prompt(update, context, edit_query=False)
 
 
 async def quick_back_to_manzil(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tophone"),
-                                       InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
-    await query.edit_message_text(
-        "\U0001F4CD Endi uyning manzilini yozing (tuman, mahalla) \u2014 bu saytda va xaritada ko'rsatiladi:",
-        reply_markup=keyboard,
-    )
+    text, keyboard, parse_mode = _build_manzil_prompt(context.user_data.get("quick_text", ""))
+    await query.edit_message_text(text, parse_mode=parse_mode, reply_markup=keyboard)
     return QUICK_MANZIL
+
+
+# ============================= NARX (avtomatik aniqlash bilan) =============================
+
+def _build_narx_prompt(quick_text: str) -> tuple:
+    detected = detect_price(quick_text)
+    if detected:
+        text = f"\U0001F4B0 Matndan narx aniqlandi: <b>{esc(detected)}</b>\n\nShu to'g'rimi?"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("\u2705 Ha, to'g'ri", callback_data="quick_narx_auto")],
+            [InlineKeyboardButton("\u270f\ufe0f O'zim yozaman", callback_data="quick_narx_write")],
+            [InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tomanzil"),
+             InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")],
+        ])
+        return text, keyboard, ParseMode.HTML
+    text = "\U0001F4B0 Narxni yozing (masalan: 150$, 1.2 mln, kelishiladi):"
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tomanzil"),
+                                       InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
+    return text, keyboard, None
+
+
+async def _finish_narx(update: Update, context: ContextTypes.DEFAULT_TYPE, narx: str) -> int:
+    context.user_data["quick_narx"] = narx
+    context.user_data["rasmlar"] = []
+    context.user_data["photo_status_msg_id"] = None
+    await quick_update_photo_status(update, context)
+    return QUICK_PHOTOS
+
+
+async def quick_narx_auto_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    detected = detect_price(context.user_data.get("quick_text", ""))
+    if not detected:
+        return await quick_narx_manual_router(update, context)
+    await query.edit_message_reply_markup(reply_markup=None)
+    return await _finish_narx(update, context, detected)
+
+
+async def quick_narx_manual_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tomanzil"),
+                                       InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
+    await query.edit_message_text("\U0001F4B0 Narxni yozing (masalan: 150$, 1.2 mln, kelishiladi):", reply_markup=keyboard)
+    return QUICK_NARX
 
 
 async def quick_narx_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -180,19 +267,14 @@ async def quick_narx_received(update: Update, context: ContextTypes.DEFAULT_TYPE
     if len(raw) > 200:
         await update.message.reply_text(f"\u26a0\ufe0f Narx juda uzun ({len(raw)} belgi). Qisqaroq yozing:")
         return QUICK_NARX
-    context.user_data["quick_narx"] = raw
-    context.user_data["rasmlar"] = []
-    context.user_data["photo_status_msg_id"] = None
-    await quick_update_photo_status(update, context)
-    return QUICK_PHOTOS
+    return await _finish_narx(update, context, raw)
 
 
 async def quick_back_to_narx(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tomanzil"),
-                                       InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
-    await query.edit_message_text("\U0001F4B0 Endi narxini yozing (masalan: 150$, 1.2 mln, kelishiladi):", reply_markup=keyboard)
+    text, keyboard, parse_mode = _build_narx_prompt(context.user_data.get("quick_text", ""))
+    await query.edit_message_text(text, parse_mode=parse_mode, reply_markup=keyboard)
     return QUICK_NARX
 
 

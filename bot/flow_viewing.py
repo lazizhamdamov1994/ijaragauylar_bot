@@ -1,10 +1,11 @@
 """
-"Ko'rish vaqtini so'rash" - kanal postidagi chuqur-havoladan
-(?start=viewing_{listing_id}) boshlanadi. MUHIM: bu yerga kirish
-`reveal_phone_core` (bot/menu.py, telefon ko'rsatish) BILAN AYNAN BIR XIL
-Limit-obuna/bepul-ko'rish to'lov devori (paywall) qoidasi orqali
-tekshiriladi - aks holda bu funksiya pullik funksiyani (telefon ko'rish)
-bepul aylanib o'tish yo'liga aylanib qolardi.
+"Ko'rish vaqtini band qilish" - telefon raqami ko'rsatilgan xabar
+TAGIDAGI tugmadan, chuqur-havola orqali (?start=viewing_{listing_id})
+boshlanadi. MUHIM: bu yerga kirish `reveal_phone_core` (bot/menu.py,
+telefon ko'rsatish) BILAN AYNAN BIR XIL Limit-obuna/bepul-ko'rish
+to'lov devori (paywall) qoidasi orqali tekshiriladi - aks holda bu
+funksiya pullik funksiyani (telefon ko'rish) bepul aylanib o'tish
+yo'liga aylanib qolardi.
 """
 import logging
 
@@ -58,7 +59,7 @@ async def request_viewing_core(update: Update, context: ContextTypes.DEFAULT_TYP
         price, days = subscription_price(), subscription_days()
         text = (
             "\U0001F513 <b>Bepul ko'rishlaringiz tugadi</b>\n\n"
-            "Ko'rish vaqtini so'rash ham — uy egasi raqamini ko'rish bilan bir xil — Limit talab qiladi.\n\n"
+            "Ko'rish vaqtini band qilish ham — uy egasi raqamini ko'rish bilan bir xil — Limit talab qiladi.\n\n"
             f"\U0001F4B3 {days} kun — <b>{price:,} so'm</b>"
         )
         keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(f"\U0001F513 {days} kunlik limit olish", callback_data=f"buy_subscription_{listing_id}")]])
@@ -75,7 +76,7 @@ async def request_viewing_core(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["viewing_listing_id"] = listing_id
     await context.bot.send_message(
         user_id,
-        "\U0001F4C5 <b>Ko'rish vaqtini so'rash</b>\n\nQaysi kun/soatda ko'rmoqchisiz? Yozing (masalan: «Ertaga soat 15:00»):",
+        "\U0001F5D3 <b>Ko'rish vaqtini band qilish</b>\n\nQaysi kun/soatda ko'rmoqchisiz? Yozing (masalan: «Ertaga soat 15:00»):",
         parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove(),
     )
     return VIEWING_TIME_WAIT

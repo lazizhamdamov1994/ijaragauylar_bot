@@ -196,8 +196,8 @@ def main():
         states={
             QUICK_TEXT: [CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_text_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_TEXT))],
             QUICK_PHONE: [CallbackQueryHandler(quick_back_to_text, pattern="^quick_back_totext$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_phone_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_PHONE))],
-            QUICK_MANZIL: [CallbackQueryHandler(quick_back_to_phone, pattern="^quick_back_tophone$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_manzil_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_MANZIL))],
-            QUICK_NARX: [CallbackQueryHandler(quick_back_to_manzil, pattern="^quick_back_tomanzil$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_narx_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_NARX))],
+            QUICK_MANZIL: [CallbackQueryHandler(quick_manzil_auto_router, pattern="^quick_manzil_auto$"), CallbackQueryHandler(quick_manzil_manual_router, pattern="^quick_manzil_write$"), CallbackQueryHandler(quick_back_to_phone, pattern="^quick_back_tophone$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_manzil_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_MANZIL))],
+            QUICK_NARX: [CallbackQueryHandler(quick_narx_auto_router, pattern="^quick_narx_auto$"), CallbackQueryHandler(quick_narx_manual_router, pattern="^quick_narx_write$"), CallbackQueryHandler(quick_back_to_manzil, pattern="^quick_back_tomanzil$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_narx_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_NARX))],
             QUICK_PHOTOS: [CallbackQueryHandler(quick_back_to_narx, pattern="^quick_back_tonarx$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), CallbackQueryHandler(quick_rasm_tayyor, pattern="^quick_rasm_tayyor$"), MessageHandler(~filters.COMMAND, quick_rasm_qabul)],
             QUICK_CONFIRM: [CallbackQueryHandler(quick_back_to_photos, pattern="^quick_back_tophotos$"), CallbackQueryHandler(quick_post, pattern="^quick_post$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(~filters.COMMAND, quick_confirm_reminder)],
         },
@@ -299,6 +299,7 @@ def main():
     app.add_handler(CallbackQueryHandler(blockask_router, pattern=r"^blockask_(yes|no)_\d+$"))
     app.add_handler(CallbackQueryHandler(toggle_setting_router, pattern=r"^toggleset_\w+$"))
     app.add_handler(CallbackQueryHandler(mod_remove_router, pattern=r"^modremove_\d+$"))
+    app.add_handler(CallbackQueryHandler(mod_toggle_super_router, pattern=r"^modsuper_\d+$"))
     app.add_handler(CallbackQueryHandler(admin_remove_router, pattern=r"^adminremove_\d+$"))
     app.add_handler(CallbackQueryHandler(stillavail_router, pattern=r"^stillavail_(yes|no)_\d+$"))
     app.add_handler(CallbackQueryHandler(complain_reason_router, pattern=r"^rpt_(rented|fake|noresponse|fraud|cancel)_\d+$"))

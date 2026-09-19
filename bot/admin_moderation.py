@@ -65,14 +65,20 @@ async def send_listing_to_channel(context: ContextTypes.DEFAULT_TYPE, listing: d
 async def admin_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    if not is_staff(query.from_user.id):
-        await query.answer("Sizda ruxsat yo'q.", show_alert=True)
-        return
     _, _, kind, obj_id = query.data.split("_", 3)
     obj_id = int(obj_id)
     if kind == "listing":
+        if not is_staff(query.from_user.id):
+            await query.answer("Sizda ruxsat yo'q.", show_alert=True)
+            return
         await approve_listing(update, context, obj_id)
     else:
+        # MUHIM: pul bilan bog'liq (to'lov cheki) - oddiy moderator EMAS,
+        # faqat admin yoki "super moderator" belgisi qo'yilgan moderator
+        # tasdiqlay oladi.
+        if not is_super_moderator(query.from_user.id):
+            await query.answer("Sizda ruxsat yo'q — to'lov cheklarini faqat admin yoki super moderator tasdiqlay oladi.", show_alert=True)
+            return
         await approve_sub(update, context, obj_id)
 
 
@@ -141,10 +147,18 @@ async def approve_sub(update: Update, context: ContextTypes.DEFAULT_TYPE, sub_id
 async def admin_reject_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    if not is_staff(query.from_user.id):
-        await query.answer("Sizda ruxsat yo'q.", show_alert=True)
-        return ConversationHandler.END
     _, _, kind, obj_id = query.data.split("_", 3)
+    if kind == "listing":
+        if not is_staff(query.from_user.id):
+            await query.answer("Sizda ruxsat yo'q.", show_alert=True)
+            return ConversationHandler.END
+    else:
+        # MUHIM: pul bilan bog'liq (to'lov cheki) - oddiy moderator EMAS,
+        # faqat admin yoki "super moderator" belgisi qo'yilgan moderator
+        # rad eta oladi.
+        if not is_super_moderator(query.from_user.id):
+            await query.answer("Sizda ruxsat yo'q — to'lov cheklarini faqat admin yoki super moderator rad eta oladi.", show_alert=True)
+            return ConversationHandler.END
     context.user_data["pending_reject"] = {"kind": kind, "id": int(obj_id)}
     await query.message.reply_text("\u270D\ufe0f Rad etish sababini yozing (bu matn foydalanuvchiga yuboriladi):", reply_markup=ReplyKeyboardRemove())
     return ADMIN_REASON

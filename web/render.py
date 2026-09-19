@@ -69,11 +69,11 @@ def render_credit_card(lang: str, card_digits: str, amount_text: str = "", with_
 
 
 
-TASHKENT_DISTRICTS = [
-    "Yunusobod", "Chilonzor", "Sergeli", "Mirzo Ulug'bek", "Shayxontohur",
-    "Olmazor", "Bektemir", "Uchtepa", "Yashnobod", "Yakkasaroy",
-    "Mirobod", "Yangihayot",
-]
+# MUHIM: tumanlar ro'yxati/aniqlash logikasi common/districts.py'da - bot
+# ("Tezkor e'lon" oqimida manzilni avtomatik taklif qilish) va veb (SEO
+# breadcrumb/sitemap) BITTA manbadan foydalanadi. Bu yerda faqat WEB'ga xos
+# SEO-slug xaritalari qo'shiladi.
+from common.districts import TASHKENT_DISTRICTS, extract_district  # noqa: E402
 
 # Tuman -> SEO-do'stona URL bo'lagi ("Mirzo Ulug'bek" -> "mirzo-ulugbek") va
 # teskarisi - /toshkent/{slug} sahifalari (web/pages.py) va sitemap.xml
@@ -81,32 +81,6 @@ TASHKENT_DISTRICTS = [
 # slug hisoblash - va ikkalasi orasida moslik yo'qolishi - xavfini yo'q qiladi).
 DISTRICT_SLUGS = {re.sub(r"[^a-z0-9]+", "", d.lower()): d for d in TASHKENT_DISTRICTS}
 DISTRICT_TO_SLUG = {name: slug for slug, name in DISTRICT_SLUGS.items()}
-
-_DISTRICT_ALIASES = {
-    "Yunusobod": ["yunusobod", "yunusabad", "юнусобод", "юнусабад"],
-    "Chilonzor": ["chilonzor", "chilanzar", "чилонзор", "чиланзар"],
-    "Sergeli": ["sergeli", "сергели"],
-    "Mirzo Ulug'bek": ["mirzo ulug", "mirzo-ulug", "мирзо улуг", "мирзо-улуг"],
-    "Shayxontohur": ["shayxontohur", "shaykhontohur", "шайхонтохур", "шайхантахур"],
-    "Olmazor": ["olmazor", "olmazar", "олмазор", "олмазар"],
-    "Bektemir": ["bektemir", "бектемир"],
-    "Uchtepa": ["uchtepa", "учтепа"],
-    "Yashnobod": ["yashnobod", "yashnabad", "яшнобод", "яшнабад"],
-    "Yakkasaroy": ["yakkasaroy", "yakkasaray", "яккасарой", "яккасарай"],
-    "Mirobod": ["mirobod", "миробод"],
-    "Yangihayot": ["yangihayot", "янгихаёт", "янгихает"],
-}
-
-
-def extract_district(text: str) -> str:
-    """Matndan (masalan tezkor e'lon xom matnidan) tuman nomini avtomatik
-    aniqlaydi. Topilmasa umumiy \"Toshkent\" qaytaradi."""
-    low = (text or "").lower()
-    for canonical, aliases in _DISTRICT_ALIASES.items():
-        for alias in aliases:
-            if alias in low:
-                return canonical
-    return "Toshkent"
 
 
 def display_address(l: dict) -> str:
