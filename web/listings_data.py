@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 from common.config import CARD_NUMBER, CHANNEL_USERNAME
 from common.db import db, get_setting, now_str
-from common.districts import TASHKENT_DISTRICTS, get_aliases_for_district
+from common.districts import TASHKENT_DISTRICTS, format_price_compact, get_aliases_for_district, parse_price_value
 from web.render import RENTAL_TYPE_LABELS, photo_url
 
 def current_subscription_price() -> int:
@@ -52,6 +52,7 @@ def get_active_listings():
         d["photo"] = photo_url(photos[0]) if photos else ""
         d["is_paid"] = bool((d.get("price_charged") or 0) > 0)
         d["detail_link"] = f"/uy/{d['id']}"
+        d["narx"] = format_price_compact(d.get("narx"))
         result.append(d)
     return result
 
@@ -69,7 +70,7 @@ def _parse_photos(row_dict):
     return row_dict
 
 
-def get_site_listings(hudud: str = "", xona: str = "", page: int = 1, rental_type: str = ""):
+def get_site_listings(hudud: str = "", xona: str = "", page: int = 1, rental_type: str = "", sort: str = ""):
     conn = db()
     query = "SELECT * FROM listings WHERE status='approved' AND COALESCE(expired,0)=0"
     params = []
@@ -92,12 +93,37 @@ def get_site_listings(hudud: str = "", xona: str = "", page: int = 1, rental_typ
     if rental_type and rental_type in RENTAL_TYPE_LABELS:
         query += " AND COALESCE(rental_type,'uzoq_muddat') = ?"
         params.append(rental_type)
-    # Pullik ("TOP") e'lonlar — egasi "topshirildi" deb belgilamaguncha —
-    # ro'yxat boshida turadi (botdagi kanalga qayta-joylash mantig'i bilan bir xil).
-    query += " ORDER BY (CASE WHEN COALESCE(price_charged,0) > 0 THEN 0 ELSE 1 END) ASC, created_at DESC"
+    if sort in ("yangi", "arzon", "qimmat"):
+        # "Eng yangi"/"Eng arzon"/"Eng qimmat" - foydalanuvchi ANIQ shu
+        # mezon bo'yicha tartiblanishini kutadi, shuning uchun "TOP"
+        # pullik e'lonlarni yuqoriga surish (pinning) qo'llanilmaydi -
+        # narx/vaqt bo'yicha saralash pastda (Python'da, narx uchun) yoki
+        # shu yerda (vaqt uchun) to'g'ridan-to'g'ri qo'llanadi.
+        query += " ORDER BY created_at DESC"
+    else:
+        # "Tanlangan" (standart) - pullik ("TOP") e'lonlar — egasi
+        # «topshirildi» deb belgilamaguncha — ro'yxat boshida turadi
+        # (botdagi kanalga qayta-joylash mantig'i bilan bir xil).
+        query += " ORDER BY (CASE WHEN COALESCE(price_charged,0) > 0 THEN 0 ELSE 1 END) ASC, created_at DESC"
     rows = conn.execute(query, params).fetchall()
     conn.close()
     listings = [_parse_photos(dict(r)) for r in rows]
+
+    if sort in ("arzon", "qimmat"):
+        try:
+            usd_rate = int(get_setting("usd_to_som_rate", "12700"))
+        except (TypeError, ValueError):
+            usd_rate = 12700
+        reverse = sort == "qimmat"
+        for l in listings:
+            l["_price_value"] = parse_price_value(l.get("narx"), usd_rate)
+        priced = [l for l in listings if l["_price_value"] is not None]
+        unpriced = [l for l in listings if l["_price_value"] is None]
+        priced.sort(key=lambda l: l["_price_value"], reverse=reverse)
+        listings = priced + unpriced
+        for l in listings:
+            l.pop("_price_value", None)
+
     total = len(listings)
     start = (page - 1) * PER_PAGE
     return listings[start:start + PER_PAGE], total

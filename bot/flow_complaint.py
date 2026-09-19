@@ -364,10 +364,22 @@ async def job_empty_region_alert(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def job_repost_paid_listings(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Pullik e'lonlar (price_charged > 0) e'lon egasi \u00abtopshirildi\u00bb deb
-    belgilamaguncha, har 3 soatda kanalga QAYTA joylanadi (bepul e'lonlar
-    faqat bir marta joylanadi, o'zgarishsiz qoladi)."""
+    belgilamaguncha, admin belgilagan oraliqda (sozlamalar:
+    paid_repost_interval_hours) kanalga QAYTA joylanadi (bepul e'lonlar
+    faqat bir marta joylanadi, o'zgarishsiz qoladi). job_promote_limit
+    kabi - tez-tez tekshiriladi, lekin oraliq o'tmagan bo'lsa chiqib
+    ketadi."""
     if not CHANNEL_ID:
         return
+    interval_hours = max(1, int(get_setting("paid_repost_interval_hours", "3") or "3"))
+    last_run = get_setting("_last_paid_repost_run_at", "")
+    if last_run:
+        try:
+            if datetime.now(TASHKENT_TZ) - datetime.fromisoformat(last_run) < timedelta(hours=interval_hours):
+                return
+        except ValueError:
+            pass
+    set_setting("_last_paid_repost_run_at", datetime.now(TASHKENT_TZ).isoformat())
     conn = db()
     rows = conn.execute(
         "SELECT * FROM listings WHERE status = 'approved' AND COALESCE(expired,0) = 0 AND COALESCE(price_charged,0) > 0"
@@ -507,11 +519,23 @@ async def fixbuttons_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def job_promote_limit(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Har 4 soatda kanalga Limit haqida qisqa, tushunarli tanishtiruv posti
-    joylanadi - real obunachilar soni bilan, to'g'ridan-to'g'ri sotib olish
-    tugmasi bilan."""
+    """Admin belgilagan oraliqda (sozlamalar: promote_limit_interval_hours)
+    kanalga Limit haqida qisqa, tushunarli tanishtiruv posti joylanadi -
+    real obunachilar soni bilan, to'g'ridan-to'g'ri sotib olish tugmasi
+    bilan. Job JobQueue'da tez-tez (har 30 daqiqada) tekshiriladi, lekin
+    oxirgi joylashdan buyon admin belgilagan soat o'tmagan bo'lsa, hech
+    narsa qilmasdan chiqadi - shu tariqa admin oraliqni o'zgartirsa, botni
+    qayta ishga tushirmasdan, keyingi tekshiruvda kuchga kiradi."""
     if not CHANNEL_ID:
         return
+    interval_hours = max(1, int(get_setting("promote_limit_interval_hours", "2") or "2"))
+    last_run = get_setting("_last_promote_limit_run_at", "")
+    if last_run:
+        try:
+            if datetime.now(TASHKENT_TZ) - datetime.fromisoformat(last_run) < timedelta(hours=interval_hours):
+                return
+        except ValueError:
+            pass
     price = subscription_price()
     days = subscription_days()
     active_count = count_active_subscribers()
@@ -528,6 +552,7 @@ async def job_promote_limit(context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(f"\U0001F513 {days} kunlik limit olish", callback_data="chbuysub")]])
     try:
         await context.bot.send_message(CHANNEL_ID, text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+        set_setting("_last_promote_limit_run_at", datetime.now(TASHKENT_TZ).isoformat())
     except Exception:
         logger.exception("Limit reklama postini kanalga yuborib bo'lmadi")
 

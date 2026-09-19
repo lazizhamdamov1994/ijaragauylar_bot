@@ -144,6 +144,11 @@ TRANSLATIONS = {
     "section_search_results": {"uz": "Qidiruv natijalari", "ru": "\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043f\u043e\u0438\u0441\u043a\u0430", "en": "Search results"},
     "section_latest": {"uz": "So'nggi e'lonlar", "ru": "\u041f\u043e\u0441\u043b\u0435\u0434\u043d\u0438\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", "en": "Latest listings"},
     "section_count_suffix": {"uz": "{n} ta e'lon topildi", "ru": "\u041d\u0430\u0439\u0434\u0435\u043d\u043e \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439: {n}", "en": "{n} listings found"},
+    "sort_label": {"uz": "Saralash", "ru": "\u0421\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u043a\u0430", "en": "Sort"},
+    "sort_tanlangan": {"uz": "Tanlangan", "ru": "\u0420\u0435\u043a\u043e\u043c\u0435\u043d\u0434\u0443\u0435\u043c\u044b\u0435", "en": "Featured"},
+    "sort_yangi": {"uz": "Eng yangi", "ru": "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u043d\u043e\u0432\u044b\u0435", "en": "Newest"},
+    "sort_arzon": {"uz": "Eng arzon", "ru": "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0434\u0435\u0448\u0451\u0432\u044b\u0435", "en": "Cheapest"},
+    "sort_qimmat": {"uz": "Eng qimmat", "ru": "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0434\u043e\u0440\u043e\u0433\u0438\u0435", "en": "Most expensive"},
     "empty_listings": {
         "uz": "Hech qanday e'lon topilmadi. Boshqa filtrni sinab ko'ring.",
         "ru": "\u041e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u044b. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0434\u0440\u0443\u0433\u043e\u0439 \u0444\u0438\u043b\u044c\u0442\u0440.",

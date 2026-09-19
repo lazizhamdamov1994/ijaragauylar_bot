@@ -121,6 +121,21 @@ SETTINGS_FIELDS = {
     "subscriber_discount_percent": {"label": "\U0001F3AF Obunachi uchun e'lon chegirmasi (%)", "hint": "0 dan 100 gacha son yozing. Masalan: 25", "kind": "percent"},
     "free_views_enabled": {"label": "\U0001F381 Bepul ko'rish tizimi", "kind": "bool"},
     "free_views_count": {"label": "\U0001F381 Bepul ko'rish soni (yangi foydalanuvchi)", "hint": "Son yozing. Masalan: 2", "kind": "int"},
+    "promote_limit_interval_hours": {
+        "label": "\U0001F4E2 Limit reklama posti oralig'i (soat)",
+        "hint": "Necha soatda bir marta kanalga «Limit» haqida reklama posti joylanishini yozing. Masalan: 2",
+        "kind": "int",
+    },
+    "paid_repost_interval_hours": {
+        "label": "\U0001F501 Pullik e'lonlarni qayta joylash oralig'i (soat)",
+        "hint": "Pullik e'lonlar necha soatda bir marta kanalga qayta joylanishini yozing. Masalan: 3",
+        "kind": "int",
+    },
+    "usd_to_som_rate": {
+        "label": "\U0001F4B1 Dollar kursi (so'mda)",
+        "hint": "1 dollar (yoki y.e.) necha so'm ekanini yozing - saytda «Eng arzon/qimmat» saralashda $ va so'm narxlarni solishtirish uchun ishlatiladi. Masalan: 12700",
+        "kind": "int",
+    },
 }
 
 

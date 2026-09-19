@@ -345,13 +345,15 @@ def main():
         app.job_queue.run_daily(job_daily_backup, time=dtime(hour=4, minute=0, tzinfo=TASHKENT_TZ))
         app.job_queue.run_daily(job_morning_digest, time=dtime(hour=8, minute=45, tzinfo=TASHKENT_TZ))
         app.job_queue.run_daily(job_stale_check, time=dtime(hour=10, minute=0, tzinfo=TASHKENT_TZ))
-        # Aniq soat asosidagi jadval (O'ZBEKISTON vaqti bo'yicha) - dastur qachon
-        # ishga tushganidan qat'iy nazar, faqat shu aniq soatlarda ishga tushadi
-        # (00:00-08:00 Toshkent vaqti bo'yicha tinch vaqt).
-        for hour in (8, 10, 12, 14, 16, 18, 20, 22):
-            app.job_queue.run_daily(job_promote_limit, time=dtime(hour=hour, minute=0, tzinfo=TASHKENT_TZ))
-        for hour in (8, 11, 14, 17, 20, 23):
-            app.job_queue.run_daily(job_repost_paid_listings, time=dtime(hour=hour, minute=0, tzinfo=TASHKENT_TZ))
+        # job_promote_limit va job_repost_paid_listings o'zlari admin
+        # sozlagan oraliqni (promote_limit_interval_hours /
+        # paid_repost_interval_hours, Sozlamalar) hisobga olib ishlaydi -
+        # shuning uchun bu yerda har 30 daqiqada tekshirib turamiz, ular esa
+        # oxirgi joylashdan buyon yetarli vaqt o'tmagan bo'lsa hech narsa
+        # qilmasdan chiqib ketishadi. Admin oraliqni o'zgartirsa, botni
+        # qayta ishga tushirmasdan, keyingi tekshiruvda kuchga kiradi.
+        app.job_queue.run_repeating(job_promote_limit, interval=1800, first=60)
+        app.job_queue.run_repeating(job_repost_paid_listings, interval=1800, first=90)
         app.job_queue.run_daily(job_weekly_top_location, time=dtime(hour=9, minute=0, tzinfo=TASHKENT_TZ), days=(0,))
         app.job_queue.run_daily(job_empty_region_alert, time=dtime(hour=11, minute=0, tzinfo=TASHKENT_TZ))
     else:

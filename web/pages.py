@@ -67,27 +67,30 @@ router = APIRouter()
 MAX_WEB_LISTING_PHOTOS = 10
 MAX_WEB_SUBMISSIONS_PER_IP_PER_DAY = 3
 
+_SORT_OPTIONS = ("", "yangi", "arzon", "qimmat")
+
+
 @router.get("/", response_class=HTMLResponse)
-def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), page: int = Query(1, ge=1), rental_type: str = Query("")):
-    return _listings_page(request, hudud, xona, page, rental_type, "/")
+def homepage(request: Request, hudud: str = Query(""), xona: str = Query(""), page: int = Query(1, ge=1), rental_type: str = Query(""), sort: str = Query("")):
+    return _listings_page(request, hudud, xona, page, rental_type, "/", sort=sort)
 
 
 @router.get("/toshkent/{slug}", response_class=HTMLResponse)
-def district_page(request: Request, slug: str, xona: str = Query(""), page: int = Query(1, ge=1), rental_type: str = Query("")):
+def district_page(request: Request, slug: str, xona: str = Query(""), page: int = Query(1, ge=1), rental_type: str = Query(""), sort: str = Query("")):
     """Har bir tuman uchun alohida, doimiy URL (SEO uchun) - masalan
     /toshkent/chilonzor. Homepage bilan BIR XIL shablon (_listings_page),
     faqat hudud oldindan tanlangan va sarlavha/tavsif/H1 shu tumanga mos."""
     district_name = DISTRICT_SLUGS.get(slug.lower())
     if not district_name:
         raise HTTPException(status_code=404)
-    return _listings_page(request, district_name, xona, page, rental_type, f"/toshkent/{slug}", district_name=district_name)
+    return _listings_page(request, district_name, xona, page, rental_type, f"/toshkent/{slug}", district_name=district_name, sort=sort)
 
 
 _ROOM_SLUG_RE = re.compile(r"^([1-9])-xonali$")
 
 
 @router.get("/toshkent/{slug}/{room_slug}", response_class=HTMLResponse)
-def district_rooms_page(request: Request, slug: str, room_slug: str, page: int = Query(1, ge=1), rental_type: str = Query("")):
+def district_rooms_page(request: Request, slug: str, room_slug: str, page: int = Query(1, ge=1), rental_type: str = Query(""), sort: str = Query("")):
     """Tuman + xonalar soni bo'yicha alohida URL - masalan
     /toshkent/yunusobod/2-xonali."""
     district_name = DISTRICT_SLUGS.get(slug.lower())
@@ -95,15 +98,17 @@ def district_rooms_page(request: Request, slug: str, room_slug: str, page: int =
     if not district_name or not room_match:
         raise HTTPException(status_code=404)
     xona = room_match.group(1)
-    return _listings_page(request, district_name, xona, page, rental_type, f"/toshkent/{slug}/{room_slug}", district_name=district_name)
+    return _listings_page(request, district_name, xona, page, rental_type, f"/toshkent/{slug}/{room_slug}", district_name=district_name, sort=sort)
 
 
 def _listings_page(
     request: Request, hudud: str, xona: str, page: int, rental_type: str,
-    canonical_path: str, district_name: str = "",
+    canonical_path: str, district_name: str = "", sort: str = "",
 ) -> HTMLResponse:
     lang = get_lang(request)
-    listings, total = get_site_listings(hudud=hudud, xona=xona, page=page, rental_type=rental_type)
+    if sort not in _SORT_OPTIONS:
+        sort = ""
+    listings, total = get_site_listings(hudud=hudud, xona=xona, page=page, rental_type=rental_type, sort=sort)
     stats = site_stats_summary()
     total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
 
@@ -123,9 +128,30 @@ def _listings_page(
             parts.append(f"xona={xona}")
         if rt:
             parts.append(f"rental_type={rt}")
+        if sort:
+            parts.append(f"sort={sort}")
         if lang != DEFAULT_LANG:
             parts.append(f"lang={lang}")
         return f"{canonical_path}?{'&'.join(parts)}" if parts else canonical_path
+
+    def sort_url(s):
+        parts = []
+        if canonical_path == "/" and hudud:
+            parts.append(f"hudud={urllib.parse.quote(hudud)}")
+        if xona:
+            parts.append(f"xona={xona}")
+        if rental_type:
+            parts.append(f"rental_type={rental_type}")
+        if s:
+            parts.append(f"sort={s}")
+        if lang != DEFAULT_LANG:
+            parts.append(f"lang={lang}")
+        return f"{canonical_path}?{'&'.join(parts)}" if parts else canonical_path
+
+    sort_options_html = "".join(
+        f'<option value="{sort_url(key)}" {"selected" if sort == key else ""}>{t(lang, tkey)}</option>'
+        for key, tkey in [("", "sort_tanlangan"), ("yangi", "sort_yangi"), ("arzon", "sort_arzon"), ("qimmat", "sort_qimmat")]
+    )
 
     rt_tabs_html = "".join(
         f'<a href="{rt_url(key)}" class="rt-tab{" active" if rental_type == key else ""}">{icon(ikey, 15) if ikey else ""}{t(lang, tkey)}</a>'
@@ -147,7 +173,8 @@ def _listings_page(
     if total_pages > 1:
         def page_url(p):
             return (f"?page={p}" + (f"&hudud={hudud}" if hudud else "") + (f"&xona={xona}" if xona else "")
-                    + (f"&rental_type={rental_type}" if rental_type else "") + (f"&lang={lang}" if lang != DEFAULT_LANG else ""))
+                    + (f"&rental_type={rental_type}" if rental_type else "") + (f"&sort={sort}" if sort else "")
+                    + (f"&lang={lang}" if lang != DEFAULT_LANG else ""))
 
         WINDOW = 5
         start_p = max(1, min(page - WINDOW // 2, total_pages - WINDOW + 1))
@@ -240,8 +267,16 @@ def _listings_page(
 
 <main class="wrap">
   <div class="section-head">
-    <h2>{t(lang,'section_search_results') if (hudud or xona) else t(lang,'section_latest')}</h2>
-    <span class="count">{t(lang,'section_count_suffix', n=total)}</span>
+    <div class="section-head-title">
+      <h2>{t(lang,'section_search_results') if (hudud or xona) else t(lang,'section_latest')}</h2>
+      <span class="count">{t(lang,'section_count_suffix', n=total)}</span>
+    </div>
+    <div class="cs-wrap sort-select">
+      <label>{t(lang,'sort_label')}</label>
+      <select onchange="location.href=this.value">
+        {sort_options_html}
+      </select>
+    </div>
   </div>
   <div class="listing-grid">
     {cards_html}

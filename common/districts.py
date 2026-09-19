@@ -167,3 +167,78 @@ def detect_price(text: str):
     if _PRICE_NEGOTIABLE.search(text):
         return "Kelishiladi"
     return None
+
+
+_PRICE_RAW_NUMBER = re.compile(r"\d[\d\s.,]{4,}\d")
+_PRICE_ALREADY_SHORT = re.compile(r"\$|y\.?\s?e\.?|у\.?\s?е\.?|mln|млн|kelishiladi|келишилади|договорн", re.IGNORECASE)
+
+
+def format_price_compact(narx: str) -> str:
+    """Xaritadagi narx yorlig'i uchun: narx maydonida ba'zan butun bir
+    gap/so'z bilan yozilgan uzun matn kelib qolishi mumkin - bu xaritada
+    xunuk ko'rinadi. Agar narx allaqachon qisqa va tayyor holatda bo'lsa
+    ($ , y.e., mln, kelishiladi) o'zgarishsiz qoldiradi; aks holda matndan
+    aniq narxni ajratib oladi va katta xom raqamlarni ("1000000") "1 mln
+    so'm" kabi qisqartirib ko'rsatadi. Hech narsa topa olmasa, uzun matnni
+    kesib "..." bilan qisqartiradi."""
+    narx = (narx or "").strip()
+    if not narx:
+        return narx
+    if len(narx) <= 22 and _PRICE_ALREADY_SHORT.search(narx):
+        return narx
+
+    extracted = detect_price(narx)
+    if extracted and extracted != narx:
+        return format_price_compact(extracted)
+    if extracted:
+        narx = extracted
+
+    m = _PRICE_RAW_NUMBER.search(narx)
+    if m:
+        digits = re.sub(r"[\s.,]", "", m.group(0))
+        if digits.isdigit():
+            n = int(digits)
+            if n >= 1_000_000:
+                mln_str = f"{n / 1_000_000:.1f}".rstrip("0").rstrip(".")
+                return f"{mln_str} mln so'm"
+            if n >= 1000:
+                return f"{n:,}".replace(",", " ") + " so'm"
+
+    if len(narx) > 22:
+        return narx[:19].rstrip() + "..."
+    return narx
+
+
+def parse_price_value(narx: str, usd_to_som_rate: int = 12700):
+    """Narxni (erkin matn) taqqoslash uchun so'mdagi taxminiy raqamga
+    aylantiradi (sayt saralashi - "Eng arzon"/"Eng qimmat" - uchun). $
+    va y.e. (shartli birlik) `usd_to_som_rate` orqali so'mga o'tkaziladi.
+    Aniqlab bo'lmasa (masalan "Kelishiladi" yoki bo'sh) None qaytaradi -
+    bunday e'lonlar saralashda oxirga suriladi."""
+    narx = (narx or "").strip()
+    if not narx:
+        return None
+    m = _PRICE_DOLLAR.search(narx) or _PRICE_DOLLAR_SUFFIX.search(narx)
+    if m:
+        try:
+            return int(float(re.sub(r"[\s,]", "", m.group(1))) * usd_to_som_rate)
+        except ValueError:
+            pass
+    m = _PRICE_YE.search(narx)
+    if m:
+        try:
+            return int(float(re.sub(r"[\s,]", "", m.group(1))) * usd_to_som_rate)
+        except ValueError:
+            pass
+    m = _PRICE_MLN_UZ.search(narx) or _PRICE_MLN_RU.search(narx)
+    if m:
+        try:
+            return int(float(m.group(1).replace(",", ".")) * 1_000_000)
+        except ValueError:
+            pass
+    m = _PRICE_SUM.search(narx) or _PRICE_RAW_NUMBER.search(narx)
+    if m:
+        digits = re.sub(r"[\s.,]", "", m.group(1) if m.lastindex else m.group(0))
+        if digits.isdigit():
+            return int(digits)
+    return None

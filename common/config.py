@@ -54,6 +54,9 @@ DEFAULT_SETTINGS = {
     "subscriber_discount_percent": os.getenv("SUBSCRIBER_DISCOUNT_PERCENT", "25"),
     "free_views_enabled": "1",
     "free_views_count": "2",
+    "promote_limit_interval_hours": os.getenv("PROMOTE_LIMIT_INTERVAL_HOURS", "2"),
+    "paid_repost_interval_hours": os.getenv("PAID_REPOST_INTERVAL_HOURS", "3"),
+    "usd_to_som_rate": os.getenv("USD_TO_SOM_RATE", "12700"),
 }
 
 # ---- Telegram orqali kirish (shaxsiy kabinet) ----
