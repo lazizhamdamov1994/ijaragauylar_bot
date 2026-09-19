@@ -32,6 +32,7 @@ from common.config import ADMIN_IDS, ADMIN_USERNAME, BOT_TOKEN as TOKEN, CARD_HO
 
 from common.telegram_media import watermark_telegram_photo
 from common.districts import TASHKENT_DISTRICTS, detect_district, detect_price
+from common.ai import ai_extract_listing_fields
 
 from bot.constants import *  # noqa: F401,F403
 from bot.db import *  # noqa: F401,F403
@@ -120,7 +121,7 @@ async def quick_phone_received(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return QUICK_PHONE
     context.user_data["telefon"] = phone
-    text, keyboard, parse_mode = _build_manzil_prompt(context.user_data.get("quick_text", ""))
+    text, keyboard, parse_mode = await _build_manzil_prompt(context)
     await update.message.reply_text(text, parse_mode=parse_mode, reply_markup=keyboard)
     return QUICK_MANZIL
 
@@ -136,15 +137,40 @@ async def quick_back_to_phone(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # ============================= MANZIL (avtomatik aniqlash bilan) =============================
 # Matndan tuman nomi aniqlansa, foydalanuvchiga qo'lda yozish o'rniga
-# "Ha, to'g'ri" / "O'zim yozaman" tanlovi beriladi - aniqlanmasa, odatdagidek
+# "Ha, to'g'ri" / "O'zim yozaman" tanlovi beriladi - aniqlanmasa, ODATDAGIDEK
+# ish yuruvchi (arzon, tez) regex birinchi urinib ko'radi; u ham topa
+# olmasa - AI (agar admin yoqib qo'ygan bo'lsa) matndan manzil/narx/xona
+# ajratib olishga harakat qiladi, natija bitta so'rovda keshlanadi (ikkalasi
+# uchun ham qayta so'rov yuborilmaydi). AI ham topa olmasa - odatdagidek
 # qo'lda so'raladi.
 
-def _build_manzil_prompt(quick_text: str) -> tuple:
+async def _get_ai_fields(context: ContextTypes.DEFAULT_TYPE) -> dict:
+    if "_ai_fields" not in context.user_data:
+        quick_text = context.user_data.get("quick_text", "")
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, ai_extract_listing_fields, quick_text)
+        context.user_data["_ai_fields"] = result or {}
+    return context.user_data["_ai_fields"]
+
+
+async def _build_manzil_prompt(context: ContextTypes.DEFAULT_TYPE) -> tuple:
+    quick_text = context.user_data.get("quick_text", "")
     detected = detect_district(quick_text)
     if detected:
         text = f"\U0001F4CD Matndan manzil (tuman) aniqlandi: <b>{esc(detected)}</b>\n\nShu to'g'rimi?"
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("\u2705 Ha, to'g'ri", callback_data="quick_manzil_auto")],
+            [InlineKeyboardButton("\u270f\ufe0f O'zim yozaman", callback_data="quick_manzil_write")],
+            [InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tophone"),
+             InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")],
+        ])
+        return text, keyboard, ParseMode.HTML
+    ai_fields = await _get_ai_fields(context)
+    ai_manzil = ai_fields.get("manzil")
+    if ai_manzil:
+        text = f"\U0001F916 AI orqali manzil taklif qilindi: <b>{esc(ai_manzil)}</b>\n\nShu to'g'rimi?"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("\u2705 Ha, to'g'ri", callback_data="quick_manzil_ai")],
             [InlineKeyboardButton("\u270f\ufe0f O'zim yozaman", callback_data="quick_manzil_write")],
             [InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tophone"),
              InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")],
@@ -157,7 +183,7 @@ def _build_manzil_prompt(quick_text: str) -> tuple:
 
 
 async def _advance_to_narx_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE, edit_query: bool = False) -> int:
-    text, keyboard, parse_mode = _build_narx_prompt(context.user_data.get("quick_text", ""))
+    text, keyboard, parse_mode = await _build_narx_prompt(context)
     if edit_query:
         await update.callback_query.edit_message_text(text, parse_mode=parse_mode, reply_markup=keyboard)
     else:
@@ -174,6 +200,17 @@ async def quick_manzil_auto_router(update: Update, context: ContextTypes.DEFAULT
         # ehtiyot chorasi sifatida qo'lda yozishga o'tkaziladi.
         return await quick_manzil_manual_router(update, context)
     context.user_data["quick_manzil"] = detected
+    return await _advance_to_narx_prompt(update, context, edit_query=True)
+
+
+async def quick_manzil_ai_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    ai_fields = await _get_ai_fields(context)
+    ai_manzil = ai_fields.get("manzil")
+    if not ai_manzil:
+        return await quick_manzil_manual_router(update, context)
+    context.user_data["quick_manzil"] = ai_manzil
     return await _advance_to_narx_prompt(update, context, edit_query=True)
 
 
@@ -242,19 +279,31 @@ async def quick_manzil_received(update: Update, context: ContextTypes.DEFAULT_TY
 async def quick_back_to_manzil(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    text, keyboard, parse_mode = _build_manzil_prompt(context.user_data.get("quick_text", ""))
+    text, keyboard, parse_mode = await _build_manzil_prompt(context)
     await query.edit_message_text(text, parse_mode=parse_mode, reply_markup=keyboard)
     return QUICK_MANZIL
 
 
 # ============================= NARX (avtomatik aniqlash bilan) =============================
 
-def _build_narx_prompt(quick_text: str) -> tuple:
+async def _build_narx_prompt(context: ContextTypes.DEFAULT_TYPE) -> tuple:
+    quick_text = context.user_data.get("quick_text", "")
     detected = detect_price(quick_text)
     if detected:
         text = f"\U0001F4B0 Matndan narx aniqlandi: <b>{esc(detected)}</b>\n\nShu to'g'rimi?"
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("\u2705 Ha, to'g'ri", callback_data="quick_narx_auto")],
+            [InlineKeyboardButton("\u270f\ufe0f O'zim yozaman", callback_data="quick_narx_write")],
+            [InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tomanzil"),
+             InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")],
+        ])
+        return text, keyboard, ParseMode.HTML
+    ai_fields = await _get_ai_fields(context)
+    ai_narx = ai_fields.get("narx")
+    if ai_narx:
+        text = f"\U0001F916 AI orqali narx taklif qilindi: <b>{esc(ai_narx)}</b>\n\nShu to'g'rimi?"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("\u2705 Ha, to'g'ri", callback_data="quick_narx_ai")],
             [InlineKeyboardButton("\u270f\ufe0f O'zim yozaman", callback_data="quick_narx_write")],
             [InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tomanzil"),
              InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")],
@@ -268,6 +317,13 @@ def _build_narx_prompt(quick_text: str) -> tuple:
 
 async def _finish_narx(update: Update, context: ContextTypes.DEFAULT_TYPE, narx: str) -> int:
     context.user_data["quick_narx"] = narx
+    # Xona soni uchun alohida so'rov bosqichi yo'q - agar AI matndan
+    # (manzil/narx aniqlash jarayonida keshlangan chaqiruvdan) xona sonini
+    # ham topgan bo'lsa, shuni ishlatamiz - hozirgacha bu maydon Tezkor
+    # e'londa doim bo'sh qolar edi.
+    ai_xona = context.user_data.get("_ai_fields", {}).get("xona")
+    if ai_xona:
+        context.user_data["quick_xona"] = ai_xona
     context.user_data["rasmlar"] = []
     context.user_data["photo_status_msg_id"] = None
     await quick_update_photo_status(update, context)
@@ -282,6 +338,17 @@ async def quick_narx_auto_router(update: Update, context: ContextTypes.DEFAULT_T
         return await quick_narx_manual_router(update, context)
     await query.edit_message_reply_markup(reply_markup=None)
     return await _finish_narx(update, context, detected)
+
+
+async def quick_narx_ai_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    ai_fields = await _get_ai_fields(context)
+    ai_narx = ai_fields.get("narx")
+    if not ai_narx:
+        return await quick_narx_manual_router(update, context)
+    await query.edit_message_reply_markup(reply_markup=None)
+    return await _finish_narx(update, context, ai_narx)
 
 
 async def quick_narx_manual_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -309,7 +376,7 @@ async def quick_narx_received(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def quick_back_to_narx(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    text, keyboard, parse_mode = _build_narx_prompt(context.user_data.get("quick_text", ""))
+    text, keyboard, parse_mode = await _build_narx_prompt(context)
     await query.edit_message_text(text, parse_mode=parse_mode, reply_markup=keyboard)
     return QUICK_NARX
 
@@ -391,6 +458,7 @@ async def quick_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     listing_id = save_quick_listing(
         user.id, user.username, user.full_name, data["telefon"],
         data["quick_manzil"], data["quick_narx"], data["quick_text"], data["rasmlar"],
+        xona=data.get("quick_xona", ""),
     )
     listing = get_listing(listing_id)
     channel_msg_id = await send_listing_to_channel(context, listing)

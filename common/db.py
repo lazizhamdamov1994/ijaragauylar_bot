@@ -145,6 +145,9 @@ def init_schema() -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS district_aliases (
         id INTEGER PRIMARY KEY AUTOINCREMENT, alias TEXT NOT NULL UNIQUE, district TEXT NOT NULL,
         added_by INTEGER, added_at TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS ai_usage_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, feature TEXT NOT NULL, input_tokens INTEGER DEFAULT 0,
+        output_tokens INTEGER DEFAULT 0, cost_usd REAL DEFAULT 0, ok INTEGER DEFAULT 1, created_at TEXT)""")
     conn.commit()
     conn.close()
 

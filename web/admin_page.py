@@ -470,6 +470,11 @@ ADMIN_HTML = """<!DOCTYPE html>
     <div class="page-head"><h1>⚙️ Sozlamalar</h1></div>
     <div class="panel-sub" style="margin-bottom:16px;">O'zgarish darhol, botni qayta ishga tushirmasdan, hamma joyda kuchga kiradi</div>
     <div class="panel" style="margin-bottom:16px;" id="settings-list"><div class="empty-note">Yuklanmoqda...</div></div>
+    <div class="panel" style="margin-bottom:16px;">
+      <h2>\U0001F916 AI xarajati (so'nggi 30 kun)</h2>
+      <div class="panel-sub">Faqat «AI yordamchi funksiyalar» yoqilgan bo'lsa hisoblanadi</div>
+      <div id="ai-usage-stats" style="margin-top:12px;"><div class="empty-note">Yuklanmoqda...</div></div>
+    </div>
     <div class="panel">
       <h2>\U0001F4E2 Barcha foydalanuvchilarga xabar yuborish</h2>
       <div class="panel-sub">Kabinetdagi «Bildirishnomalar» bo'limida ko'rinadi</div>
@@ -863,6 +868,20 @@ async function removeDistrictAliasAction(aliasId) {
   await fetch(`/api/admin/district-aliases/${aliasId}/remove`, { method: 'POST' });
   loadDistrictAliases();
 }
+
+async function loadAiUsage() {
+  const res = await fetch('/api/admin/ai-usage');
+  const s = await res.json();
+  const el = document.getElementById('ai-usage-stats');
+  if (!s.calls) { el.innerHTML = `<div class="empty-note">Hozircha AI chaqiruvi bo'lmagan</div>`; return; }
+  el.innerHTML = `
+    <div style="display:flex;gap:24px;flex-wrap:wrap;">
+      <div><div style="font-size:22px;font-weight:800;">${s.calls}</div><div class="panel-sub">Chaqiruvlar</div></div>
+      <div><div style="font-size:22px;font-weight:800;">$${s.cost_usd.toFixed(3)}</div><div class="panel-sub">Taxminiy xarajat</div></div>
+      <div><div style="font-size:22px;font-weight:800;">${(s.input_tokens + s.output_tokens).toLocaleString()}</div><div class="panel-sub">Jami token</div></div>
+      <div><div style="font-size:22px;font-weight:800;${s.errors ? 'color:var(--danger,#e5484d);' : ''}">${s.errors}</div><div class="panel-sub">Xatolik</div></div>
+    </div>`;
+}
 async function addModeratorAction() {
   const input = document.getElementById('mod-add-input');
   const uid = parseInt(input.value.trim(), 10);
@@ -1161,6 +1180,7 @@ loadBlocked();
 loadSettings();
 loadSupport();
 loadDistrictAliases();
+loadAiUsage();
 setInterval(loadStats, 60000);
 setInterval(loadSubarenda, 30000);
 setInterval(loadInquiries, 30000);

@@ -137,18 +137,19 @@ def save_listing(data: dict, price_charged: int) -> int:
     return listing_id
 
 
-def save_quick_listing(user_id: int, username, full_name, telefon: str, manzil: str, narx: str, raw_text: str, rasmlar: list) -> int:
+def save_quick_listing(user_id: int, username, full_name, telefon: str, manzil: str, narx: str, raw_text: str, rasmlar: list, xona: str = "") -> int:
     """Admin uchun tezkor rejim: OLX'dan ko'chirilgan matn HECH QANDAY o'zgartirishsiz,
     aynan o'zi saqlanadi va kanalga shu holicha (branding qo'shilmasdan) chiqadi.
     Manzil va narx endi MAJBURIY - shu ikkisi tufayli tezkor e'lonlar ham saytda
-    aniq manzili va narxi bilan (lite shablonda) to'g'ri ko'rinadi."""
+    aniq manzili va narxi bilan (lite shablonda) to'g'ri ko'rinadi. Xona (ixtiyoriy,
+    odatda AI orqali matndan aniqlanadi) - saytdagi xonalar soni filtri uchun."""
     conn = db()
     cur = conn.execute(
         """INSERT INTO listings
             (user_id, username, full_name, manzil, moljal, kimlarga, xona, qulaylik, narx,
              telefon, photos, price_charged, status, is_quick, raw_text, created_at)
-           VALUES (?, ?, ?, ?, '', '', '', '', ?, ?, ?, 0, 'pending', 1, ?, ?)""",
-        (user_id, username, full_name, manzil, narx, telefon, json.dumps(rasmlar), raw_text, now_str()),
+           VALUES (?, ?, ?, ?, '', '', ?, '', ?, ?, ?, 0, 'pending', 1, ?, ?)""",
+        (user_id, username, full_name, manzil, xona, narx, telefon, json.dumps(rasmlar), raw_text, now_str()),
     )
     conn.commit()
     listing_id = cur.lastrowid

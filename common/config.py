@@ -39,6 +39,12 @@ MAX_DAILY_LISTINGS = int(os.getenv("MAX_DAILY_LISTINGS", "5"))
 MOD_DAILY_LISTINGS = int(os.getenv("MOD_DAILY_LISTINGS", "50"))
 STALE_CHECK_DAYS = int(os.getenv("STALE_CHECK_DAYS", "7"))
 
+# ---- AI (Claude) - ixtiyoriy yordamchi funksiyalar uchun ----
+# Kalit bo'sh bo'lsa, common/ai.py'dagi barcha funksiyalar jim ravishda
+# None qaytaradi - eski (regex asosidagi) mantiq ishlayveradi, hech narsa
+# sinmaydi.
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
 # ---- To'lov ----
 CARD_HOLDER = os.getenv("CARD_HOLDER", "")
 CARD_NUMBER = os.getenv("CARD_NUMBER", "5614681434261669")
@@ -57,6 +63,7 @@ DEFAULT_SETTINGS = {
     "promote_limit_interval_hours": os.getenv("PROMOTE_LIMIT_INTERVAL_HOURS", "2"),
     "paid_repost_interval_hours": os.getenv("PAID_REPOST_INTERVAL_HOURS", "3"),
     "usd_to_som_rate": os.getenv("USD_TO_SOM_RATE", "12700"),
+    "ai_features_enabled": "0",
 }
 
 # ---- Telegram orqali kirish (shaxsiy kabinet) ----

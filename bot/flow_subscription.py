@@ -35,6 +35,9 @@ from bot.db import *  # noqa: F401,F403
 from bot.helpers import *  # noqa: F401,F403
 from bot.fraud_detection import *  # noqa: F401,F403
 
+from common.telegram_media import download_photo_bytes
+from common.ai import ai_check_receipt, ai_features_enabled
+
 logger = logging.getLogger(__name__)
 
 # ============================= OBUNA (KANAL UCHUN) - ODDIY, 1 OYLIK =============================
@@ -146,11 +149,24 @@ async def subscription_receipt(update: Update, context: ContextTypes.DEFAULT_TYP
         [[InlineKeyboardButton("\u2705 Tasdiqlash", callback_data=f"admin_approve_sub_{sub_id}"),
           InlineKeyboardButton("\u274c Rad etish", callback_data=f"admin_reject_sub_{sub_id}")]]
     )
+    ai_note = ""
+    if ai_features_enabled():
+        try:
+            receipt_bytes = await download_photo_bytes(receipt)
+            if receipt_bytes:
+                loop = asyncio.get_event_loop()
+                receipt_check = await loop.run_in_executor(None, ai_check_receipt, receipt_bytes, "image/jpeg", price, CARD_HOLDER)
+                if receipt_check and not receipt_check.get("matches"):
+                    ai_note = f"\n\n\U0001F916⚠️ <b>AI: chekda nomuvofiqlik</b> — {esc(receipt_check.get('note') or '')}"
+        except Exception:
+            logger.exception("AI obuna chekini tekshirishda xatolik")
+
     caption = (
         f"\U0001F4B3 <b>Yangi obuna so'rovi</b> #{sub_id}\n\n"
         f"\U0001F464 {esc(user.full_name)} (@{esc(user.username) or 'yo`q'})\n"
         f"\U0001F194 user_id: {user.id}\n"
         f"\U0001F4B0 Summasi: {price:,} so'm"
+        f"{ai_note}"
     )
     any_success = False
     for admin_id in ADMIN_IDS:

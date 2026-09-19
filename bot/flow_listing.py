@@ -32,6 +32,7 @@ from common.config import ADMIN_IDS, ADMIN_USERNAME, BOT_TOKEN as TOKEN, CARD_HO
 
 from common.telegram_media import download_photo_bytes, watermark_telegram_photo
 from common.slideshow import build_instagram_caption, build_slideshow_video
+from common.ai import ai_check_receipt, ai_features_enabled, ai_screen_for_scam
 
 from bot.constants import *  # noqa: F401,F403
 from bot.db import *  # noqa: F401,F403
@@ -677,8 +678,35 @@ async def submit_listing_to_admin(context: ContextTypes.DEFAULT_TYPE, listing_id
     blocked = get_blocked_phone(data["telefon"])
     warning = "\u26a0\ufe0f\u26a0\ufe0f <b>DIQQAT: BU RAQAM BLOKLANGAN RO'YXATDA!</b> \u26a0\ufe0f\u26a0\ufe0f\n\n" if blocked else ""
 
+    # AI firibgarlik skrining va (agar chek bo'lsa) to'lov cheki oldindan
+    # tekshiruvi - faqat admin "ai_features_enabled" sozlamasini yoqib
+    # qo'ygan bo'lsa ishlaydi; xatolik yoki o'chirilgan bo'lsa None
+    # qaytadi va bu bosqich jimgina o'tkazib yuboriladi - moderatsiya
+    # jarayoni hech qachon bunga bog'liq bo'lmaydi (moderator baribir
+    # qo'lda tekshirib, o'zi qaror qiladi).
+    ai_warning = ""
+    try:
+        loop = asyncio.get_event_loop()
+        scam = await loop.run_in_executor(None, ai_screen_for_scam, caption)
+        if scam and scam.get("suspicious"):
+            ai_warning += f"\U0001F916\u26a0\ufe0f <b>AI: shubhali belgilar topildi</b> \u2014 {esc(scam.get('reason') or '')}\n\n"
+    except Exception:
+        logger.exception("AI firibgarlik skriningida xatolik")
+
+    if data.get("payment_receipt") and ai_features_enabled():
+        try:
+            receipt_bytes = await download_photo_bytes(data["payment_receipt"])
+            if receipt_bytes:
+                receipt_check = await loop.run_in_executor(
+                    None, ai_check_receipt, receipt_bytes, "image/jpeg", price_charged, CARD_HOLDER,
+                )
+                if receipt_check and not receipt_check.get("matches"):
+                    ai_warning += f"\U0001F916\u26a0\ufe0f <b>AI: chekda nomuvofiqlik</b> \u2014 {esc(receipt_check.get('note') or '')}\n\n"
+        except Exception:
+            logger.exception("AI to'lov cheki tekshiruvida xatolik")
+
     sender_line = (
-        f"{warning}"
+        f"{warning}{ai_warning}"
         f"\U0001F464 Yuboruvchi: {esc(data.get('full_name'))} (@{esc(data.get('username')) or 'yo`q'})\n"
         f"\U0001F4B0 To'lov qilingan summa: {price_charged:,} so'm\n"
         f"\U0001F194 E'lon: #{listing_id}\n\n"

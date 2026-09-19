@@ -27,6 +27,7 @@ from common.db import (
 )
 
 from common.districts import add_district_alias, list_district_aliases, remove_district_alias
+from common.ai import ai_usage_summary
 
 from web.auth import check_auth, get_current_tg_user
 from web.listings_data import get_active_listings, normalize_phone_web
@@ -893,6 +894,11 @@ def api_admin_set_setting(key: str = Query(...), value: str = Query(...), user: 
         final = raw
     set_setting(key, final)
     return {"ok": True, "value": final}
+
+
+@router.get("/api/admin/ai-usage")
+def api_admin_ai_usage(user: str = Depends(check_auth)):
+    return ai_usage_summary(30)
 
 
 @router.post("/api/admin/broadcast")

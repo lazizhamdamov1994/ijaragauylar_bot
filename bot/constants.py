@@ -136,6 +136,10 @@ SETTINGS_FIELDS = {
         "hint": "1 dollar (yoki y.e.) necha so'm ekanini yozing - saytda «Eng arzon/qimmat» saralashda $ va so'm narxlarni solishtirish uchun ishlatiladi. Masalan: 12700",
         "kind": "int",
     },
+    "ai_features_enabled": {
+        "label": "\U0001F916 AI yordamchi funksiyalar",
+        "kind": "bool",
+    },
 }
 
 

@@ -2,6 +2,7 @@
 Ommaviy sahifalar: bosh sahifa, e'lon tafsiloti, subarenda, e'lon joylash
 (+ veb-saytdan yuborilgan e'lonni botning moderatsiya navbatiga yuborish).
 """
+import asyncio
 import json as _json
 import logging
 import os
@@ -25,6 +26,7 @@ from common.config import (
 )
 from common.db import db, get_favorite_listing_ids, get_price_history, is_phone_blocked, now_str
 from common.telegram_media import watermark_photo_bytes_list
+from common.ai import ai_screen_for_scam
 
 from web.auth import _client_ip, get_current_tg_user, is_web_subscribed
 from web.listings_data import (
@@ -1328,7 +1330,18 @@ async def notify_admins_new_web_listing(listing_id: int, d: dict, file_ids: list
     if not ADMIN_IDS or not BOT_TOKEN:
         return
     caption = _web_listing_caption(d) + f"\n\n\U0001F194 E'lon raqami: #{listing_id}\n\U0001F310 Manba: <b>veb-sayt</b> orqali yuborilgan"
+
+    ai_warning = ""
+    try:
+        loop = asyncio.get_event_loop()
+        scam = await loop.run_in_executor(None, ai_screen_for_scam, caption)
+        if scam and scam.get("suspicious"):
+            ai_warning = f"\U0001F916⚠️ <b>AI: shubhali belgilar topildi</b> — {esc_html(scam.get('reason') or '')}\n\n"
+    except Exception:
+        logger.exception("AI firibgarlik skriningida xatolik (veb e'lon)")
+
     sender_line = (
+        f"{ai_warning}"
         f"\U0001F464 Yuboruvchi: {esc_html(d.get('full_name') or 'Nomsiz')} (veb-saytdan — Telegram akkaunti yo'q)\n"
         f"\U0001F4DE Bog'lanish uchun: {esc_html(d['telefon'])}\n"
         f"\U0001F4B0 To'lov qilingan summa: {price_charged:,} so'm\n"
