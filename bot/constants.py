@@ -64,7 +64,8 @@ logger = logging.getLogger(__name__)
     SLIDESHOW_CONFIRM,
     EDIT_LISTING_VALUE,
     VIEWING_TIME_WAIT,
-) = range(37)
+    DISTALIAS_ADD_WAIT,
+) = range(38)
 
 BTN_ELON = "\U0001F4DD E'lon berish"
 BTN_LISTINGS = "\U0001F4CB Mening e'lonlarim"
@@ -87,6 +88,7 @@ BTN_QUICK = "\u26a1 Tezkor e'lon"
 BTN_MODERATORS = "\U0001F46E Moderatorlar"
 BTN_FLAGGED = "\U0001F6A8 Shubhali faollik"
 BTN_USER_SEARCH = "\U0001F50E Qidirish"
+BTN_DISTRICT_ALIASES = "\U0001F5FA Tuman kalit so'zlari"
 
 STEPS = [
     {"state": MANZIL, "field": "manzil", "prompt": "\U0001F4CD <b>Manzil</b> (Адрес):", "kind": "text", "maxlen": 250},

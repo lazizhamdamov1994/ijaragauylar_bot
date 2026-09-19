@@ -41,6 +41,7 @@ from telegram.ext import (
 )
 
 from common.config import ADMIN_IDS, ADMIN_USERNAME, BOT_TOKEN as TOKEN, CARD_HOLDER, CHANNEL_ID, CHANNEL_USERNAME, DASHBOARD_URL, DB_PATH, DEFAULT_SETTINGS as INITIAL_SETTINGS, MAX_DAILY_LISTINGS, MOD_DAILY_LISTINGS, STALE_CHECK_DAYS
+from common.districts import seed_district_aliases
 
 from bot.constants import *  # noqa: F401,F403
 from bot.db import *  # noqa: F401,F403
@@ -81,6 +82,7 @@ def main():
         raise RuntimeError("CHANNEL_ID topilmadi. .env faylida CHANNEL_ID o'rnating.")
 
     init_db()
+    seed_district_aliases()
     persistence = PicklePersistence(filepath="bot_persistence.pkl")
     app = (
         Application.builder().token(TOKEN).persistence(persistence)
@@ -222,6 +224,14 @@ def main():
         persistent=False,
     )
 
+    distalias_add_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(district_alias_add_entry, pattern=r"^distalias_add_\d+$")],
+        states={DISTALIAS_ADD_WAIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, district_alias_add_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(DISTALIAS_ADD_WAIT))]},
+        fallbacks=[CommandHandler("bekor", district_alias_add_cancel)],
+        name="distalias_add_conv",
+        persistent=False,
+    )
+
     usersearch_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex(f"^{re.escape(BTN_USER_SEARCH)}$") & filters.User(ADMIN_IDS), usersearch_entry)],
         states={USER_SEARCH_WAIT: [MessageHandler(filters.ALL & ~filters.COMMAND, usersearch_received)]},
@@ -276,12 +286,13 @@ def main():
     app.add_handler(quick_conv)
     app.add_handler(mod_add_conv)
     app.add_handler(admin_add_conv)
+    app.add_handler(distalias_add_conv)
     app.add_handler(usersearch_conv)
     app.add_handler(addloc_conv)
     app.add_handler(edit_field_conv)
     register_conv("edit_field_conv", edit_field_conv)
     app.add_handler(MessageHandler(
-        filters.Regex(f"^({re.escape(BTN_LISTINGS)}|{re.escape(BTN_HELP)}|{re.escape(BTN_LOCATION_ALERT)}|{re.escape(BTN_MY_LOCATIONS)}|{re.escape(BTN_CHANNEL)}|{re.escape(BTN_STATS)}|{re.escape(BTN_SUBSCRIBERS)}|{re.escape(BTN_SETTINGS)}|{re.escape(BTN_PENDING)}|{re.escape(BTN_BLOCKED)}|{re.escape(BTN_MODERATORS)}|{re.escape(BTN_FLAGGED)}|{re.escape(BTN_LISTINGS_MAP)}|{re.escape(BTN_ADMIN_PANEL)}|{re.escape(BTN_SUBARENDA)})$"),
+        filters.Regex(f"^({re.escape(BTN_LISTINGS)}|{re.escape(BTN_HELP)}|{re.escape(BTN_LOCATION_ALERT)}|{re.escape(BTN_MY_LOCATIONS)}|{re.escape(BTN_CHANNEL)}|{re.escape(BTN_STATS)}|{re.escape(BTN_SUBSCRIBERS)}|{re.escape(BTN_SETTINGS)}|{re.escape(BTN_PENDING)}|{re.escape(BTN_BLOCKED)}|{re.escape(BTN_MODERATORS)}|{re.escape(BTN_FLAGGED)}|{re.escape(BTN_LISTINGS_MAP)}|{re.escape(BTN_ADMIN_PANEL)}|{re.escape(BTN_SUBARENDA)}|{re.escape(BTN_DISTRICT_ALIASES)})$"),
         text_menu_router,
     ))
     app.add_handler(CallbackQueryHandler(admin_approve, pattern=r"^admin_approve_(listing|sub)_\d+$"))
@@ -300,6 +311,10 @@ def main():
     app.add_handler(CallbackQueryHandler(toggle_setting_router, pattern=r"^toggleset_\w+$"))
     app.add_handler(CallbackQueryHandler(mod_remove_router, pattern=r"^modremove_\d+$"))
     app.add_handler(CallbackQueryHandler(mod_toggle_super_router, pattern=r"^modsuper_\d+$"))
+    app.add_handler(CallbackQueryHandler(district_alias_view_router, pattern=r"^distalias_view_\d+$"))
+    app.add_handler(CallbackQueryHandler(district_alias_back_router, pattern=r"^distalias_back$"))
+    app.add_handler(CallbackQueryHandler(district_alias_remove_router, pattern=r"^distaliasrm_\d+_\d+$"))
+    app.add_handler(CallbackQueryHandler(quickteach_skip_router, pattern=r"^quickteach_skip$"))
     app.add_handler(CallbackQueryHandler(admin_remove_router, pattern=r"^adminremove_\d+$"))
     app.add_handler(CallbackQueryHandler(stillavail_router, pattern=r"^stillavail_(yes|no)_\d+$"))
     app.add_handler(CallbackQueryHandler(complain_reason_router, pattern=r"^rpt_(rented|fake|noresponse|fraud|cancel)_\d+$"))

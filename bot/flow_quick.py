@@ -31,7 +31,7 @@ from telegram.ext import ContextTypes, ConversationHandler, filters
 from common.config import ADMIN_IDS, ADMIN_USERNAME, BOT_TOKEN as TOKEN, CARD_HOLDER, CHANNEL_ID, CHANNEL_USERNAME, DASHBOARD_URL, DB_PATH, DEFAULT_SETTINGS as INITIAL_SETTINGS, MAX_DAILY_LISTINGS, MOD_DAILY_LISTINGS, STALE_CHECK_DAYS
 
 from common.telegram_media import watermark_telegram_photo
-from common.districts import detect_district, detect_price
+from common.districts import TASHKENT_DISTRICTS, detect_district, detect_price
 
 from bot.constants import *  # noqa: F401,F403
 from bot.db import *  # noqa: F401,F403
@@ -189,6 +189,40 @@ async def quick_manzil_manual_router(update: Update, context: ContextTypes.DEFAU
     return QUICK_MANZIL
 
 
+async def _offer_quick_teach(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Manzil qo'lda kiritilib, matnda tuman AVTOMATIK aniqlanmagan bo'lsa -
+    moderatorga tizimni "o'rgatish" imkoniyatini ixtiyoriy (o'tkazib
+    yuborsa bo'ladigan) tarzda taklif qiladi. MUHIM: bu yerdagi tugmalar
+    quick_conv'dan MUSTAQIL - "district_alias_add_conv" (bot/main.py,
+    bot/district_alias_ui.py) ni ishga tushiradi, xuddi shu callback_data
+    ("distalias_add_{idx}") "Tuman kalit so'zlari" bo'limidagi bilan bir
+    xil - shu orqali ikkinchi nusxa yozish shart bo'lmadi."""
+    rows, row = [], []
+    for i, d in enumerate(TASHKENT_DISTRICTS):
+        row.append(InlineKeyboardButton(d, callback_data=f"distalias_add_{i}"))
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton("\u23ed O'tkazib yuborish", callback_data="quickteach_skip")])
+    await update.message.reply_text(
+        "\U0001F393 Bu manzilda tuman nomi avtomatik aniqlanmadi. Xohlasangiz, "
+        "tizimni o'rgatish uchun shu manzildagi kalit so'zni tegishli tumanga "
+        "biriktiring (ixtiyoriy - o'tkazib yuborsangiz ham e'lon davom etadi):",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+async def quickteach_skip_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    try:
+        await query.edit_message_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+
 async def quick_manzil_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if await try_escape_to_menu(update, context):
         return ConversationHandler.END
@@ -200,6 +234,8 @@ async def quick_manzil_received(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text(f"\u26a0\ufe0f Manzil juda uzun ({len(raw)} belgi). 250 belgidan qisqaroq yozing:")
         return QUICK_MANZIL
     context.user_data["quick_manzil"] = raw
+    if detect_district(context.user_data.get("quick_text", "")) is None:
+        await _offer_quick_teach(update, context)
     return await _advance_to_narx_prompt(update, context, edit_query=False)
 
 

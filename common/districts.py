@@ -1,9 +1,20 @@
 """
 Toshkent tumanlari - bot va veb UMUMIY (ikkalasi ham erkin matndan tuman
-nomini avtomatik aniqlashi kerak: veb - SEO breadcrumb/sitemap uchun,
-bot - "Tezkor e'lon" oqimida manzilni avtomatik taklif qilish uchun).
+nomini avtomatik aniqlashi kerak: veb - SEO breadcrumb/sitemap va tuman
+filtri uchun, bot - "Tezkor e'lon" oqimida manzilni avtomatik taklif
+qilish uchun).
+
+MUHIM: tuman -> kalit so'z (alias) bog'lanishi endi DB'dagi
+`district_aliases` jadvalida saqlanadi, qattiq kodlangan ro'yxat EMAS -
+shu orqali admin/moderatorlar vaqt o'tishi bilan yangi kalit so'zlar
+(mahalla/mavze/mashxur joy nomlari - masalan "Darxon" -> Sergeli)
+qo'shib, tizimni "o'rgatib" boraveradi, kod o'zgartirmasdan va qayta
+deploy qilmasdan. Pastdagi _SEED_DISTRICT_ALIASES faqat DASTLABKI
+(bo'sh jadvalga bir martalik) to'ldirish uchun ishlatiladi.
 """
 import re
+
+from common.db import db, now_str
 
 TASHKENT_DISTRICTS = [
     "Yunusobod", "Chilonzor", "Sergeli", "Mirzo Ulug'bek", "Shayxontohur",
@@ -11,10 +22,21 @@ TASHKENT_DISTRICTS = [
     "Mirobod", "Yangihayot",
 ]
 
-_DISTRICT_ALIASES = {
-    "Yunusobod": ["yunusobod", "yunusabad", "юнусобод", "юнусабад"],
+# Boshlang'ich (urug') kalit so'zlar - DB jadvali bo'sh bo'lsa, bir marta
+# shu ro'yxat bilan to'ldiriladi (seed_district_aliases()). Shundan keyin
+# ro'yxat FAQAT DB orqali (admin/moderator amallari bilan) kengayadi.
+_SEED_DISTRICT_ALIASES = {
+    "Yunusobod": [
+        "yunusobod", "yunusabad", "юнусобод", "юнусабад",
+        "megaplanet", "mega planet", "мегапланет", "мега плэнет",
+        "turkiston", "туркистон", "7a mavze", "7-a mavze", "7 mavze", "7-мавзе",
+    ],
     "Chilonzor": ["chilonzor", "chilanzar", "чилонзор", "чиланзар"],
-    "Sergeli": ["sergeli", "сергели"],
+    "Sergeli": [
+        "sergeli", "сергели",
+        "darxon", "дархон", "yangi darxon", "янги дархон",
+        "choshtepa", "чоштепа",
+    ],
     "Mirzo Ulug'bek": ["mirzo ulug", "mirzo-ulug", "мирзо улуг", "мирзо-улуг"],
     "Shayxontohur": ["shayxontohur", "shaykhontohur", "шайхонтохур", "шайхантахур"],
     "Olmazor": ["olmazor", "olmazar", "олмазор", "олмазар"],
@@ -27,16 +49,79 @@ _DISTRICT_ALIASES = {
 }
 
 
+def seed_district_aliases() -> None:
+    """Ilova ishga tushganda chaqiriladi (bot/main.py, web/app.py). Jadval
+    BO'SH bo'lsagina boshlang'ich ro'yxatni yozadi - keyingi ishga
+    tushishlarda (jadvalda allaqachon qatorlar bo'lgani uchun) hech
+    narsa qilmaydi, shu bilan admin qo'shgan/o'chirgan aliaslarga
+    tegmaydi."""
+    conn = db()
+    count = conn.execute("SELECT COUNT(*) c FROM district_aliases").fetchone()["c"]
+    if count == 0:
+        for district, aliases in _SEED_DISTRICT_ALIASES.items():
+            for alias in aliases:
+                conn.execute(
+                    "INSERT OR IGNORE INTO district_aliases (alias, district, added_by, added_at) VALUES (?, ?, NULL, ?)",
+                    (alias.strip().lower(), district, now_str()),
+                )
+        conn.commit()
+    conn.close()
+
+
+def list_district_aliases() -> list:
+    conn = db()
+    rows = conn.execute("SELECT * FROM district_aliases ORDER BY district, alias").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_aliases_for_district(district: str) -> list:
+    """Berilgan tumanga bog'langan barcha kalit so'zlarni (o'zi + aliaslar)
+    qaytaradi - tuman filtri (web/listings_data.py) shu ro'yxatning
+    HAR BIRINI manzil/mo'ljal matnida qidiradi, shu orqali "Darxon" deb
+    yozilgan e'lon ham "Sergeli" filtrida chiqadi."""
+    conn = db()
+    rows = conn.execute("SELECT alias FROM district_aliases WHERE district = ?", (district,)).fetchall()
+    conn.close()
+    return [district] + [r["alias"] for r in rows]
+
+
+def add_district_alias(alias: str, district: str, added_by: int = None) -> bool:
+    alias = (alias or "").strip().lower()
+    if not alias or district not in TASHKENT_DISTRICTS:
+        return False
+    conn = db()
+    cur = conn.execute(
+        "INSERT OR IGNORE INTO district_aliases (alias, district, added_by, added_at) VALUES (?, ?, ?, ?)",
+        (alias, district, added_by, now_str()),
+    )
+    conn.commit()
+    added = cur.rowcount > 0
+    conn.close()
+    return added
+
+
+def remove_district_alias(alias_id: int) -> None:
+    conn = db()
+    conn.execute("DELETE FROM district_aliases WHERE id = ?", (alias_id,))
+    conn.commit()
+    conn.close()
+
+
 def detect_district(text: str):
-    """Matndan tuman nomini aniqlaydi. Topilmasa None qaytaradi (masalan
-    "Tezkor e'lon" oqimida - avtomatik taklif berish kerakmi yoki yo'qmi
-    shuni ANIQ bilish uchun; "Toshkent" degan noaniq standart qiymat
-    bu yerda ishlatilmaydi)."""
+    """Matndan tuman nomini (yoki unga bog'langan kalit so'zni) aniqlaydi.
+    Topilmasa None qaytaradi (masalan "Tezkor e'lon" oqimida - avtomatik
+    taklif berish kerakmi yoki yo'qmi shuni ANIQ bilish uchun; "Toshkent"
+    degan noaniq standart qiymat bu yerda ishlatilmaydi)."""
     low = (text or "").lower()
-    for canonical, aliases in _DISTRICT_ALIASES.items():
-        for alias in aliases:
-            if alias in low:
-                return canonical
+    if not low:
+        return None
+    conn = db()
+    rows = conn.execute("SELECT alias, district FROM district_aliases").fetchall()
+    conn.close()
+    for r in rows:
+        if r["alias"] in low:
+            return r["district"]
     return None
 
 

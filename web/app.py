@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from common.config import SITE_NAME
 from common.db import init_and_migrate
+from common.districts import seed_district_aliases
 
 from web import account, admin_page, api, map_page, pages, render, seo
 from web.middleware import SecurityHeadersMiddleware, VisitTrackingMiddleware
@@ -27,6 +28,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(VisitTrackingMiddleware)
 
 init_and_migrate()
+seed_district_aliases()
 
 app.include_router(render.router)
 app.include_router(pages.router)

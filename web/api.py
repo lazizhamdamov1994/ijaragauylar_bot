@@ -26,6 +26,8 @@ from common.db import (
     toggle_favorite,
 )
 
+from common.districts import add_district_alias, list_district_aliases, remove_district_alias
+
 from web.auth import check_auth, get_current_tg_user
 from web.listings_data import get_active_listings, normalize_phone_web
 from web.pages import notify_telegram
@@ -693,6 +695,34 @@ def api_admin_remove_moderator(mod_user_id: int, user: str = Depends(check_auth)
 @router.post("/api/admin/moderators/{mod_user_id}/set-super")
 def api_admin_set_moderator_super(mod_user_id: int, is_super: bool = Query(...), user: str = Depends(check_auth)):
     set_moderator_super(mod_user_id, is_super)
+    return {"ok": True}
+
+
+# ============================= ADMIN: TUMAN KALIT SO'ZLARI =============================
+# Mahalla/mavze/mashxur joy nomlarini ("Darxon" -> Sergeli) tumanlarga
+# biriktirish - "Tezkor e'lon" (bot) va tuman filtri (sayt) shu ro'yxatdan
+# foydalanadi. Bot tomonida ham bir xil funksiyalar (common/districts.py)
+# ishlatiladi - IKKALA joy ham BITTA manbadan o'qiydi/yozadi.
+
+@router.get("/api/admin/district-aliases")
+def api_admin_district_aliases(user: str = Depends(check_auth)):
+    return {"districts": TASHKENT_DISTRICTS, "aliases": list_district_aliases()}
+
+
+@router.post("/api/admin/district-aliases/add")
+def api_admin_add_district_alias(district: str = Query(...), alias: str = Query(...), user: str = Depends(check_auth)):
+    if district not in TASHKENT_DISTRICTS:
+        raise HTTPException(status_code=400, detail="noto'g'ri tuman")
+    added_any = False
+    for kw in alias.split(","):
+        if add_district_alias(kw, district):
+            added_any = True
+    return {"ok": True, "added": added_any}
+
+
+@router.post("/api/admin/district-aliases/{alias_id}/remove")
+def api_admin_remove_district_alias(alias_id: int, user: str = Depends(check_auth)):
+    remove_district_alias(alias_id)
     return {"ok": True}
 
 

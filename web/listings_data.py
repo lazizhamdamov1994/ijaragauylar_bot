@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from common.config import CARD_NUMBER, CHANNEL_USERNAME
 from common.db import db, get_setting, now_str
+from common.districts import TASHKENT_DISTRICTS, get_aliases_for_district
 from web.render import RENTAL_TYPE_LABELS, photo_url
 
 def current_subscription_price() -> int:
@@ -73,8 +74,18 @@ def get_site_listings(hudud: str = "", xona: str = "", page: int = 1, rental_typ
     query = "SELECT * FROM listings WHERE status='approved' AND COALESCE(expired,0)=0"
     params = []
     if hudud:
-        query += " AND (manzil LIKE ? OR moljal LIKE ?)"
-        params += [f"%{hudud}%", f"%{hudud}%"]
+        # MUHIM: tuman tanlansa, faqat aynan shu nom EMAS, balki unga
+        # bog'langan barcha kalit so'zlar (masalan "Darxon" -> Sergeli)
+        # ham qidiriladi - shu orqali mahalla/mavze nomi bilan yozilgan
+        # e'lonlar ham tegishli tuman filtrida chiqadi.
+        keywords = get_aliases_for_district(hudud) if hudud in TASHKENT_DISTRICTS else [hudud]
+        or_clauses = []
+        for kw in keywords:
+            or_clauses.append("manzil LIKE ?")
+            params.append(f"%{kw}%")
+            or_clauses.append("moljal LIKE ?")
+            params.append(f"%{kw}%")
+        query += " AND (" + " OR ".join(or_clauses) + ")"
     if xona:
         query += " AND xona LIKE ?"
         params.append(f"%{xona}%")

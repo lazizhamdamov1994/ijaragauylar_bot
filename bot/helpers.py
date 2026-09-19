@@ -194,13 +194,13 @@ def main_menu_keyboard(user_id: int) -> ReplyKeyboardMarkup:
         rows.append([BTN_SETTINGS, BTN_MODERATORS])
         rows.append([BTN_PENDING, BTN_BLOCKED])
         rows.append([BTN_FLAGGED, BTN_USER_SEARCH])
-        rows.append([BTN_LISTINGS_MAP])
+        rows.append([BTN_LISTINGS_MAP, BTN_DISTRICT_ALIASES])
         if DASHBOARD_URL:  # Admin Panel - oddiy URL tugma, http:// bilan ham ishlaydi
             rows.append([BTN_ADMIN_PANEL])
         rows.append([BTN_QUICK])
     elif is_moderator(user_id):
         rows.append([BTN_STATS, BTN_PENDING])
-        rows.append([BTN_QUICK])
+        rows.append([BTN_QUICK, BTN_DISTRICT_ALIASES])
     return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 

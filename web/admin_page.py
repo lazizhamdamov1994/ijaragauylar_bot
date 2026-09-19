@@ -237,6 +237,7 @@ ADMIN_HTML = """<!DOCTYPE html>
 
     <div class="side-group-label">Tizim</div>
     <a data-tab="blocked"><span class="icon">\U0001F6AB</span> Bloklangan</a>
+    <a data-tab="districts"><span class="icon">\U0001F5FA</span> Tuman kalit so'zlari</a>
     <a data-tab="settings"><span class="icon">⚙️</span> Sozlamalar</a>
   </nav>
   <div class="side-live"><span class="pulse-dot"></span> Jonli holat</div>
@@ -438,6 +439,31 @@ ADMIN_HTML = """<!DOCTYPE html>
       </div>
     </div>
     <div id="blocked-list"><div class="empty-note">Yuklanmoqda...</div></div>
+  </div>
+
+  <div id="tab-districts" class="tab-page">
+    <div class="page-head"><h1>\U0001F5FA Tuman kalit so'zlari</h1></div>
+    <div class="panel-sub" style="margin-bottom:16px;">Mahalla/mavze/mashxur joy nomlarini ("Darxon" -> Sergeli) tumanlarga biriktiring - "Tezkor e'lon" (bot) bunday so'zlarni matndan avtomatik tanib oladi, sayt tuman filtri ham ularni hisobga oladi</div>
+    <div class="panel" style="margin-bottom:16px;">
+      <h2>\U00002795 Yangi kalit so'z qo'shish</h2>
+      <div class="inline-form" style="margin-top:12px;">
+        <div class="form-row"><label>Tuman</label>
+          <select id="distalias-district-select"></select>
+        </div>
+        <div class="form-row"><label>Kalit so'z(lar) - vergul bilan bir nechtasi</label>
+          <input id="distalias-add-input" type="text" placeholder="Masalan: Darxon, Yangi Darxon">
+        </div>
+        <button class="btn btn-primary" onclick="addDistrictAliasAction()">Qo'shish</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="table-scroll">
+        <table class="visit-table" id="district-aliases-table">
+          <thead><tr><th>Tuman</th><th>Kalit so'z</th><th>Qo'shilgan</th><th></th></tr></thead>
+          <tbody><tr><td colspan="4" class="empty-note">Yuklanmoqda...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div id="tab-settings" class="tab-page">
@@ -802,6 +828,41 @@ async function toggleModeratorSuperAction(userId, makeSuper) {
   await fetch(`/api/admin/moderators/${userId}/set-super?is_super=${makeSuper}`, { method: 'POST' });
   loadModerators();
 }
+
+let districtAliasesLoaded = false;
+async function loadDistrictAliases() {
+  const res = await fetch('/api/admin/district-aliases');
+  const data = await res.json();
+  if (!districtAliasesLoaded) {
+    const sel = document.getElementById('distalias-district-select');
+    sel.innerHTML = data.districts.map(d => `<option value="${d}">${d}</option>`).join('');
+    districtAliasesLoaded = true;
+  }
+  const tbody = document.querySelector('#district-aliases-table tbody');
+  if (!data.aliases.length) { tbody.innerHTML = `<tr><td colspan="4" class="empty-note">Hozircha kalit so'z yo'q</td></tr>`; return; }
+  tbody.innerHTML = data.aliases.map(a => `
+    <tr>
+      <td><b>${a.district}</b></td>
+      <td>${a.alias}</td>
+      <td>${(a.added_at || '-').slice(0, 10)}${a.added_by ? '' : ' (dastlabki)'}</td>
+      <td><button class="btn btn-danger" style="padding:5px 10px;font-size:11.5px;" onclick="removeDistrictAliasAction(${a.id})">O'chirish</button></td>
+    </tr>
+  `).join('');
+}
+async function addDistrictAliasAction() {
+  const district = document.getElementById('distalias-district-select').value;
+  const input = document.getElementById('distalias-add-input');
+  const alias = input.value.trim();
+  if (!alias) { alert("Kalit so'z kiriting."); return; }
+  await fetch(`/api/admin/district-aliases/add?district=${encodeURIComponent(district)}&alias=${encodeURIComponent(alias)}`, { method: 'POST' });
+  input.value = '';
+  loadDistrictAliases();
+}
+async function removeDistrictAliasAction(aliasId) {
+  if (!confirm("Bu kalit so'zni o'chirasizmi?")) return;
+  await fetch(`/api/admin/district-aliases/${aliasId}/remove`, { method: 'POST' });
+  loadDistrictAliases();
+}
 async function addModeratorAction() {
   const input = document.getElementById('mod-add-input');
   const uid = parseInt(input.value.trim(), 10);
@@ -1099,6 +1160,7 @@ loadFlagged();
 loadBlocked();
 loadSettings();
 loadSupport();
+loadDistrictAliases();
 setInterval(loadStats, 60000);
 setInterval(loadSubarenda, 30000);
 setInterval(loadInquiries, 30000);

@@ -45,6 +45,7 @@ from bot.admin_panel import *  # noqa: F401,F403
 from bot.flow_listing import *  # noqa: F401,F403
 from bot.admin_moderators import *  # noqa: F401,F403
 from bot.flow_complaint import *  # noqa: F401,F403
+from bot.district_alias_ui import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
 
@@ -316,6 +317,8 @@ async def text_menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_subarenda_info(update, context)
     elif text == BTN_ADMIN_PANEL and admin:
         await show_admin_panel_link(update, context)
+    elif text == BTN_DISTRICT_ALIASES and staff:
+        await show_district_alias_districts(update, context)
 
 
 async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
