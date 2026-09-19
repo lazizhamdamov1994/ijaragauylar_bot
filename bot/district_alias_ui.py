@@ -17,6 +17,7 @@ from common.districts import TASHKENT_DISTRICTS, add_district_alias, list_distri
 from bot.constants import *  # noqa: F401,F403
 from bot.db import *  # noqa: F401,F403
 from bot.helpers import *  # noqa: F401,F403
+from bot.fraud_detection import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
 
