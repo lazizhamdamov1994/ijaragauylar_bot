@@ -59,6 +59,7 @@ from bot.flow_complaint import *  # noqa: F401,F403
 from bot.flow_edit import *  # noqa: F401,F403
 from bot.flow_viewing import *  # noqa: F401,F403
 from bot.jobs import *  # noqa: F401,F403
+from bot.ai_concierge import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
 
@@ -197,14 +198,22 @@ def main():
         entry_points=[MessageHandler(filters.Regex(f"^{re.escape(BTN_QUICK)}$"), quick_entry)],
         states={
             QUICK_TEXT: [CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_text_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_TEXT))],
-            QUICK_PHONE: [CallbackQueryHandler(quick_back_to_text, pattern="^quick_back_totext$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_phone_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_PHONE))],
-            QUICK_MANZIL: [CallbackQueryHandler(quick_manzil_auto_router, pattern="^quick_manzil_auto$"), CallbackQueryHandler(quick_manzil_ai_router, pattern="^quick_manzil_ai$"), CallbackQueryHandler(quick_manzil_manual_router, pattern="^quick_manzil_write$"), CallbackQueryHandler(quick_back_to_phone, pattern="^quick_back_tophone$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_manzil_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_MANZIL))],
+            QUICK_PHONE: [CallbackQueryHandler(quick_phone_auto_router, pattern="^quick_phone_auto$"), CallbackQueryHandler(quick_phone_manual_router, pattern="^quick_phone_write$"), CallbackQueryHandler(quick_back_to_text, pattern="^quick_back_totext$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_phone_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_PHONE))],
+            QUICK_MANZIL: [CallbackQueryHandler(quick_combined_auto_router, pattern="^quick_combined_auto$"), CallbackQueryHandler(quick_manzil_auto_router, pattern="^quick_manzil_auto$"), CallbackQueryHandler(quick_manzil_ai_router, pattern="^quick_manzil_ai$"), CallbackQueryHandler(quick_manzil_manual_router, pattern="^quick_manzil_write$"), CallbackQueryHandler(quick_back_to_phone, pattern="^quick_back_tophone$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_manzil_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_MANZIL))],
             QUICK_NARX: [CallbackQueryHandler(quick_narx_auto_router, pattern="^quick_narx_auto$"), CallbackQueryHandler(quick_narx_ai_router, pattern="^quick_narx_ai$"), CallbackQueryHandler(quick_narx_manual_router, pattern="^quick_narx_write$"), CallbackQueryHandler(quick_back_to_manzil, pattern="^quick_back_tomanzil$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, quick_narx_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(QUICK_NARX))],
             QUICK_PHOTOS: [CallbackQueryHandler(quick_back_to_narx, pattern="^quick_back_tonarx$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), CallbackQueryHandler(quick_rasm_tayyor, pattern="^quick_rasm_tayyor$"), MessageHandler(~filters.COMMAND, quick_rasm_qabul)],
             QUICK_CONFIRM: [CallbackQueryHandler(quick_back_to_photos, pattern="^quick_back_tophotos$"), CallbackQueryHandler(quick_post, pattern="^quick_post$"), CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$"), MessageHandler(~filters.COMMAND, quick_confirm_reminder)],
         },
         fallbacks=[CallbackQueryHandler(quick_cancel_cb, pattern="^quick_cancel$")],
         name="quick_conv",
+        persistent=False,
+    )
+
+    ai_concierge_conv = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex(f"^{re.escape(BTN_AI_CONCIERGE)}$"), ai_concierge_entry)],
+        states={AI_CONCIERGE_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, ai_concierge_message), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(AI_CONCIERGE_CHAT))]},
+        fallbacks=[CommandHandler("bekor", ai_concierge_cancel)],
+        name="ai_concierge_conv",
         persistent=False,
     )
 
@@ -284,6 +293,7 @@ def main():
     app.add_handler(admin_settings_conv)
     app.add_handler(admin_block_conv)
     app.add_handler(quick_conv)
+    app.add_handler(ai_concierge_conv)
     app.add_handler(mod_add_conv)
     app.add_handler(admin_add_conv)
     app.add_handler(distalias_add_conv)

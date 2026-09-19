@@ -3,14 +3,20 @@ E'lonlarni bazadan o'qish va narx/karta sozlamalari - saytning barcha
 sahifalari shu yerdagi funksiyalardan foydalanadi.
 """
 import json as _json
+import logging
 import os
 import re
 from datetime import datetime, timedelta
 
-from common.config import CARD_NUMBER, CHANNEL_USERNAME
+import httpx
+
+from common.config import BOT_TOKEN, BOT_USERNAME, CARD_NUMBER, CHANNEL_ID, CHANNEL_USERNAME
 from common.db import db, get_setting, now_str
 from common.districts import TASHKENT_DISTRICTS, format_price_compact, get_aliases_for_district, parse_price_value
 from web.render import RENTAL_TYPE_LABELS, photo_url
+from bot.helpers import build_caption, channel_keyboard
+
+logger = logging.getLogger(__name__)
 
 def current_subscription_price() -> int:
     try:
@@ -201,6 +207,44 @@ def record_web_submission(ip: str) -> None:
     conn.execute("INSERT INTO web_listing_submissions (ip, created_at) VALUES (?, ?)", (ip, now_str()))
     conn.commit()
     conn.close()
+
+
+async def post_listing_to_channel(listing: dict):
+    """Kanalga rasmlar + matn+tugma post qiladi. Muvaffaqiyatli bo'lsa
+    yuborilgan xabar (matn) message_id'sini qaytaradi, aks holda None.
+    web/api.py (admin qo'lda tasdiqlaganda) va web/pages.py (AI avtomatik
+    tasdiqlaganda) IKKALASI HAM shu bitta funksiyani ishlatadi - mantiq
+    ikki joyda takrorlanmaydi."""
+    if not BOT_TOKEN or not CHANNEL_ID:
+        return None
+    photos = listing.get("photos") or []
+    async with httpx.AsyncClient(timeout=20) as client:
+        try:
+            if len(photos) == 1:
+                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", json={"chat_id": CHANNEL_ID, "photo": photos[0]})
+            elif photos:
+                await client.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMediaGroup",
+                    json={"chat_id": CHANNEL_ID, "media": [{"type": "photo", "media": p} for p in photos]},
+                )
+        except Exception:
+            logger.exception("Kanalga rasm yuborishda xatolik (listing_id=%s)", listing.get("id"))
+            return None
+        caption = build_caption(listing, BOT_USERNAME)
+        keyboard = channel_keyboard(listing["id"], BOT_USERNAME, listing.get("latitude"), listing.get("longitude"))
+        try:
+            resp = await client.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                json={"chat_id": CHANNEL_ID, "text": caption, "parse_mode": "HTML", "reply_markup": keyboard.to_dict()},
+            )
+            data = resp.json()
+            if not data.get("ok"):
+                logger.error("Kanalga matn yuborishda xatolik: %s", data)
+                return None
+            return data["result"]["message_id"]
+        except Exception:
+            logger.exception("Kanalga matn yuborishda xatolik (listing_id=%s)", listing.get("id"))
+            return None
 
 
 

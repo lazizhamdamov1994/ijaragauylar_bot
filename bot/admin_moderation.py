@@ -82,25 +82,19 @@ async def admin_approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await approve_sub(update, context, obj_id)
 
 
-async def approve_listing(update: Update, context: ContextTypes.DEFAULT_TYPE, listing_id: int):
-    query = update.callback_query
-    listing = get_listing(listing_id)
-    if not listing:
-        await query.message.reply_text("\u26a0\ufe0f E'lon topilmadi.")
-        return
-    if listing["status"] != "pending":
-        await query.message.reply_text(f"Bu e'lon allaqachon ko'rib chiqilgan (holat: {listing['status']}).")
-        return
-
+async def approve_and_post_listing_core(context: ContextTypes.DEFAULT_TYPE, listing: dict) -> bool:
+    """E'lonni kanalga joylash + status yangilash + egasiga xabar - UI'dan
+    (callback_query) mustaqil "yurak" qism. Odam "Tasdiqlash" tugmasini
+    bosganda (approve_listing) HAM, AI orqali avtomatik tasdiqlanganda
+    (auto-moderation) HAM - ikkalasi ham shu bitta funksiyani chaqiradi,
+    mantiq ikki joyda takrorlanmaydi. Muvaffaqiyatli bo'lsa True."""
+    listing_id = listing["id"]
     channel_msg_id = await send_listing_to_channel(context, listing)
     if channel_msg_id is None:
-        await query.message.reply_text("\u26a0\ufe0f Kanalga joylashda xatolik yuz berdi (tarmoq muammosi). Hech narsa joylanmadi \u2014 \u00abTasdiqlash\u00bb tugmasini qaytadan bosing.")
-        return
+        return False
 
     update_listing_status(listing_id, "approved", channel_msg_id=channel_msg_id)
     listing["channel_msg_id"] = channel_msg_id
-    await query.edit_message_reply_markup(reply_markup=None)
-    await query.message.reply_text(f"\u2705 E'lon #{listing_id} kanalga joylandi.")
 
     await notify_location_alert_matches(context, listing)
 
@@ -112,6 +106,27 @@ async def approve_listing(update: Update, context: ContextTypes.DEFAULT_TYPE, li
         await context.bot.send_message(listing["user_id"], msg)
     except Exception:
         logger.exception("Foydalanuvchiga xabar yuborib bo'lmadi")
+
+    return True
+
+
+async def approve_listing(update: Update, context: ContextTypes.DEFAULT_TYPE, listing_id: int):
+    query = update.callback_query
+    listing = get_listing(listing_id)
+    if not listing:
+        await query.message.reply_text("\u26a0\ufe0f E'lon topilmadi.")
+        return
+    if listing["status"] != "pending":
+        await query.message.reply_text(f"Bu e'lon allaqachon ko'rib chiqilgan (holat: {listing['status']}).")
+        return
+
+    ok = await approve_and_post_listing_core(context, listing)
+    if not ok:
+        await query.message.reply_text("\u26a0\ufe0f Kanalga joylashda xatolik yuz berdi (tarmoq muammosi). Hech narsa joylanmadi \u2014 \u00abTasdiqlash\u00bb tugmasini qaytadan bosing.")
+        return
+
+    await query.edit_message_reply_markup(reply_markup=None)
+    await query.message.reply_text(f"\u2705 E'lon #{listing_id} kanalga joylandi.")
 
 
 async def approve_sub(update: Update, context: ContextTypes.DEFAULT_TYPE, sub_id: int):

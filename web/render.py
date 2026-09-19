@@ -3,6 +3,7 @@ Sayt uchun umumiy render yordamchilari: i18n (uz/ru/en), sahifa
 head/header/footer, e'lon kartochkasi, to'lov kartasi vizuali, ikonalar.
 """
 import hashlib
+import json
 import os
 import re
 import urllib.parse
@@ -149,6 +150,28 @@ TRANSLATIONS = {
     "sort_yangi": {"uz": "Eng yangi", "ru": "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u043d\u043e\u0432\u044b\u0435", "en": "Newest"},
     "sort_arzon": {"uz": "Eng arzon", "ru": "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0434\u0435\u0448\u0451\u0432\u044b\u0435", "en": "Cheapest"},
     "sort_qimmat": {"uz": "Eng qimmat", "ru": "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0434\u043e\u0440\u043e\u0433\u0438\u0435", "en": "Most expensive"},
+    "ai_chat_title": {"uz": "AI yordamchi", "ru": "\u0418\u0418-\u043f\u043e\u043c\u043e\u0449\u043d\u0438\u043a", "en": "AI assistant"},
+    "ai_chat_welcome": {
+        "uz": "Salom! Menga qanday uy kerakligini yozing - masalan \u00abChilonzorda 2 xonali, 300$ gacha\u00bb.",
+        "ru": "\u041f\u0440\u0438\u0432\u0435\u0442! \u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435, \u043a\u0430\u043a\u043e\u0435 \u0436\u0438\u043b\u044c\u0451 \u0432\u0430\u043c \u043d\u0443\u0436\u043d\u043e \u2014 \u043d\u0430\u043f\u0440\u0438\u043c\u0435\u0440 \u00ab2-\u043a\u043e\u043c\u043d\u0430\u0442\u043d\u0430\u044f \u0432 \u0427\u0438\u043b\u0430\u043d\u0437\u0430\u0440\u0435, \u0434\u043e $300\u00bb.",
+        "en": "Hi! Tell me what kind of place you're looking for - e.g. \u00ab2-room in Chilonzor, up to $300\u00bb.",
+    },
+    "ai_chat_placeholder": {"uz": "Savolingizni yozing...", "ru": "\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u0432\u043e\u043f\u0440\u043e\u0441...", "en": "Type your question..."},
+    "ai_chat_disabled": {
+        "uz": "AI yordamchi hozircha ishga tushirilmagan.",
+        "ru": "\u0418\u0418-\u043f\u043e\u043c\u043e\u0449\u043d\u0438\u043a \u043f\u043e\u043a\u0430 \u043d\u0435 \u0432\u043a\u043b\u044e\u0447\u0451\u043d.",
+        "en": "AI assistant isn't enabled yet.",
+    },
+    "ai_chat_error": {
+        "uz": "Texnik nosozlik. Birozdan keyin qayta urinib ko'ring.",
+        "ru": "\u0422\u0435\u0445\u043d\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u043d\u0435\u043f\u043e\u043b\u0430\u0434\u043a\u0430. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043f\u043e\u0437\u0436\u0435.",
+        "en": "Technical issue. Please try again shortly.",
+    },
+    "ai_chat_rate_limited": {
+        "uz": "Bugungi xabar chegarasiga yetdingiz. Ertaga qayta urinib ko'ring.",
+        "ru": "\u0412\u044b \u0434\u043e\u0441\u0442\u0438\u0433\u043b\u0438 \u0434\u043d\u0435\u0432\u043d\u043e\u0433\u043e \u043b\u0438\u043c\u0438\u0442\u0430 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0439. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0437\u0430\u0432\u0442\u0440\u0430.",
+        "en": "You've reached today's message limit. Try again tomorrow.",
+    },
     "empty_listings": {
         "uz": "Hech qanday e'lon topilmadi. Boshqa filtrni sinab ko'ring.",
         "ru": "\u041e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u044b. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0434\u0440\u0443\u0433\u043e\u0439 \u0444\u0438\u043b\u044c\u0442\u0440.",
@@ -679,7 +702,170 @@ def render_footer(lang: str = DEFAULT_LANG) -> str:
     </div>
     <div class="footer-bottom">&copy; {year} {SITE_NAME}. {t(lang,'footer_rights')}</div>
   </div>
-</footer>"""
+</footer>
+{render_ai_chat_widget(lang)}"""
+
+
+def render_ai_chat_widget(lang: str = DEFAULT_LANG) -> str:
+    """Butun saytda (footer orqali) ko'rinadigan suzuvchi AI chat vidjeti.
+    Orqa tarafi (/api/ai-chat, web/api.py) common/ai_agent.py'dagi bot
+    Concierge bilan BIR XIL mantiqni ishlatadi. AI o'chirilgan bo'lsa ham
+    tugma ko'rinadi - ochilganda mos xabar ko'rsatiladi (botdagi bilan bir
+    xil "graceful degrade" tamoyili)."""
+    return f"""<div id="ai-chat-widget">
+  <button id="ai-chat-toggle" type="button" aria-label="{t(lang,'ai_chat_title')}">\U0001F916</button>
+  <div id="ai-chat-panel" class="ai-chat-hidden">
+    <div class="ai-chat-header">
+      <span>\U0001F916 {t(lang,'ai_chat_title')}</span>
+      <button id="ai-chat-close" type="button" aria-label="close">&times;</button>
+    </div>
+    <div id="ai-chat-messages"></div>
+    <div class="ai-chat-typing ai-chat-hidden" id="ai-chat-typing"><span></span><span></span><span></span></div>
+    <div class="ai-chat-input-row">
+      <input id="ai-chat-input" type="text" placeholder="{t(lang,'ai_chat_placeholder')}" maxlength="500" autocomplete="off">
+      <button id="ai-chat-send" type="button" aria-label="send">\U0001F680</button>
+    </div>
+  </div>
+</div>
+<style>
+#ai-chat-widget {{ position: fixed; right: 18px; bottom: 18px; z-index: 200; }}
+#ai-chat-toggle {{
+  width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--brand); color: #fff; font-size: 24px; box-shadow: var(--shadow-lg);
+  display: flex; align-items: center; justify-content: center; transition: transform .15s;
+}}
+#ai-chat-toggle:hover {{ transform: scale(1.06); }}
+#ai-chat-panel {{
+  position: absolute; right: 0; bottom: 68px; width: 340px; max-width: calc(100vw - 32px);
+  height: 460px; max-height: calc(100vh - 120px); background: #fff; border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg); border: 1px solid var(--line); display: flex; flex-direction: column;
+  overflow: hidden;
+}}
+.ai-chat-hidden {{ display: none !important; }}
+.ai-chat-header {{
+  background: var(--brand); color: #fff; padding: 14px 16px; font-weight: 700; font-size: 14.5px;
+  display: flex; align-items: center; justify-content: space-between;
+}}
+.ai-chat-header button {{ background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; line-height: 1; }}
+#ai-chat-messages {{ flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }}
+.ai-chat-bubble {{ max-width: 84%; padding: 9px 13px; border-radius: var(--radius); font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }}
+.ai-chat-bubble.user {{ align-self: flex-end; background: var(--brand); color: #fff; border-bottom-right-radius: 4px; }}
+.ai-chat-bubble.ai {{ align-self: flex-start; background: var(--bg-soft); color: var(--ink); border-bottom-left-radius: 4px; }}
+.ai-chat-bubble.ai a {{ color: var(--brand-dark); font-weight: 600; }}
+.ai-chat-typing {{ padding: 0 14px 8px; display: flex; gap: 4px; }}
+.ai-chat-typing span {{ width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: aiTypingBlink 1.2s infinite ease-in-out; }}
+.ai-chat-typing span:nth-child(2) {{ animation-delay: .2s; }}
+.ai-chat-typing span:nth-child(3) {{ animation-delay: .4s; }}
+@keyframes aiTypingBlink {{ 0%, 80%, 100% {{ opacity: .25; }} 40% {{ opacity: 1; }} }}
+.ai-chat-input-row {{ display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); }}
+.ai-chat-input-row input {{
+  flex: 1; border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 9px 14px;
+  font-size: 13.5px; outline: none; font-family: inherit;
+}}
+.ai-chat-input-row input:focus {{ border-color: var(--brand); }}
+.ai-chat-input-row button {{
+  width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--brand); color: #fff;
+  font-size: 15px; cursor: pointer; flex-shrink: 0;
+}}
+@media (max-width: 640px) {{
+  #ai-chat-widget {{ right: 12px; bottom: 12px; }}
+  #ai-chat-panel {{ width: calc(100vw - 24px); height: calc(100vh - 140px); bottom: 64px; }}
+}}
+</style>
+<script>
+(function() {{
+  var LANG = {json.dumps(lang)};
+  var STR = {{
+    disabled: {json.dumps(t(lang, 'ai_chat_disabled'))},
+    error: {json.dumps(t(lang, 'ai_chat_error'))},
+    rateLimited: {json.dumps(t(lang, 'ai_chat_rate_limited'))},
+    welcome: {json.dumps(t(lang, 'ai_chat_welcome'))}
+  }};
+  var toggle = document.getElementById('ai-chat-toggle');
+  var panel = document.getElementById('ai-chat-panel');
+  var closeBtn = document.getElementById('ai-chat-close');
+  var messagesEl = document.getElementById('ai-chat-messages');
+  var typingEl = document.getElementById('ai-chat-typing');
+  var input = document.getElementById('ai-chat-input');
+  var sendBtn = document.getElementById('ai-chat-send');
+  var opened = false;
+  var sending = false;
+
+  function sessionId() {{
+    try {{
+      var id = localStorage.getItem('ai_chat_session');
+      if (!id) {{
+        id = (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2)));
+        localStorage.setItem('ai_chat_session', id);
+      }}
+      return id;
+    }} catch (e) {{
+      return 'anon-' + Math.random().toString(36).slice(2);
+    }}
+  }}
+
+  function escapeHtml(s) {{
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }}
+
+  function linkify(escaped) {{
+    return escaped.replace(/(https?:\\/\\/[^\\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  }}
+
+  function addBubble(text, who) {{
+    var b = document.createElement('div');
+    b.className = 'ai-chat-bubble ' + who;
+    b.innerHTML = linkify(escapeHtml(text));
+    messagesEl.appendChild(b);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }}
+
+  function open() {{
+    panel.classList.remove('ai-chat-hidden');
+    if (!opened) {{
+      opened = true;
+      addBubble(STR.welcome, 'ai');
+      input.focus();
+    }}
+  }}
+
+  toggle.addEventListener('click', function() {{
+    if (panel.classList.contains('ai-chat-hidden')) open();
+    else panel.classList.add('ai-chat-hidden');
+  }});
+  closeBtn.addEventListener('click', function() {{ panel.classList.add('ai-chat-hidden'); }});
+
+  async function send() {{
+    var msg = input.value.trim();
+    if (!msg || sending) return;
+    sending = true;
+    addBubble(msg, 'user');
+    input.value = '';
+    typingEl.classList.remove('ai-chat-hidden');
+    try {{
+      var res = await fetch('/api/ai-chat', {{
+        method: 'POST', headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ session_id: sessionId(), message: msg, lang: LANG }})
+      }});
+      var data = await res.json();
+      typingEl.classList.add('ai-chat-hidden');
+      if (data.disabled) addBubble(STR.disabled, 'ai');
+      else if (data.rate_limited) addBubble(STR.rateLimited, 'ai');
+      else if (!data.reply) addBubble(STR.error, 'ai');
+      else addBubble(data.reply, 'ai');
+    }} catch (e) {{
+      typingEl.classList.add('ai-chat-hidden');
+      addBubble(STR.error, 'ai');
+    }}
+    sending = false;
+  }}
+
+  sendBtn.addEventListener('click', send);
+  input.addEventListener('keydown', function(e) {{ if (e.key === 'Enter') send(); }});
+}})();
+</script>"""
 
 
 def photo_url(file_id: str) -> str:

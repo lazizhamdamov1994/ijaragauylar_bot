@@ -180,7 +180,7 @@ def channel_link_button():
 
 
 def main_menu_keyboard(user_id: int) -> ReplyKeyboardMarkup:
-    rows = [[BTN_ELON], [BTN_LISTINGS, BTN_SUBSCRIPTION], [BTN_CHECK_PHONE, BTN_HELP], [BTN_LOCATION_ALERT, BTN_MY_LOCATIONS], [BTN_CHANNEL]]
+    rows = [[BTN_ELON], [BTN_AI_CONCIERGE], [BTN_LISTINGS, BTN_SUBSCRIPTION], [BTN_CHECK_PHONE, BTN_HELP], [BTN_LOCATION_ALERT, BTN_MY_LOCATIONS], [BTN_CHANNEL]]
     if DASHBOARD_URL:
         rows.append([BTN_SUBARENDA])
     # MUHIM: Telegram WebApp tugmalari FAQAT https:// havolalarni qabul qiladi -

@@ -65,7 +65,8 @@ logger = logging.getLogger(__name__)
     EDIT_LISTING_VALUE,
     VIEWING_TIME_WAIT,
     DISTALIAS_ADD_WAIT,
-) = range(38)
+    AI_CONCIERGE_CHAT,
+) = range(39)
 
 BTN_ELON = "\U0001F4DD E'lon berish"
 BTN_LISTINGS = "\U0001F4CB Mening e'lonlarim"
@@ -89,6 +90,8 @@ BTN_MODERATORS = "\U0001F46E Moderatorlar"
 BTN_FLAGGED = "\U0001F6A8 Shubhali faollik"
 BTN_USER_SEARCH = "\U0001F50E Qidirish"
 BTN_DISTRICT_ALIASES = "\U0001F5FA Tuman kalit so'zlari"
+BTN_AI_CONCIERGE = "\U0001F916 AI yordamchi"
+BTN_AI_CONCIERGE_END = "\U0001F51A Suhbatni tugatish"
 
 STEPS = [
     {"state": MANZIL, "field": "manzil", "prompt": "\U0001F4CD <b>Manzil</b> (Адрес):", "kind": "text", "maxlen": 250},
@@ -139,6 +142,15 @@ SETTINGS_FIELDS = {
     "ai_features_enabled": {
         "label": "\U0001F916 AI yordamchi funksiyalar",
         "kind": "bool",
+    },
+    "ai_auto_approve_free_listings": {
+        "label": "\U0001F916 Bepul e'lonlarni AI avtomatik tasdiqlasin",
+        "kind": "bool",
+    },
+    "ai_concierge_daily_limit": {
+        "label": "\U0001F4AC AI yordamchi - kunlik xabar chegarasi (bitta foydalanuvchi)",
+        "hint": "Bitta foydalanuvchi/mehmon bir kunda AI yordamchiga nechta xabar yozishi mumkinligini yozing. Masalan: 30",
+        "kind": "int",
     },
 }
 

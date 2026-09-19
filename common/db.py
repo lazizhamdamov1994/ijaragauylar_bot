@@ -12,7 +12,7 @@ xavfsiz).
 import json
 import logging
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from common.config import DB_PATH, DEFAULT_SETTINGS
 
@@ -148,6 +148,8 @@ def init_schema() -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS ai_usage_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT, feature TEXT NOT NULL, input_tokens INTEGER DEFAULT 0,
         output_tokens INTEGER DEFAULT 0, cost_usd REAL DEFAULT 0, ok INTEGER DEFAULT 1, created_at TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS ai_chat_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_key TEXT NOT NULL, platform TEXT NOT NULL, created_at TEXT)""")
     conn.commit()
     conn.close()
 
@@ -243,6 +245,48 @@ def get_blocked_phone(phone: str):
 
 def is_phone_blocked(phone: str) -> bool:
     return get_blocked_phone(phone) is not None
+
+
+def count_today_ai_chat_messages(user_key: str, platform: str) -> int:
+    """AI Concierge kuchlik xarajatni nazorat qilish uchun - bitta
+    foydalanuvchi/sessiya bir kunda nechta xabar yuborganini sanaydi
+    (bot uchun user_key=telegram user_id, veb uchun sessiya/IP kaliti)."""
+    since = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = db()
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM ai_chat_messages WHERE user_key = ? AND platform = ? AND created_at >= ?",
+        (str(user_key), platform, since),
+    ).fetchone()["c"]
+    conn.close()
+    return n
+
+
+def log_ai_chat_message(user_key: str, platform: str) -> None:
+    conn = db()
+    conn.execute(
+        "INSERT INTO ai_chat_messages (user_key, platform, created_at) VALUES (?, ?, ?)",
+        (str(user_key), platform, now_str()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def has_prior_rejected_listing(user_id: int = None, phone: str = None) -> bool:
+    """Foydalanuvchining (yoki - veb orqali anonim yuborilgan e'lonlar
+    uchun, ular hammasi user_id=0 bilan saqlanadi, shuning uchun TELEFON
+    RAQAMI bo'yicha) ilgari rad etilgan e'loni bo'lganmi - AI orqali
+    avtomatik tasdiqlash (auto-moderation) uchun ishonch tekshiruvi: agar
+    bo'lsa, bunday yuboruvchining KEYINGI e'loni ham AVTOMATIK emas, odam
+    tomonidan ko'rib chiqiladi."""
+    conn = db()
+    if user_id:
+        row = conn.execute("SELECT 1 FROM listings WHERE user_id = ? AND status = 'rejected' LIMIT 1", (user_id,)).fetchone()
+    elif phone:
+        row = conn.execute("SELECT 1 FROM listings WHERE telefon = ? AND status = 'rejected' LIMIT 1", (phone,)).fetchone()
+    else:
+        row = None
+    conn.close()
+    return row is not None
 
 
 # ============================= SEVIMLILAR (bot va sayt UMUMIY) =============================

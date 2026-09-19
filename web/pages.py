@@ -24,9 +24,12 @@ from common.config import (
     SITE_NAME,
     SITE_URL,
 )
-from common.db import db, get_favorite_listing_ids, get_price_history, is_phone_blocked, now_str
+from common.db import db, get_favorite_listing_ids, get_price_history, get_setting, has_prior_rejected_listing, is_phone_blocked, now_str
 from common.telegram_media import watermark_photo_bytes_list
-from common.ai import ai_screen_for_scam
+from common.ai import ai_features_enabled, ai_screen_for_scam
+
+from bot.db import get_listing, update_listing_status
+from bot.admin_moderation import log_channel_post
 
 from web.auth import _client_ip, get_current_tg_user, is_web_subscribed
 from web.listings_data import (
@@ -37,6 +40,7 @@ from web.listings_data import (
     get_site_listing,
     get_site_listings,
     normalize_phone_web,
+    post_listing_to_channel,
     record_web_submission,
     site_stats_summary,
     web_submissions_today,
@@ -1332,6 +1336,7 @@ async def notify_admins_new_web_listing(listing_id: int, d: dict, file_ids: list
     caption = _web_listing_caption(d) + f"\n\n\U0001F194 E'lon raqami: #{listing_id}\n\U0001F310 Manba: <b>veb-sayt</b> orqali yuborilgan"
 
     ai_warning = ""
+    scam = None
     try:
         loop = asyncio.get_event_loop()
         scam = await loop.run_in_executor(None, ai_screen_for_scam, caption)
@@ -1339,6 +1344,41 @@ async def notify_admins_new_web_listing(listing_id: int, d: dict, file_ids: list
             ai_warning = f"\U0001F916⚠️ <b>AI: shubhali belgilar topildi</b> — {esc_html(scam.get('reason') or '')}\n\n"
     except Exception:
         logger.exception("AI firibgarlik skriningida xatolik (veb e'lon)")
+
+    # AI avtomatik tasdiqlash - bot/flow_listing.py'dagi bilan bir xil
+    # shart: faqat bepul e'lon + admin alohida yoqqan bo'lsa + AI shubha
+    # topmasa + telefon bloklanmagan + foydalanuvchining oldin rad
+    # etilgan e'loni bo'lmasa. Aks holda odatdagidek admin navbatiga tushadi.
+    if price_charged == 0 and ai_features_enabled() and get_setting("ai_auto_approve_free_listings", "0") == "1":
+        listing_row = get_listing(listing_id)
+        trusted = (
+            listing_row is not None
+            and scam is not None and not scam.get("suspicious")
+            and not is_phone_blocked(d["telefon"])
+            and not has_prior_rejected_listing(phone=d["telefon"])
+        )
+        if trusted:
+            message_id = await post_listing_to_channel(listing_row)
+            if message_id is not None:
+                update_listing_status(listing_id, "approved", channel_msg_id=message_id)
+                log_channel_post(listing_id, message_id)
+                link = f"https://t.me/{CHANNEL_USERNAME}" if CHANNEL_USERNAME else None
+                msg = "✅ Sizning e'loningiz tasdiqlandi va kanalga joylandi!"
+                if link:
+                    msg += f"\n{link}"
+                await notify_telegram(listing_row["user_id"], msg)
+                for admin_id in ADMIN_IDS:
+                    try:
+                        async with httpx.AsyncClient(timeout=10) as client:
+                            await client.post(
+                                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                                json={"chat_id": admin_id, "text": f"\U0001F916 AI avtomatik tasdiqladi (veb, bepul, xavf belgisi topilmadi): E'lon #{listing_id} kanalga joylandi."},
+                            )
+                    except Exception:
+                        logger.exception("Adminga (%s) AI avto-tasdiq xabarini yuborib bo'lmadi (veb)", admin_id)
+                return
+            # Kanalga joylashda xato bo'lsa - pastdagi ODATDAGI (qo'lda
+            # tasdiqlash) yo'lga o'tkaziladi, hech narsa yo'qolmaydi.
 
     sender_line = (
         f"{ai_warning}"

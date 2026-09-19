@@ -64,6 +64,8 @@ DEFAULT_SETTINGS = {
     "paid_repost_interval_hours": os.getenv("PAID_REPOST_INTERVAL_HOURS", "3"),
     "usd_to_som_rate": os.getenv("USD_TO_SOM_RATE", "12700"),
     "ai_features_enabled": "0",
+    "ai_auto_approve_free_listings": "0",
+    "ai_concierge_daily_limit": "30",
 }
 
 # ---- Telegram orqali kirish (shaxsiy kabinet) ----

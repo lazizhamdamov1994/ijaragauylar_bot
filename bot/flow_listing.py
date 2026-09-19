@@ -33,6 +33,7 @@ from common.config import ADMIN_IDS, ADMIN_USERNAME, BOT_TOKEN as TOKEN, CARD_HO
 from common.telegram_media import download_photo_bytes, watermark_telegram_photo
 from common.slideshow import build_instagram_caption, build_slideshow_video
 from common.ai import ai_check_receipt, ai_features_enabled, ai_screen_for_scam
+from common.db import has_prior_rejected_listing
 
 from bot.constants import *  # noqa: F401,F403
 from bot.db import *  # noqa: F401,F403
@@ -704,6 +705,36 @@ async def submit_listing_to_admin(context: ContextTypes.DEFAULT_TYPE, listing_id
                     ai_warning += f"\U0001F916\u26a0\ufe0f <b>AI: chekda nomuvofiqlik</b> \u2014 {esc(receipt_check.get('note') or '')}\n\n"
         except Exception:
             logger.exception("AI to'lov cheki tekshiruvida xatolik")
+
+    # AI avtomatik tasdiqlash - FAQAT bepul e'lonlar uchun (pullik e'lon
+    # har doim chek tekshiruvi uchun odamga tushadi), va FAQAT admin
+    # "ai_auto_approve_free_listings" sozlamasini alohida yoqib qo'ygan
+    # bo'lsa (ai_features_enabled'dan mustaqil, qo'shimcha ruxsat kerak -
+    # bu ancha jiddiyroq qadam). Shubha bo'lsa (AI signal, bloklangan
+    # raqam, foydalanuvchining oldin rad etilgan e'loni) - odatdagidek
+    # odam navbatiga tushadi, hech narsa avtomatik qilinmaydi.
+    if price_charged == 0 and ai_features_enabled() and get_setting("ai_auto_approve_free_listings", "0") == "1":
+        listing_row = get_listing(listing_id)
+        trusted = (
+            listing_row is not None
+            and scam is not None and not scam.get("suspicious")
+            and not blocked
+            and not has_prior_rejected_listing(listing_row["user_id"])
+        )
+        if trusted:
+            ok = await approve_and_post_listing_core(context, listing_row)
+            if ok:
+                for admin_id in ADMIN_IDS:
+                    try:
+                        await context.bot.send_message(
+                            admin_id,
+                            f"\U0001F916 AI avtomatik tasdiqladi (bepul, xavf belgisi topilmadi): E'lon #{listing_id} kanalga joylandi.",
+                        )
+                    except Exception:
+                        logger.exception("Adminga (%s) AI avto-tasdiq xabarini yuborib bo'lmadi", admin_id)
+                return True
+            # Kanalga joylashda tarmoq xatoligi bo'lsa - pastdagi ODATDAGI
+            # (odam tasdiqlaydigan) yo'lga o'tkaziladi, hech narsa yo'qolmaydi.
 
     sender_line = (
         f"{warning}{ai_warning}"

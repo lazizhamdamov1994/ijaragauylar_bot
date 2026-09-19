@@ -27,10 +27,11 @@ from common.db import (
 )
 
 from common.districts import add_district_alias, list_district_aliases, remove_district_alias
-from common.ai import ai_usage_summary
+from common.ai import ai_features_enabled, ai_usage_summary
+from common.ai_agent import concierge_rate_limited, concierge_turn
 
 from web.auth import check_auth, get_current_tg_user
-from web.listings_data import get_active_listings, normalize_phone_web
+from web.listings_data import get_active_listings, normalize_phone_web, post_listing_to_channel
 from web.pages import notify_telegram
 from web.render import TASHKENT_DISTRICTS
 
@@ -77,8 +78,6 @@ from bot.fraud_detection import (
 from bot.helpers import (
     add_extra_admin,
     add_moderator,
-    build_caption,
-    channel_keyboard,
     remove_extra_admin,
     remove_moderator,
     set_moderator_super,
@@ -86,6 +85,43 @@ from bot.helpers import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# ============================= AI CHAT (OMMAVIY, parolsiz - saytdagi suzuvchi vidjet) =============================
+# Suhbat tarixi SERVER tomonida (jarayon xotirasida) saqlanadi - brauzer
+# faqat tasodifiy session_id (localStorage) yuboradi. Sabab: Claude SDK
+# javob obyektlari (tool_use bloklari) to'g'ridan-to'g'ri JSON-seriyalash
+# mumkin emas - shuning uchun ular hech qachon brauzerga yuborilmaydi,
+# faqat matnli javob (reply) yuboriladi. common/ai_agent.py - bot
+# Concierge bilan BIR XIL mantiq.
+_web_chat_sessions: dict = {}
+_WEB_CHAT_MAX_SESSIONS = 500
+
+
+@router.post("/api/ai-chat")
+async def api_ai_chat(request: Request):
+    data = await request.json()
+    session_id = str(data.get("session_id") or "").strip()[:80]
+    message = str(data.get("message") or "").strip()
+    if not session_id or not message:
+        raise HTTPException(status_code=400, detail="invalid_request")
+    if len(message) > 500:
+        raise HTTPException(status_code=400, detail="message_too_long")
+
+    if not ai_features_enabled():
+        return {"reply": None, "disabled": True}
+    if concierge_rate_limited(session_id, "web"):
+        return {"reply": None, "rate_limited": True}
+
+    history = _web_chat_sessions.get(session_id, [])
+    reply, new_history = await concierge_turn(session_id, "web", history, message)
+    if reply is None:
+        return {"reply": None}
+
+    _web_chat_sessions[session_id] = new_history
+    if len(_web_chat_sessions) > _WEB_CHAT_MAX_SESSIONS:
+        _web_chat_sessions.pop(next(iter(_web_chat_sessions)), None)
+    return {"reply": reply}
+
 
 @router.get("/api/listing-inquiries")
 def get_listing_inquiries(user: str = Depends(check_auth)):
@@ -534,41 +570,9 @@ async def api_submit_support_request(request: Request):
 # Botdagi bilan bir xil oqim (approve_listing/approve_sub/admin_reject_reason,
 # bot/admin_moderation.py) - lekin python-telegram-bot Application contextisiz,
 # to'g'ridan-to'g'ri Telegram Bot API orqali (xuddi web/pages.py'dagi
-# notify_admins_new_web_listing kabi).
-
-async def _post_listing_to_channel(listing: dict):
-    """Kanalga rasmlar + matn+tugma post qiladi. Muvaffaqiyatli bo'lsa
-    yuborilgan xabar (matn) message_id'sini qaytaradi, aks holda None."""
-    if not BOT_TOKEN or not CHANNEL_ID:
-        return None
-    photos = listing.get("photos") or []
-    async with httpx.AsyncClient(timeout=20) as client:
-        try:
-            if len(photos) == 1:
-                await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", json={"chat_id": CHANNEL_ID, "photo": photos[0]})
-            elif photos:
-                await client.post(
-                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMediaGroup",
-                    json={"chat_id": CHANNEL_ID, "media": [{"type": "photo", "media": p} for p in photos]},
-                )
-        except Exception:
-            logger.exception("Kanalga rasm yuborishda xatolik (listing_id=%s)", listing.get("id"))
-            return None
-        caption = build_caption(listing, BOT_USERNAME)
-        keyboard = channel_keyboard(listing["id"], BOT_USERNAME, listing.get("latitude"), listing.get("longitude"))
-        try:
-            resp = await client.post(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                json={"chat_id": CHANNEL_ID, "text": caption, "parse_mode": "HTML", "reply_markup": keyboard.to_dict()},
-            )
-            data = resp.json()
-            if not data.get("ok"):
-                logger.error("Kanalga matn yuborishda xatolik: %s", data)
-                return None
-            return data["result"]["message_id"]
-        except Exception:
-            logger.exception("Kanalga matn yuborishda xatolik (listing_id=%s)", listing.get("id"))
-            return None
+# notify_admins_new_web_listing kabi). Haqiqiy kanalga-joylash funksiyasi
+# (post_listing_to_channel) endi web/listings_data.py'da - AI avtomatik
+# tasdiqlash (web/pages.py) bilan BIR XIL funksiyani ishlatadi.
 
 
 @router.get("/api/admin/pending")
@@ -596,7 +600,7 @@ async def api_admin_approve_listing(listing_id: int, user: str = Depends(check_a
         raise HTTPException(status_code=404, detail="not_found")
     if listing["status"] != "pending":
         raise HTTPException(status_code=409, detail="already_reviewed")
-    message_id = await _post_listing_to_channel(listing)
+    message_id = await post_listing_to_channel(listing)
     if message_id is None:
         raise HTTPException(status_code=502, detail="channel_post_failed")
     update_listing_status(listing_id, "approved", channel_msg_id=message_id)

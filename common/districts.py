@@ -169,6 +169,26 @@ def detect_price(text: str):
     return None
 
 
+_PHONE_PATTERN = re.compile(r"(?:\+998|998)[\s\-]?(\d{2})[\s\-]?(\d{3})[\s\-]?(\d{2})[\s\-]?(\d{2})\b")
+
+
+def detect_phone(text: str):
+    """Matndan O'zbekiston telefon raqamini ajratib olishga harakat qiladi
+    (masalan Tezkor e'lon xom OLX matnida raqam ham bo'lsa). MUHIM: faqat
+    aniq "+998"/"998" prefiksi bilan yozilgan raqamlarni tanib oladi -
+    prefikssiz 9 xonali ketma-ketliklar (narx, uy raqami va h.k. bilan
+    adashtirib yuborish xavfi yuqori) qabul qilinmaydi. Topilmasa None."""
+    if not text:
+        return None
+    m = _PHONE_PATTERN.search(text)
+    if not m:
+        return None
+    digits = "998" + "".join(m.groups())
+    if not re.fullmatch(r"998\d{9}", digits):
+        return None
+    return "+" + digits
+
+
 _PRICE_RAW_NUMBER = re.compile(r"\d[\d\s.,]{4,}\d")
 _PRICE_ALREADY_SHORT = re.compile(r"\$|y\.?\s?e\.?|у\.?\s?е\.?|mln|млн|kelishiladi|келишилади|договорн", re.IGNORECASE)
 

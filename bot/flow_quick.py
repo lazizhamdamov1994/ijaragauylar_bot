@@ -31,7 +31,7 @@ from telegram.ext import ContextTypes, ConversationHandler, filters
 from common.config import ADMIN_IDS, ADMIN_USERNAME, BOT_TOKEN as TOKEN, CARD_HOLDER, CHANNEL_ID, CHANNEL_USERNAME, DASHBOARD_URL, DB_PATH, DEFAULT_SETTINGS as INITIAL_SETTINGS, MAX_DAILY_LISTINGS, MOD_DAILY_LISTINGS, STALE_CHECK_DAYS
 
 from common.telegram_media import watermark_telegram_photo
-from common.districts import TASHKENT_DISTRICTS, detect_district, detect_price
+from common.districts import TASHKENT_DISTRICTS, detect_district, detect_phone, detect_price
 from common.ai import ai_extract_listing_fields
 
 from bot.constants import *  # noqa: F401,F403
@@ -87,9 +87,8 @@ async def quick_text_received(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(f"\u26a0\ufe0f Matn juda uzun ({len(raw)} belgi). Iltimos, {QUICK_MAX_LEN} belgidan qisqaroq qiling:")
         return QUICK_TEXT
     context.user_data["quick_text"] = raw
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_totext"),
-                                       InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
-    await update.message.reply_text("\U0001F4DE Telefon raqamni yozing (+998...):", reply_markup=keyboard)
+    text, keyboard = _build_phone_prompt(raw)
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
     return QUICK_PHONE
 
 
@@ -102,6 +101,55 @@ async def quick_back_to_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
         parse_mode=ParseMode.HTML, reply_markup=keyboard,
     )
     return QUICK_TEXT
+
+
+# ============================= TELEFON (matndan avtomatik aniqlash bilan) =============================
+# Matnda aniq "+998"/"998" prefiksli raqam bo'lsa, qo'lda yozish o'rniga
+# manzil/narxdagi kabi "Ha, to'g'ri" / "O'zim yozaman" tanlovi beriladi.
+
+def _build_phone_prompt(quick_text: str) -> tuple:
+    detected = detect_phone(quick_text)
+    if detected and not get_blocked_phone(detected):
+        text = f"\U0001F4DE Matndan telefon raqam aniqlandi: <b>{esc(detected)}</b>\n\nShu to'g'rimi?"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Ha, to'g'ri", callback_data="quick_phone_auto")],
+            [InlineKeyboardButton("✏️ O'zim yozaman", callback_data="quick_phone_write")],
+            [InlineKeyboardButton("⬅️ Orqaga", callback_data="quick_back_totext"),
+             InlineKeyboardButton("❌ Bekor qilish", callback_data="quick_cancel")],
+        ])
+        return text, keyboard
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Orqaga", callback_data="quick_back_totext"),
+                                       InlineKeyboardButton("❌ Bekor qilish", callback_data="quick_cancel")]])
+    return "\U0001F4DE Telefon raqamni yozing (+998...):", keyboard
+
+
+async def _advance_to_manzil_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE, edit_query: bool) -> int:
+    text, keyboard, parse_mode = await _build_manzil_prompt(context)
+    if edit_query:
+        await update.callback_query.message.reply_text(text, parse_mode=parse_mode, reply_markup=keyboard)
+    else:
+        await update.message.reply_text(text, parse_mode=parse_mode, reply_markup=keyboard)
+    return QUICK_MANZIL
+
+
+async def quick_phone_auto_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    phone = detect_phone(context.user_data.get("quick_text", ""))
+    if not phone or get_blocked_phone(phone):
+        return await quick_phone_manual_router(update, context)
+    context.user_data["telefon"] = phone
+    await query.edit_message_reply_markup(reply_markup=None)
+    return await _advance_to_manzil_prompt(update, context, edit_query=True)
+
+
+async def quick_phone_manual_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Orqaga", callback_data="quick_back_totext"),
+                                       InlineKeyboardButton("❌ Bekor qilish", callback_data="quick_cancel")]])
+    await query.edit_message_text("\U0001F4DE Telefon raqamni yozing (+998...):", reply_markup=keyboard)
+    return QUICK_PHONE
 
 
 async def quick_phone_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -121,17 +169,14 @@ async def quick_phone_received(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return QUICK_PHONE
     context.user_data["telefon"] = phone
-    text, keyboard, parse_mode = await _build_manzil_prompt(context)
-    await update.message.reply_text(text, parse_mode=parse_mode, reply_markup=keyboard)
-    return QUICK_MANZIL
+    return await _advance_to_manzil_prompt(update, context, edit_query=False)
 
 
 async def quick_back_to_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_totext"),
-                                       InlineKeyboardButton("\u274c Bekor qilish", callback_data="quick_cancel")]])
-    await query.edit_message_text("\U0001F4DE Telefon raqamni yozing (+998...):", reply_markup=keyboard)
+    text, keyboard = _build_phone_prompt(context.user_data.get("quick_text", ""))
+    await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
     return QUICK_PHONE
 
 
@@ -156,6 +201,24 @@ async def _get_ai_fields(context: ContextTypes.DEFAULT_TYPE) -> dict:
 async def _build_manzil_prompt(context: ContextTypes.DEFAULT_TYPE) -> tuple:
     quick_text = context.user_data.get("quick_text", "")
     detected = detect_district(quick_text)
+    detected_narx = detect_price(quick_text)
+    if detected and detected_narx:
+        # Ikkalasi ham (manzil VA narx) regex orqali aniqlansa - alohida-
+        # alohida ikki marta tasdiqlashning hojati yo'q, bitta ekranda
+        # birgalikda ko'rsatiladi va BITTA tugma bilan ikkalasi ham qabul
+        # qilinadi (tezroq). Faqat bittasi topilsa - pastdagi odatdagi,
+        # alohida-alohida tasdiqlash bosqichlariga o'tiladi.
+        text = (
+            f"\U0001F4CD Manzil: <b>{esc(detected)}</b>\n"
+            f"\U0001F4B0 Narx: <b>{esc(detected_narx)}</b>\n\nHammasi to'g'rimi?"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Hammasi to'g'ri", callback_data="quick_combined_auto")],
+            [InlineKeyboardButton("✏️ O'zim yozaman", callback_data="quick_manzil_write")],
+            [InlineKeyboardButton("⬅️ Orqaga", callback_data="quick_back_tophone"),
+             InlineKeyboardButton("❌ Bekor qilish", callback_data="quick_cancel")],
+        ])
+        return text, keyboard, ParseMode.HTML
     if detected:
         text = f"\U0001F4CD Matndan manzil (tuman) aniqlandi: <b>{esc(detected)}</b>\n\nShu to'g'rimi?"
         keyboard = InlineKeyboardMarkup([
@@ -189,6 +252,21 @@ async def _advance_to_narx_prompt(update: Update, context: ContextTypes.DEFAULT_
     else:
         await update.message.reply_text(text, parse_mode=parse_mode, reply_markup=keyboard)
     return QUICK_NARX
+
+
+async def quick_combined_auto_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    quick_text = context.user_data.get("quick_text", "")
+    manzil = detect_district(quick_text)
+    narx = detect_price(quick_text)
+    if not manzil or not narx:
+        # Matn shu oraliqda o'zgarmagan bo'lsa, bu holat yuzaga kelmaydi -
+        # ehtiyot chorasi sifatida qo'lda yozishga o'tkaziladi.
+        return await quick_manzil_manual_router(update, context)
+    context.user_data["quick_manzil"] = manzil
+    await query.edit_message_reply_markup(reply_markup=None)
+    return await _finish_narx(update, context, narx)
 
 
 async def quick_manzil_auto_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
