@@ -32,6 +32,7 @@ from common.db import (
 )
 
 from web.auth import create_session_token, get_current_tg_user, is_web_subscribed, verify_telegram_auth
+from common.districts import current_usd_to_som_rate, format_price_dual
 from web.listings_data import current_card_number, current_subscription_days, current_subscription_price
 from web.pages import notify_telegram, telegram_upload_photos
 from web.render import DEFAULT_LANG, esc_html, get_lang, icon, render_credit_card, render_footer, render_head, render_header, render_listing_card, t
@@ -241,6 +242,9 @@ def kabinet_page(request: Request):
 
     # Sevimlilar
     favorites = get_favorite_listings_full(uid)
+    usd_rate = current_usd_to_som_rate()
+    for f in favorites:
+        f["narx"], f["narx_approx"] = format_price_dual(f.get("narx"), usd_rate)
     favorited_ids = {f["id"] for f in favorites}
     if favorites:
         fav_cards = "".join(render_listing_card(f, favorited_ids) for f in favorites)

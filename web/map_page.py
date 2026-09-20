@@ -146,6 +146,7 @@ PUBLIC_MAP_HTML = """<!DOCTYPE html>
   .pcard-title { font-size: 13.5px; font-weight: 800; color: #16202e; line-height: 1.3; margin-bottom: 3px; }
   .pcard-meta { font-size: 11.5px; color: #6b7688; margin-bottom: 8px; }
   .pcard-price { font-size: 15px; font-weight: 800; color: #16202e; margin-bottom: 9px; }
+  .pcard-price-approx { font-size: 12px; font-weight: 600; color: #64748b; }
   .pcard-actions { display: flex; gap: 6px; }
   .pcard-actions a { flex: 1; text-align: center; padding: 8px 6px; border-radius: 9px; font-size: 11.5px; font-weight: 700; text-decoration: none; }
   .pcard-btn-primary { background: var(--map-accent); color: #fff !important; }
@@ -316,7 +317,7 @@ function makeMarker(l) {
     `${photoHtml}<div class="pcard-body">${badges}` +
     `<div class="pcard-title">${l.manzil || l.moljal || ML.no_address}</div>` +
     `<div class="pcard-meta">\U0001F6CF ${l.xona || '-'} \u00b7 \U0001F465 ${(l.kimlarga||'').slice(0,20) || '-'}</div>` +
-    `<div class="pcard-price">${l.narx || ''}</div>` +
+    `<div class="pcard-price">${l.narx || ''}${l.narx_approx ? ` <span class="pcard-price-approx">${l.narx_approx}</span>` : ''}</div>` +
     `<div class="pcard-actions">${detailBtn}${chanBtn}</div></div>`
   );
   return marker;

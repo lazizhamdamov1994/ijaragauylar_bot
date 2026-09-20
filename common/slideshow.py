@@ -31,9 +31,22 @@ from common.watermark import load_logo
 logger = logging.getLogger(__name__)
 
 CANVAS_W, CANVAS_H = 1080, 1920  # Instagram Reels/Stories uchun tik (9:16) format
-INTRO_STEP_SECONDS = 1  # sarlavha -> manzil -> narx uchun 3 ta alohida (1s dan) kadr - ketma-ket "ochilish" effekti
-OTHER_FRAME_SECONDS = 1
+INTRO_SECONDS = 3.0  # sarlavha+manzil+narx - HAMMASI BIRDAN, video boshidanoq
+OTHER_FRAME_SECONDS = 1.7
 MAX_PHOTOS = 10
+
+# ===== Harakat (Ken Burns zoom) + kadrlar orasidagi yumshoq o'tish =====
+# Oddiy statik-rasm slaydshov o'rniga - haqiqiy Instagram Reels'dagi kabi
+# HAR BIR kadr sekin zumlanadi (navbat bilan ichkariga/tashqariga - bir xil
+# effekt takrorlanavermasligi uchun), kadrlar orasida esa qattiq kesish
+# emas, yumshoq eritib o'tish (crossfade) ishlatiladi. Bu ffmpeg'ning o'zida
+# (GPU/AI shart emas) bajariladi - kichik VPS'da ham ishlaydi, faqat video
+# yasash biroz ko'proq vaqt oladi (_GEN_SEMAPHORE bitta video bilan cheklab,
+# resursni himoya qiladi).
+FPS = 30
+XFADE_SECONDS = 0.5
+ZOOM_RANGE = 0.14  # masalan 1.0 -> 1.14 (yoki teskari) - sezilarli, lekin haddan oshmagan harakat
+PRESCALE = 1.5  # zoompan silliq ishlashi uchun manba kadrni oldindan kattalashtirish
 
 BRAND_ACCENT = (255, 59, 92)  # sayt bilan bir xil #FF3B5C
 
@@ -96,6 +109,26 @@ def _centered_text(draw, y, text, font, fill=(255, 255, 255, 255), shadow=False)
         draw.text((x + 2, y + 3), text, font=font, fill=(0, 0, 0, 110))
     draw.text((x, y), text, font=font, fill=fill)
     return w
+
+
+def _shrink_font_to_fit(draw, text: str, base_size: int, max_width: int, min_size: int = 26, extra_width: int = 0):
+    """Matn shriftini (kerak bo'lsa) max_width'ga sig'guncha kamaytiradi -
+    uzun manzillar branded karta chegarasidan tashqariga chiqib ketmasligi
+    uchun (avval qattiq belgi-soni bo'yicha kesish ishlatilgan edi - bu
+    uzun so'zli manzillarda hali ham matn kartadan oshib ketishiga olib
+    kelardi). Eng kichik o'lchamda ham sig'masa, "..." bilan qisqartiradi."""
+    size = base_size
+    while size >= min_size:
+        font = _load_font(size)
+        w = draw.textbbox((0, 0), text, font=font)[2] + extra_width
+        if w <= max_width:
+            return font, text
+        size -= 2
+    font = _load_font(min_size)
+    trimmed = text
+    while trimmed and draw.textbbox((0, 0), trimmed + "...", font=font)[2] + extra_width > max_width:
+        trimmed = trimmed[:-1]
+    return font, (trimmed.rstrip() + "..." if trimmed else text[:1])
 
 
 def _centered_text_with_dot(draw, y, text, font, fill, dot_color):
@@ -219,9 +252,11 @@ def _draw_cta_banner(canvas: Image.Image) -> Image.Image:
     return Image.alpha_composite(canvas, overlay).convert("RGB")
 
 
-def _draw_intro_frame(canvas: Image.Image, step: int, manzil: str, narx: str) -> Image.Image:
-    """BIRINCHI rasmning 3 ta bosqichli ("ochiluvchi") kadri:
-    step 0 -> faqat sarlavha, step 1 -> + manzil, step 2 -> + narx.
+def _draw_intro_frame(canvas: Image.Image, manzil: str, narx: str) -> Image.Image:
+    """Sarlavha kartasi - sarlavha, manzil VA narx HAMMASI BIRDAN, video
+    boshidanoq ko'rinadi (avvalgi versiyada bu 3 ta alohida kadrda
+    ketma-ket "ochilib" chiqardi - Instagram Reels formatiga mos emas edi,
+    tomoshabin birinchi soniyalardayoq to'liq ma'lumotni ko'rishi kerak).
     Pastki CTA banneri ALOHIDA (_draw_cta_banner) - bu kadrga ham, qolgan
     barcha rasmlarga ham qo'shiladi (build_slideshow_video ichida)."""
     canvas = _draw_branded_card(canvas)
@@ -231,8 +266,6 @@ def _draw_intro_frame(canvas: Image.Image, step: int, manzil: str, narx: str) ->
     _paste_logo_centered(overlay, LOGO_TOP, LOGO_MAX_H)
 
     title_font = _load_font(74)
-    address_font = _load_font(48)
-    price_font = _load_font(58)
 
     _draw_spaced_text(draw, CANVAS_W // 2, TITLE_Y, "MAKLERSIZ UY", title_font, fill=(255, 255, 255, 255), tracking=7)
     bar_w = 110
@@ -241,19 +274,77 @@ def _draw_intro_frame(canvas: Image.Image, step: int, manzil: str, narx: str) ->
         radius=3, fill=(*BRAND_ACCENT, 255),
     )
 
-    if step >= 1:
-        _centered_text_with_dot(draw, ADDRESS_Y, (manzil or "").strip()[:42], address_font, fill=(225, 228, 238, 255), dot_color=BRAND_ACCENT)
+    # MUHIM: uzun manzillar/narxlar branded kartadan (CARD_W) tashqariga
+    # chiqib ketmasligi uchun shrift o'lchami dinamik ravishda mosligicha
+    # kamaytiriladi (avval qattiq belgi-soni bo'yicha kesish - [:42] -
+    # ishlatilgan edi, bu uzun so'zli manzillarda hali ham matn kartadan
+    # oshib ketishiga olib kelardi - haqiqiy sinov videosida topilgan xato).
+    addr_text = (manzil or "").strip()
+    addr_font, addr_text = _shrink_font_to_fit(draw, addr_text, 48, CARD_W - 140, min_size=28, extra_width=32)
+    _centered_text_with_dot(draw, ADDRESS_Y, addr_text, addr_font, fill=(225, 228, 238, 255), dot_color=BRAND_ACCENT)
 
-    if step >= 2:
-        _draw_price_chip(draw, PRICE_CY, (narx or "").strip()[:24], price_font)
+    price_text = (narx or "").strip()
+    price_font, price_text = _shrink_font_to_fit(draw, price_text, 58, CARD_W - 160, min_size=32)
+    _draw_price_chip(draw, PRICE_CY, price_text, price_font)
 
     return Image.alpha_composite(canvas, overlay).convert("RGB")
 
 
+def _zoompan_filter(idx: int, duration: float, zoom_in: bool) -> str:
+    """Bitta kadr uchun sekin "Ken Burns" zum filtri - toq/juft indeksларда
+    yo'nalish almashtiriladi (ichkariga/tashqariga), shu orqali barcha
+    kadrlar bir xil effektni takrorlamaydi. Manba avval PRESCALE marta
+    kattalashtiriladi - aks holda zoompan kichik manbadan kesganda harakat
+    "sakrab-sakrab" (jitter) chiqadi."""
+    d_frames = max(int(round(duration * FPS)), 1)
+    rate = ZOOM_RANGE / d_frames
+    zmax = 1 + ZOOM_RANGE
+    if zoom_in:
+        z_expr = f"if(eq(on,0),1.0,min(zoom+{rate:.6f},{zmax:.4f}))"
+    else:
+        z_expr = f"if(eq(on,0),{zmax:.4f},max(zoom-{rate:.6f},1.0))"
+    pw, ph = int(CANVAS_W * PRESCALE), int(CANVAS_H * PRESCALE)
+    return (
+        f"[{idx}:v]scale={pw}:{ph}:flags=lanczos,setsar=1,"
+        f"zoompan=z='{z_expr}':d={d_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+        f"s={CANVAS_W}x{CANVAS_H}:fps={FPS},"
+        # MUHIM: "-loop 1 -i rasm.jpg" standart 25 fps bilan cheksiz "kadr"
+        # beradi, zoompan esa HAR BIR kirish kadriga d ta chiqish kadri
+        # qo'shadi - shu sabab trim BO'LMASA video kutilganidan O'NLAB
+        # MARTA uzun chiqadi (haqiqiy videoda sinovdan o'tkazib topilgan
+        # xato). trim orqali chiqish ANIQ d ta kadr bilan cheklanadi.
+        f"trim=start_frame=0:end_frame={d_frames},setpts=PTS-STARTPTS,format=yuv420p[v{idx}]"
+    )
+
+
+def _build_video_filter_complex(frame_paths: list[tuple[str, float]]) -> tuple[str, str]:
+    """Har bir kadrga Ken Burns zum filtrini qo'llaydi, keyin ularni
+    ketma-ket yumshoq eritib o'tish (xfade) bilan bog'laydi. Statik
+    rasmlar ketma-ketligi o'rniga haqiqiy, professional harakatli video
+    hosil qiladi - HAMMASI ffmpeg'ning o'zida, tashqi AI/GPU xizmatisiz.
+    (filter_complex_matni, oxirgi_oqim_nomi) qaytaradi."""
+    filters = [_zoompan_filter(idx, dur, zoom_in=(idx % 2 == 0)) for idx, (_, dur) in enumerate(frame_paths)]
+    n = len(frame_paths)
+    if n == 1:
+        return ";".join(filters), "v0"
+
+    prev_label = "v0"
+    cum = 0.0
+    for j in range(1, n):
+        cum += frame_paths[j - 1][1]
+        offset = cum - j * XFADE_SECONDS
+        out_label = f"vx{j}" if j < n - 1 else "vout"
+        filters.append(f"[{prev_label}][v{j}]xfade=transition=fade:duration={XFADE_SECONDS}:offset={offset:.3f}[{out_label}]")
+        prev_label = out_label
+    return ";".join(filters), prev_label
+
+
 async def build_slideshow_video(photos: list[bytes], manzil: str, narx: str) -> bytes | None:
-    """1-rasm ustida 3 bosqichli "ochiluvchi" sarlavha (sarlavha -> manzil ->
-    narx, har biri 1 soniya, jami 3 soniya), qolgan rasmlar 1 soniyadan
-    (matnsiz) almashadigan, OVOZSIZ mp4 video yasaydi."""
+    """1-rasm ustida sarlavha+manzil+narx BIRDANIGA (video boshidanoq)
+    ko'rinadigan branded karta, qolgan rasmlar - har biri sekin
+    zumlanadigan (Ken Burns) va bir-biriga yumshoq eriydigan (crossfade)
+    kadrlar - zamonaviy Instagram Reels formatiga mos, OVOZSIZ mp4 video
+    yasaydi."""
     photos = photos[:MAX_PHOTOS]
     if not photos:
         return None
@@ -261,15 +352,14 @@ async def build_slideshow_video(photos: list[bytes], manzil: str, narx: str) -> 
     async with _GEN_SEMAPHORE:
         try:
             with tempfile.TemporaryDirectory(prefix="slideshow_") as tmpdir:
-                frame_paths = []
+                frame_paths: list[tuple[str, float]] = []
 
                 try:
                     first = _fit_frame(photos[0])
-                    for step in range(3):
-                        frame = _draw_cta_banner(_draw_intro_frame(first, step, manzil, narx))
-                        path = os.path.join(tmpdir, f"frame_intro_{step}.jpg")
-                        frame.save(path, format="JPEG", quality=92)
-                        frame_paths.append((path, INTRO_STEP_SECONDS))
+                    frame = _draw_cta_banner(_draw_intro_frame(first, manzil, narx))
+                    path = os.path.join(tmpdir, "frame_intro.jpg")
+                    frame.save(path, format="JPEG", quality=92)
+                    frame_paths.append((path, INTRO_SECONDS))
                 except Exception:
                     logger.exception("Slaydshov sarlavha kadrini tayyorlashda xatolik")
 
@@ -286,21 +376,18 @@ async def build_slideshow_video(photos: list[bytes], manzil: str, narx: str) -> 
                 if not frame_paths:
                     return None
 
-                concat_path = os.path.join(tmpdir, "concat.txt")
-                with open(concat_path, "w", encoding="utf-8") as f:
-                    for path, duration in frame_paths:
-                        f.write(f"file '{path}'\nduration {duration}\n")
-                    # ffmpeg concat demuxer'ning o'zига xos xususiyati: oxirgi
-                    # faylning "duration"si e'tiborga olinmaydi, shuning uchun
-                    # oxirgi kadr yana bir marta (duration'siz) takrorlanadi.
-                    f.write(f"file '{frame_paths[-1][0]}'\n")
+                filter_complex, final_label = _build_video_filter_complex(frame_paths)
 
                 output_path = os.path.join(tmpdir, "output.mp4")
-                cmd = [
-                    "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_path,
-                    "-vf", "fps=30,format=yuv420p",
+                cmd = ["ffmpeg", "-y"]
+                for path, duration in frame_paths:
+                    cmd += ["-loop", "1", "-t", f"{duration}", "-i", path]
+                cmd += [
+                    "-filter_complex", filter_complex,
+                    "-map", f"[{final_label}]",
+                    "-r", str(FPS),
                     "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-                    "-an", "-movflags", "+faststart",
+                    "-an", "-movflags", "+faststart", "-pix_fmt", "yuv420p",
                     output_path,
                 ]
                 proc = await asyncio.create_subprocess_exec(

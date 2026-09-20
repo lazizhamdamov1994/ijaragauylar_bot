@@ -680,7 +680,7 @@ def listing_detail(request: Request, listing_id: int):
 
     <div>
       <div class="sidebar-card">
-        <div class="sidebar-price">{esc_html(l['narx'])}</div>
+        <div class="sidebar-price">{esc_html(l['narx'])}{f'<span class="sidebar-price-approx">{esc_html(l["narx_approx"])}</span>' if l.get('narx_approx') else ''}</div>
         {phone_cta_html}
         {viewing_cta_html}
         {sidebar_note_html}

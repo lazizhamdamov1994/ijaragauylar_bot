@@ -12,7 +12,14 @@ import httpx
 
 from common.config import BOT_TOKEN, BOT_USERNAME, CARD_NUMBER, CHANNEL_ID, CHANNEL_USERNAME
 from common.db import db, get_setting, now_str
-from common.districts import TASHKENT_DISTRICTS, format_price_compact, get_aliases_for_district, parse_price_value
+from common.districts import (
+    TASHKENT_DISTRICTS,
+    current_usd_to_som_rate,
+    format_price_compact,
+    format_price_dual,
+    get_aliases_for_district,
+    parse_price_value,
+)
 from web.render import RENTAL_TYPE_LABELS, photo_url
 from bot.helpers import build_caption, channel_keyboard
 
@@ -33,6 +40,18 @@ def current_subscription_days() -> int:
 
 
 
+def _apply_dual_price(d: dict, usd_rate: int) -> dict:
+    """Narxni saytda ko'rsatishga tayyorlaydi: asl narxni ixcham qiladi
+    (`narx`) va admin kursiga ko'ra ikkinchi valyutadagi taxminiy qiymatni
+    qo'shadi (`narx_approx`) - shu orqali dollarda va so'mda kiritilgan
+    e'lonlar bir-biriga solishtirib ko'rinadi (masalan "300 $" yonida
+    "≈ 3 810 000 so'm")."""
+    main, approx = format_price_dual(d.get("narx"), usd_rate)
+    d["narx"] = main
+    d["narx_approx"] = approx
+    return d
+
+
 def get_active_listings():
     conn = db()
     rows = conn.execute(
@@ -44,6 +63,7 @@ def get_active_listings():
            ORDER BY (CASE WHEN COALESCE(price_charged,0) > 0 THEN 0 ELSE 1 END) ASC, created_at DESC"""
     ).fetchall()
     conn.close()
+    usd_rate = current_usd_to_som_rate()
     result = []
     for r in rows:
         d = dict(r)
@@ -58,7 +78,7 @@ def get_active_listings():
         d["photo"] = photo_url(photos[0]) if photos else ""
         d["is_paid"] = bool((d.get("price_charged") or 0) > 0)
         d["detail_link"] = f"/uy/{d['id']}"
-        d["narx"] = format_price_compact(d.get("narx"))
+        _apply_dual_price(d, usd_rate)
         result.append(d)
     return result
 
@@ -115,20 +135,24 @@ def get_site_listings(hudud: str = "", xona: str = "", page: int = 1, rental_typ
     conn.close()
     listings = [_parse_photos(dict(r)) for r in rows]
 
+    # MUHIM: narx qiymati (saralash uchun) va ko'rsatiladigan ikkinchi
+    # valyutadagi taxminiy narx (`narx_approx`) BITTA joriy admin kursidan
+    # hisoblanadi - shu orqali dollarda va so'mda kiritilgan e'lonlar
+    # to'g'ri solishtiriladi (masalan "Eng arzon" saralashda ham).
+    usd_rate = current_usd_to_som_rate()
+    for l in listings:
+        l["_price_value"] = parse_price_value(l.get("narx"), usd_rate)
+        _apply_dual_price(l, usd_rate)
+
     if sort in ("arzon", "qimmat"):
-        try:
-            usd_rate = int(get_setting("usd_to_som_rate", "12700"))
-        except (TypeError, ValueError):
-            usd_rate = 12700
         reverse = sort == "qimmat"
-        for l in listings:
-            l["_price_value"] = parse_price_value(l.get("narx"), usd_rate)
         priced = [l for l in listings if l["_price_value"] is not None]
         unpriced = [l for l in listings if l["_price_value"] is None]
         priced.sort(key=lambda l: l["_price_value"], reverse=reverse)
         listings = priced + unpriced
-        for l in listings:
-            l.pop("_price_value", None)
+
+    for l in listings:
+        l.pop("_price_value", None)
 
     total = len(listings)
     start = (page - 1) * PER_PAGE
@@ -143,7 +167,7 @@ def get_site_listing(listing_id: int):
     conn.close()
     if not row:
         return None
-    return _parse_photos(dict(row))
+    return _apply_dual_price(_parse_photos(dict(row)), current_usd_to_som_rate())
 
 
 def get_related_listings(listing_id: int, hudud_hint: str, limit: int = 3):
@@ -156,7 +180,8 @@ def get_related_listings(listing_id: int, hudud_hint: str, limit: int = 3):
         (listing_id, f"%{hudud_hint[:15]}%", f"%{hudud_hint[:15]}%", limit),
     ).fetchall()
     conn.close()
-    return [_parse_photos(dict(r)) for r in rows]
+    usd_rate = current_usd_to_som_rate()
+    return [_apply_dual_price(_parse_photos(dict(r)), usd_rate) for r in rows]
 
 
 def site_stats_summary():

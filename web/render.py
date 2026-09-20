@@ -935,7 +935,7 @@ def render_listing_card(l: dict, favorited_ids: frozenset = frozenset()) -> str:
       <div class="lc-title">{esc_html(display_address(l))}</div>
     </div>
     {meta_html}
-    <div class="lc-price">{esc_html(l.get('narx') or '')}</div>
+    <div class="lc-price">{esc_html(l.get('narx') or '')}{f'<span class="lc-price-approx">{esc_html(l["narx_approx"])}</span>' if l.get('narx_approx') else ''}</div>
   </div>
 </a>"""
 

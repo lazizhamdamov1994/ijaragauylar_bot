@@ -14,7 +14,7 @@ deploy qilmasdan. Pastdagi _SEED_DISTRICT_ALIASES faqat DASTLABKI
 """
 import re
 
-from common.db import db, now_str
+from common.db import db, get_setting, now_str
 
 TASHKENT_DISTRICTS = [
     "Yunusobod", "Chilonzor", "Sergeli", "Mirzo Ulug'bek", "Shayxontohur",
@@ -262,3 +262,42 @@ def parse_price_value(narx: str, usd_to_som_rate: int = 12700):
         if digits.isdigit():
             return int(digits)
     return None
+
+
+def current_usd_to_som_rate() -> int:
+    """Admin panelida sozlangan dollar kursini o'qiydi (butun sayt/bot/AI
+    bitta manbadan - shu funksiyadan - foydalanishi kerak, aks holda
+    kurs o'zgartirilganda ba'zi joylar eski qattiq kodlangan qiymatda
+    qolib ketadi)."""
+    try:
+        return int(get_setting("usd_to_som_rate", "12700"))
+    except (TypeError, ValueError):
+        return 12700
+
+
+def format_price_dual(narx: str, usd_to_som_rate: int = None):
+    """Narxni asl valyutasida ko'rsatadi VA admin kursiga ko'ra ikkinchi
+    valyutadagi taxminiy qiymatini qo'shadi (masalan asl "300$" bo'lsa -
+    "≈ 3 810 000 so'm", asl "3.5 mln so'm" bo'lsa - "≈ 276 $") - saytda
+    dollar va so'mdagi e'lonlar bir-biriga solishtirib ko'rinishi uchun.
+    (asosiy_matn, taxminiy_matn_yoki_None) qaytaradi - "Kelishiladi" yoki
+    aniqlab bo'lmagan narxlar uchun ikkinchisi None bo'ladi."""
+    if usd_to_som_rate is None:
+        usd_to_som_rate = current_usd_to_som_rate()
+    main = format_price_compact(narx)
+    if not main:
+        return main, None
+    is_dollar = bool(
+        _PRICE_DOLLAR.search(narx) or _PRICE_DOLLAR_SUFFIX.search(narx) or _PRICE_YE.search(narx)
+    )
+    value_som = parse_price_value(narx, usd_to_som_rate)
+    if value_som is None or value_som <= 0 or not usd_to_som_rate:
+        return main, None
+    if is_dollar:
+        approx = f"{value_som:,}".replace(",", " ") + " so'm"
+    else:
+        usd_val = round(value_som / usd_to_som_rate)
+        if usd_val < 1:
+            return main, None
+        approx = f"{usd_val:,}".replace(",", " ") + " $"
+    return main, f"≈ {approx}"

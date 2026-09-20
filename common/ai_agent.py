@@ -47,18 +47,27 @@ SEARCH_TOOL = {
 
 def _search_listings_tool(hudud: str = "", xona: str = "", rental_type: str = "", narx_max_som: int = 0) -> dict:
     from common.config import SITE_URL
-    from common.districts import parse_price_value
+    from common.districts import current_usd_to_som_rate, parse_price_value
     from web.listings_data import get_site_listings
 
     listings, total = get_site_listings(hudud=hudud or "", xona=xona or "", rental_type=rental_type or "", page=1)
+    usd_rate = current_usd_to_som_rate()
     results = []
     for l in listings:
         if narx_max_som:
-            val = parse_price_value(l.get("narx"))
+            # MUHIM: so'mdagi narx aynan qiyoslanadi, dollar/y.e.dagi narx
+            # esa admin panelidagi joriy kursga ko'ra so'mga o'tkazilib
+            # solishtiriladi - aks holda "300$ gacha" so'ralganda
+            # so'mdagi e'lonlar kursga qaramay noto'g'ri chiqib/tushib
+            # qolishi mumkin edi.
+            val = parse_price_value(l.get("narx"), usd_rate)
             if val is not None and val > narx_max_som:
                 continue
+        narx_display = l.get("narx")
+        if l.get("narx_approx"):
+            narx_display = f"{narx_display} ({l['narx_approx']})"
         results.append({
-            "manzil": l.get("manzil"), "narx": l.get("narx"), "xona": l.get("xona"),
+            "manzil": l.get("manzil"), "narx": narx_display, "xona": l.get("xona"),
             "link": f"{SITE_URL}/uy/{l['id']}" if SITE_URL else f"/uy/{l['id']}",
         })
         if len(results) >= 5:
