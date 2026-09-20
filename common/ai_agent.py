@@ -16,6 +16,7 @@ MUHIM chegaralar (common/ai.py bilan bir xil tamoyil):
 """
 import json
 import logging
+import re
 
 from common.ai import AI_MODEL, _get_client, _log_usage, ai_features_enabled
 from common.db import count_today_ai_chat_messages, get_setting, log_ai_chat_message
@@ -83,8 +84,26 @@ def _concierge_system_prompt() -> str:
         "yozsa, shu tilda javob bering).\n"
         "- E'lon topilmasa, buni ochiq ayting va boshqa mezon bilan qidirishni taklif qiling.\n"
         "- Platformaga aloqasi bo'lmagan savollarga (siyosat, dasturlash va h.k.) javob bermang, "
-        "muloyimlik bilan mavzuga qaytaring."
+        "muloyimlik bilan mavzuga qaytaring.\n"
+        "- Javoblaringiz doim ODDIY MATN (plain text) sifatida yuboriladi - Markdown ISHLATMANG "
+        "(hech qachon **qalin**, __ostiga chizilgan__, *kursiv*, # sarlavha yoki [matn](havola) "
+        "formatidan foydalanmang). Havolalarni har doim SOF holda yozing, hech qanday belgi bilan "
+        "o'rab yoki bezab qo'ymang - masalan: https://ijaragauylar.uz/uy/999 (oldidan yoki keyinidan "
+        "yulduzcha yoki boshqa belgi bo'lmasin)."
     )
+
+
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^\s)]+)\)")
+
+
+def _sanitize_reply(text: str) -> str:
+    """AI vaqti-vaqti bilan qoidaga qaramay Markdown yozib qo'yishi mumkin
+    (masalan **havola**) - bot/veb xabarlari oddiy matn sifatida yuborilgani
+    uchun bu belgilar havolaga yopishib, buzilgan URL hosil qiladi. Shuning
+    uchun qo'shimcha himoya sifatida bu yerda tozalab qo'yamiz."""
+    text = _MD_LINK_RE.sub(lambda m: f"{m.group(1)}: {m.group(2)}", text)
+    text = text.replace("**", "").replace("__", "")
+    return text
 
 
 def concierge_rate_limited(user_key: str, platform: str) -> bool:
@@ -136,7 +155,7 @@ async def concierge_turn(user_key: str, platform: str, history: list, user_messa
 
             text = next((b.text for b in response.content if b.type == "text"), "")
             messages.append({"role": "assistant", "content": response.content})
-            return text, messages
+            return _sanitize_reply(text), messages
 
         return "Kechirasiz, so'rovingizni birroz soddaroq qayta yozib ko'ring.", messages
     except Exception:

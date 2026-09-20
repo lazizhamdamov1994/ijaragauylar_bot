@@ -811,7 +811,14 @@ def render_ai_chat_widget(lang: str = DEFAULT_LANG) -> str:
   }}
 
   function linkify(escaped) {{
-    return escaped.replace(/(https?:\\/\\/[^\\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    return escaped.replace(/(https?:\\/\\/[^\\s<]+)/g, function(url) {{
+      var trail = '';
+      while (url.length && /[*_.,!?:;)\\]]/.test(url.slice(-1))) {{
+        trail = url.slice(-1) + trail;
+        url = url.slice(0, -1);
+      }}
+      return '<a href="' + url + '" target="_blank" rel="noopener">' + url + '</a>' + trail;
+    }});
   }}
 
   function addBubble(text, who) {{
