@@ -703,6 +703,7 @@ def render_footer(lang: str = DEFAULT_LANG) -> str:
         <a href="/elon-joylash">{t(lang,'mobile_post')}</a>
         <a href="/xarita">{t(lang,'nav_map_title')}</a>
         <a href="/baholash">AI baholash</a>
+        <a href="/bozor-yangiliklari">Bozor yangiliklari</a>
         <a href="/subarenda">{t(lang,'nav_subarenda')}</a>
         <a href="/kabinet">{t(lang,'nav_account_label')}</a>
       </div>

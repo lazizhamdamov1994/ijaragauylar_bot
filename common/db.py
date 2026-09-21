@@ -166,6 +166,9 @@ def init_schema() -> None:
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, platform TEXT NOT NULL,
         district TEXT, xona TEXT, condition_text TEXT, photo_file_ids TEXT, receipt_file_id TEXT,
         status TEXT DEFAULT 'pending', created_at TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS market_digests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, status TEXT DEFAULT 'draft',
+        created_at TEXT, posted_at TEXT)""")
     conn.commit()
     conn.close()
 
@@ -360,6 +363,44 @@ def save_valuation_request(user_key: str, platform: str, district: str, xona: st
     )
     conn.commit()
     conn.close()
+
+
+def save_market_digest(content: str) -> int:
+    conn = db()
+    conn.execute(
+        "INSERT INTO market_digests (content, status, created_at) VALUES (?, 'draft', ?)",
+        (content, now_str()),
+    )
+    digest_id = conn.execute("SELECT last_insert_rowid() id").fetchone()["id"]
+    conn.commit()
+    conn.close()
+    return digest_id
+
+
+def get_market_digest(digest_id: int):
+    conn = db()
+    row = conn.execute("SELECT * FROM market_digests WHERE id = ?", (digest_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_market_digest_status(digest_id: int, status: str, posted_at: str = None) -> None:
+    conn = db()
+    if posted_at:
+        conn.execute("UPDATE market_digests SET status = ?, posted_at = ? WHERE id = ?", (status, posted_at, digest_id))
+    else:
+        conn.execute("UPDATE market_digests SET status = ? WHERE id = ?", (status, digest_id))
+    conn.commit()
+    conn.close()
+
+
+def list_posted_market_digests(limit: int = 20) -> list:
+    conn = db()
+    rows = conn.execute(
+        "SELECT * FROM market_digests WHERE status = 'posted' ORDER BY posted_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def log_ai_feedback(listing_id: int, was_flagged: bool, decision: str) -> None:

@@ -61,6 +61,7 @@ from bot.flow_viewing import *  # noqa: F401,F403
 from bot.jobs import *  # noqa: F401,F403
 from bot.ai_concierge import *  # noqa: F401,F403
 from bot.flow_valuation import *  # noqa: F401,F403
+from bot.flow_digest import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
 
@@ -333,6 +334,8 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_approve, pattern=r"^admin_approve_(listing|sub)_\d+$"))
     app.add_handler(CallbackQueryHandler(valpay_approve_router, pattern=r"^valpay_approve_\d+$"))
     app.add_handler(CallbackQueryHandler(valpay_reject_router, pattern=r"^valpay_reject_\d+$"))
+    app.add_handler(CallbackQueryHandler(digest_approve_router, pattern=r"^digest_approve_\d+$"))
+    app.add_handler(CallbackQueryHandler(digest_reject_router, pattern=r"^digest_reject_\d+$"))
     app.add_handler(CallbackQueryHandler(subpage_router, pattern=r"^subpage_\d+$"))
     app.add_handler(CallbackQueryHandler(usercard_router, pattern=r"^usercard_\d+$"))
     app.add_handler(CallbackQueryHandler(cardcancel_router, pattern=r"^cardcancel_\d+$"))
@@ -396,6 +399,7 @@ def main():
         app.job_queue.run_daily(job_ai_daily_report, time=dtime(hour=21, minute=0, tzinfo=TASHKENT_TZ))
         app.job_queue.run_daily(job_ai_accuracy_review, time=dtime(hour=10, minute=30, tzinfo=TASHKENT_TZ), days=(0,))
         app.job_queue.run_daily(job_market_snapshot, time=dtime(hour=23, minute=0, tzinfo=TASHKENT_TZ))
+        app.job_queue.run_daily(job_generate_market_digest, time=dtime(hour=23, minute=15, tzinfo=TASHKENT_TZ))
     else:
         logger.warning("JobQueue mavjud emas \u2014 eslatma va oylik hisobot ishlamaydi. O'rnating: pip install \"python-telegram-bot[job-queue]\"")
 

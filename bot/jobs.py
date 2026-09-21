@@ -29,8 +29,8 @@ from telegram.constants import ParseMode
 from telegram.error import BadRequest, NetworkError, TimedOut
 from telegram.ext import ContextTypes, ConversationHandler, filters
 
-from common.ai import ai_features_enabled, ai_generate_ops_report, ai_review_own_accuracy, ai_usage_summary
-from common.db import ai_accuracy_summary
+from common.ai import ai_features_enabled, ai_generate_ops_report, ai_generate_public_digest, ai_review_own_accuracy, ai_usage_summary
+from common.db import ai_accuracy_summary, get_district_price_history, get_usd_rate_history, save_market_digest
 from common.config import ADMIN_IDS, ADMIN_USERNAME, BOT_TOKEN as TOKEN, CARD_HOLDER, CHANNEL_ID, CHANNEL_USERNAME, DASHBOARD_URL, DB_PATH, DEFAULT_SETTINGS as INITIAL_SETTINGS, MAX_DAILY_LISTINGS, MOD_DAILY_LISTINGS, STALE_CHECK_DAYS
 
 from bot.constants import *  # noqa: F401,F403
@@ -250,6 +250,68 @@ async def job_market_snapshot(context: ContextTypes.DEFAULT_TYPE):
         )
         conn.commit()
         conn.close()
+
+
+def _format_public_market_text() -> str:
+    """Faqat OMMAVIY (ichki bo'lmagan) bozor raqamlarini - dollar kursi va
+    tumanlar bo'yicha o'rtacha narx tendensiyasini - AI digest yozuvchisi
+    uchun matn blokiga jamlaydi. Daromad/foydalanuvchi/AI xarajati kabi
+    ICHKI ma'lumotlar bu yerga ATAYIN kiritilmaydi."""
+    usd_hist = get_usd_rate_history(days=14)
+    lines = ["Dollar kursi tarixi (so'nggi kunlar, so'mda):"]
+    if usd_hist:
+        for r in usd_hist[-14:]:
+            lines.append(f"- {r['recorded_at'][:10]}: {r['rate']:,}")
+    else:
+        lines.append("(ma'lumot yo'q)")
+
+    lines.append("")
+    lines.append("Tumanlar bo'yicha o'rtacha ijara narxi tendensiyasi (so'nggi kunlar, so'mda):")
+    district_hist = get_district_price_history(days=14)
+    by_district = {}
+    for r in district_hist:
+        by_district.setdefault(r["district"], []).append(r)
+    if not by_district:
+        lines.append("(ma'lumot yo'q)")
+    for district, rows in by_district.items():
+        rows_sorted = sorted(rows, key=lambda r: r["recorded_at"])
+        first, last = rows_sorted[0], rows_sorted[-1]
+        lines.append(
+            f"- {district}: {first['recorded_at'][:10]} = {first['avg_price_som']:,} ({first['listing_count']} ta e'lon) "
+            f"-> {last['recorded_at'][:10]} = {last['avg_price_som']:,} ({last['listing_count']} ta e'lon)"
+        )
+    return "\n".join(lines)
+
+
+async def job_generate_market_digest(context: ContextTypes.DEFAULT_TYPE):
+    """Har kuni kechqurun (job_market_snapshot'dan keyin, shu kunning eng
+    yangi suratiga asoslanib) - bozor holati haqida OMMAVIY post loyihasini
+    tayyorlaydi va adminlarga tasdiqlash uchun yuboradi. Laziz aynan shu
+    rejimni tanlagan: AVTOMATIK e'lon QILINMAYDI - ✅/❌ tugmasi orqali
+    admin/super moderator qaror qabul qiladi (bot/flow_digest.py)."""
+    if get_setting("ai_market_digest_enabled", "1") != "1" or not ai_features_enabled():
+        return
+    market_text = _format_public_market_text()
+    content = None
+    try:
+        loop = asyncio.get_event_loop()
+        content = await loop.run_in_executor(None, ai_generate_public_digest, market_text)
+    except Exception:
+        logger.exception("AI bozor digest generatsiyasida xatolik")
+    if not content:
+        return
+
+    digest_id = save_market_digest(content)
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Kanalga joylash", callback_data=f"digest_approve_{digest_id}"),
+        InlineKeyboardButton("❌ Bekor qilish", callback_data=f"digest_reject_{digest_id}"),
+    ]])
+    text = f"\U0001F4F0 <b>Kunlik bozor tahlili (loyiha)</b> #{digest_id}\n\n{content}\n\n<i>Tasdiqlasangiz kanalga va saytga chiqadi.</i>"
+    for admin_id in ADMIN_IDS:
+        try:
+            await context.bot.send_message(admin_id, text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+        except Exception:
+            logger.exception("Bozor digest loyihasini yuborib bo'lmadi: admin_id=%s", admin_id)
 
 
 async def job_daily_backup(context: ContextTypes.DEFAULT_TYPE):

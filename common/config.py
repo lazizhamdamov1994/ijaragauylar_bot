@@ -70,6 +70,7 @@ DEFAULT_SETTINGS = {
     "ai_scam_extra_guidance": "",
     "ai_valuation_extra_guidance": "",
     "valuation_price": "10000",
+    "ai_market_digest_enabled": "1",
 }
 
 # ---- Telegram orqali kirish (shaxsiy kabinet) ----

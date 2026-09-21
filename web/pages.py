@@ -32,6 +32,7 @@ from common.db import (
     has_prior_rejected_listing,
     has_prior_valuation,
     is_phone_blocked,
+    list_posted_market_digests,
     now_str,
     save_valuation_payment,
     save_valuation_request,
@@ -857,6 +858,63 @@ document.addEventListener('keydown', (e) => {{
 
 
 # ============================= SEO: SITEMAP VA ROBOTS =============================
+
+# ============================= BOZOR YANGILIKLARI (AI kunlik digest) =============================
+#
+# bot/jobs.py'dagi job_generate_market_digest har kuni loyiha tayyorlaydi,
+# admin bot/flow_digest.py'dagi tugma orqali tasdiqlagach, market_digests
+# jadvalida status='posted' bo'ladi - shu sahifa FAQAT shularni ko'rsatadi
+# (loyihalar/bekor qilinganlar hech qachon ommaga chiqmaydi).
+
+@router.get("/bozor-yangiliklari", response_class=HTMLResponse)
+def market_digest_page(request: Request):
+    lang = get_lang(request)
+    digests = list_posted_market_digests(limit=30)
+    items_html = "".join(
+        f"""<div class="digest-card">
+              <div class="digest-date">{icon('calendar', 14)} {(d['posted_at'] or d['created_at'] or '')[:10]}</div>
+              <div class="digest-content">{esc_html(d['content']).replace(chr(10), '<br>')}</div>
+            </div>"""
+        for d in digests
+    )
+    if not items_html:
+        items_html = f"""<div class="empty-state">
+              <div class="es-icon">{icon('sad', 30)}</div>
+              <p>Hozircha bozor tahlili postlari yo'q. Tez orada paydo bo'ladi!</p>
+            </div>"""
+
+    html = f"""<!DOCTYPE html>
+<html lang="{lang}">
+<head>
+{render_head("Bozor yangiliklari - Ijaraga Uylar", "Toshkent ijara bozori haqida AI tomonidan tayyorlangan kunlik tahlillar - dollar kursi, tumanlar bo'yicha narx tendensiyasi.", "/bozor-yangiliklari", lang=lang)}
+</head>
+<body>
+{render_header(lang, "/bozor-yangiliklari")}
+
+<section class="form-page-hero">
+  <div class="wrap">
+    <h1>{icon('sparkle', 26)} Bozor yangiliklari</h1>
+    <p>Toshkent ijara bozori haqida AI tomonidan tayyorlangan kunlik tahlillar.</p>
+  </div>
+</section>
+
+<main class="wrap" style="max-width:720px;padding-top:30px;padding-bottom:80px;">
+  {items_html}
+</main>
+
+<div style="height:40px;"></div>
+{render_footer(lang)}
+<style>
+.digest-card {{ background:var(--card,#fff); border:1px solid var(--line,#eee); border-radius:16px; padding:20px 22px; margin-bottom:16px; }}
+.digest-date {{ display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--muted,#888); margin-bottom:10px; }}
+.digest-content {{ font-size:15px; line-height:1.65; }}
+.empty-state {{ text-align:center; padding:60px 20px; color:var(--muted,#888); }}
+.empty-state .es-icon {{ margin-bottom:12px; opacity:.5; }}
+</style>
+</body>
+</html>"""
+    return HTMLResponse(html)
+
 
 # ============================= SUBARENDA =============================
 

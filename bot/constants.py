@@ -180,6 +180,11 @@ SETTINGS_FIELDS = {
         "hint": "Har bir foydalanuvchining BIRINCHI baholashi doim bepul. Keyingi (2-, 3- ...) baholashlar uchun narxni shu yerda belgilang. Masalan: 10000",
         "kind": "int",
     },
+    "ai_market_digest_enabled": {
+        "label": "\U0001F4F0 Kunlik AI bozor tahlili posti",
+        "hint": "Yoqilsa, har kuni kechqurun AI bozor tahlili loyihasini tayyorlab, tasdiqlash uchun adminlarga yuboradi (avtomatik e'lon qilinmaydi).",
+        "kind": "bool",
+    },
 }
 
 

@@ -394,6 +394,54 @@ def ai_analyze_market_trends(history_text: str) -> str:
         return None
 
 
+# ============================= 6b: OMMAVIY BOZOR DIGEST (kanal+sayt) =============================
+
+_PUBLIC_DIGEST_SYSTEM = (
+    "Siz \"Ijaraga Uylar\" (ijaragauylar.uz) platformasi uchun Toshkent ko'chmas mulk ijara "
+    "bozori haqida OMMAVIY post yozasiz - bu Telegram kanalga va saytga chiqadi, oddiy "
+    "foydalanuvchilar o'qiydi.\n\n"
+    "QOIDALAR:\n"
+    "- FAQAT berilgan raqamlar (dollar kursi, tumanlar bo'yicha o'rtacha narx tendensiyasi) "
+    "asosida yozing - hech narsani o'ylab topmang.\n"
+    "- Platformaning ICHKI ma'lumotlarini (daromad, foydalanuvchilar soni, AI xarajati va h.k.) "
+    "HECH QACHON eslatmang - bu post FAQAT bozor holati haqida.\n"
+    "- Agar kechagi/oldingi kunlardan beri sezilarli o'zgarish bo'lmasa yoki ma'lumot "
+    "yetarli bo'lmasa, BO'SH JAVOB qaytaring - har kuni majburan \"yangilik\" o'ylab topmang.\n"
+    "- Qiziqarli, o'qishga arziydigan, lekin qisqa (4-7 gap) o'zbek tilida post yozing, "
+    "oxirida kanalga/saytga tabiiy taklif bilan (uy qidirayotgan yoki joylashtirmoqchi "
+    "bo'lganlarga).\n"
+    "- Markdown ishlatmang (**, _, [text](url) va h.k.) - oddiy matn sifatida yuboriladi."
+)
+
+
+def ai_generate_public_digest(market_text: str) -> str:
+    """Ommaviy (kanal+sayt) bozor tahlili posti yozadi - FAQAT ochiq bozor
+    raqamlaridan (dollar kursi, tuman narx tendensiyasi), platformaning
+    ichki ma'lumotlarisiz. Bo'sh qator yoki None = bugun e'lon qilishga
+    arziydigan narsa yo'q (bu KUTILGAN holat, xato emas - job shunchaki
+    hech narsa yubormaydi)."""
+    if not ai_features_enabled() or not (market_text or "").strip():
+        return None
+    client = _get_client()
+    if not client:
+        return None
+    try:
+        response = client.messages.create(
+            model=MARKET_ANALYSIS_MODEL, max_tokens=800,
+            output_config={"effort": "low"},
+            system=_PUBLIC_DIGEST_SYSTEM,
+            messages=[{"role": "user", "content": market_text}],
+        )
+        _log_usage("public_digest", response.usage, ok=True, model=MARKET_ANALYSIS_MODEL)
+        text = next((b.text for b in response.content if b.type == "text"), "")
+        text = strip_markdown(text).strip()
+        return text or None
+    except Exception:
+        logger.exception("ai_generate_public_digest xatolik")
+        _log_usage("public_digest", ok=False, model=MARKET_ANALYSIS_MODEL)
+        return None
+
+
 # ============================= 7: UY BAHOLASH (FOYDALANUVCHILAR UCHUN) =============================
 
 _VALUATION_SYSTEM = (
