@@ -352,6 +352,48 @@ def ai_review_own_accuracy(accuracy_text: str) -> str:
         return None
 
 
+# ============================= 6: BOZOR TENDENSIYASI TAHLILI =============================
+
+_MARKET_TREND_SYSTEM = (
+    "Siz \"Ijaraga Uylar\" platformasi uchun Toshkent ko'chmas mulk ijara bozori tendensiyasini "
+    "tahlil qiluvchi yordamchisiz. Sizga dollar kursi va bir yoki bir nechta tuman uchun "
+    "o'rtacha narx tarixi (vaqt bo'yicha) beriladi.\n\n"
+    "QOIDALAR:\n"
+    "- FAQAT berilgan raqamlar asosida yozing - hech qanday tashqi statistika yoki "
+    "sabab-oqibatni o'ylab topmang.\n"
+    "- Aniq tendensiyani ayting (o'sish/pasayish/barqaror, foizda taxminan).\n"
+    "- Ma'lumot juda kam bo'lsa (masalan 1-2 kunlik), buni ochiq ayting - noaniq xulosa "
+    "chiqarmang.\n"
+    "- Qisqa yozing (3-5 gap), o'zbek tilida, Markdown ishlatmang."
+)
+
+
+def ai_analyze_market_trends(history_text: str) -> str:
+    """Dollar kursi/tuman narx tarixidan qisqa, raqamlarga asoslangan
+    tendensiya tahlili yozadi (admin panelning "Bozor tahlili" bo'limida,
+    talab bo'yicha - rejalashtirilgan emas). None = AI fikr bera olmadi."""
+    if not ai_features_enabled() or not (history_text or "").strip():
+        return None
+    client = _get_client()
+    if not client:
+        return None
+    try:
+        response = client.messages.create(
+            model=MARKET_ANALYSIS_MODEL, max_tokens=800,
+            output_config={"effort": "low"},
+            system=_MARKET_TREND_SYSTEM,
+            messages=[{"role": "user", "content": history_text}],
+        )
+        _log_usage("market_trend_analysis", response.usage, ok=True, model=MARKET_ANALYSIS_MODEL)
+        text = next((b.text for b in response.content if b.type == "text"), "")
+        text = strip_markdown(text).strip()
+        return text or None
+    except Exception:
+        logger.exception("ai_analyze_market_trends xatolik")
+        _log_usage("market_trend_analysis", ok=False, model=MARKET_ANALYSIS_MODEL)
+        return None
+
+
 def ai_usage_summary(days: int = 30) -> dict:
     """Admin panel uchun - so'nggi N kundagi AI xarajati/chaqiruvlar soni."""
     since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")

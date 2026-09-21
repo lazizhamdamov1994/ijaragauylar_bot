@@ -223,6 +223,7 @@ ADMIN_HTML = """<!DOCTYPE html>
     <a data-tab="overview" class="active"><span class="icon">\U0001F4CA</span> Umumiy</a>
     <a data-tab="visitors"><span class="icon">\U0001F465</span> Tashriflar</a>
     <a data-tab="mapview"><span class="icon">\U0001F5FA</span> Xarita</a>
+    <a data-tab="market"><span class="icon">\U0001F4C8</span> Bozor tahlili</a>
 
     <div class="side-group-label">Moderatsiya</div>
     <a data-tab="pending"><span class="icon">\U0001F553</span> Kutilmoqda <span id="pending-badge" class="side-badge"></span></a>
@@ -504,6 +505,40 @@ ADMIN_HTML = """<!DOCTYPE html>
     <div class="panel"><div id="map"></div></div>
   </div>
 
+  <div id="tab-market" class="tab-page">
+    <div class="page-head"><h1>\U0001F4C8 Bozor tahlili</h1></div>
+    <div class="panel-sub" style="margin-bottom:16px;">Har kuni avtomatik yig'iladigan dollar kursi va tuman narx dinamikasi</div>
+    <div class="charts-grid">
+      <div class="panel">
+        <h2>\U0001F4B1 Dollar kursi (so'mda)</h2>
+        <div class="panel-sub">So'nggi 90 kun</div>
+        <div class="chart-box"><canvas id="usdRateChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>\U0001F3D8 Tuman o'rtacha narxi</h2>
+        <div class="panel-sub">
+          <select id="market-district-select" style="margin-right:8px;"></select>
+          so'mda, so'nggi 90 kun
+        </div>
+        <div class="chart-box"><canvas id="districtPriceChart"></canvas></div>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:16px;">
+      <h2>\U0001F916 AI bozor tahlili</h2>
+      <div class="panel-sub">Tanlangan tuman va dollar kursi tarixidan qisqa AI tahlili (talab bo'yicha, avtomatik emas)</div>
+      <button class="btn btn-primary" style="margin-top:10px;" onclick="runMarketAnalysis()">Tahlil qil</button>
+      <div id="market-analysis-result" style="margin-top:12px;"></div>
+    </div>
+    <div class="panel" style="margin-top:16px;">
+      <h2>\U0001F4E4 Ma'lumotlarni yuklab olish</h2>
+      <div class="panel-sub">CSV formatida - tahlil yoki hisobot uchun</div>
+      <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
+        <a class="btn btn-secondary" href="/api/admin/export/usd-rate-history.csv">Dollar kursi tarixi (CSV)</a>
+        <a class="btn btn-secondary" href="/api/admin/export/district-price-history.csv">Tuman narx tarixi (CSV)</a>
+      </div>
+    </div>
+  </div>
+
   <div id="user-card-modal"></div>
 
 </div>
@@ -516,6 +551,7 @@ document.querySelectorAll('.side-nav a').forEach(a => {
     a.classList.add('active');
     document.getElementById('tab-' + a.dataset.tab).classList.add('active');
     if (a.dataset.tab === 'mapview' && !window._mapLoaded) { loadMap(); window._mapLoaded = true; }
+    if (a.dataset.tab === 'market' && !window._marketLoaded) { loadMarketTab(); window._marketLoaded = true; }
   });
 });
 
@@ -668,6 +704,57 @@ async function loadStats() {
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
       scales: { y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, stepSize: 1 } }, x: { grid: { display: false }, ticks: { color: tickColor, maxRotation: 0, autoSkipPadding: 12 } } } }
   }));
+}
+
+async function loadMarketTab() {
+  const gridColor = 'rgba(0,0,0,0.04)';
+  const tickColor = '#717171';
+
+  const distRes = await fetch('/api/admin/district-aliases');
+  const distData = await distRes.json();
+  const sel = document.getElementById('market-district-select');
+  sel.innerHTML = distData.districts.map(d => `<option value="${d}">${d}</option>`).join('');
+  sel.addEventListener('change', () => loadDistrictPriceChart(sel.value));
+
+  const usdRows = await (await fetch('/api/admin/usd-rate-history?days=90')).json();
+  if (window._marketCharts) window._marketCharts.forEach(c => c.destroy());
+  window._marketCharts = [];
+  window._marketCharts.push(new Chart(document.getElementById('usdRateChart'), {
+    type: 'line',
+    data: { labels: usdRows.map(r => r.recorded_at.slice(0,10)), datasets: [
+      { label: "Dollar kursi", data: usdRows.map(r => r.rate), borderColor: '#FF3B5C', backgroundColor: 'rgba(255,59,92,0.12)', fill: true, tension: 0.35, pointRadius: 2 }
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { y: { grid: { color: gridColor }, ticks: { color: tickColor } }, x: { grid: { display: false }, ticks: { color: tickColor, maxRotation: 0, autoSkipPadding: 12 } } } }
+  }));
+
+  if (distData.districts.length) loadDistrictPriceChart(distData.districts[0]);
+}
+
+async function loadDistrictPriceChart(district) {
+  const gridColor = 'rgba(0,0,0,0.04)';
+  const tickColor = '#717171';
+  const rows = await (await fetch(`/api/admin/district-price-history?district=${encodeURIComponent(district)}&days=90`)).json();
+  if (window._marketCharts[1]) { window._marketCharts[1].destroy(); window._marketCharts.pop(); }
+  window._marketCharts.push(new Chart(document.getElementById('districtPriceChart'), {
+    type: 'line',
+    data: { labels: rows.map(r => r.recorded_at.slice(0,10)), datasets: [
+      { label: district, data: rows.map(r => r.avg_price_som), borderColor: '#2563EB', backgroundColor: 'rgba(37,99,235,0.12)', fill: true, tension: 0.35, pointRadius: 2 }
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { y: { grid: { color: gridColor }, ticks: { color: tickColor } }, x: { grid: { display: false }, ticks: { color: tickColor, maxRotation: 0, autoSkipPadding: 12 } } } }
+  }));
+}
+
+async function runMarketAnalysis() {
+  const district = document.getElementById('market-district-select').value;
+  const resultEl = document.getElementById('market-analysis-result');
+  resultEl.innerHTML = '<div class="empty-note">Tahlil qilinmoqda...</div>';
+  const res = await fetch(`/api/admin/market-analysis?district=${encodeURIComponent(district)}`, { method: 'POST' });
+  const data = await res.json();
+  resultEl.innerHTML = data.analysis
+    ? `<div style="white-space:pre-wrap;font-size:13.5px;line-height:1.6;">${data.analysis}</div>`
+    : `<div class="empty-note">Tahlil uchun hali yetarli ma'lumot yo'q yoki AI o'chirilgan.</div>`;
 }
 
 async function loadPending() {

@@ -2,14 +2,14 @@
 Sayt/admin panel ishlatadigan kichik JSON API endpointlari (statistika,
 so'rovlar ro'yxati, kuzatuv).
 """
+import asyncio
+import csv
 import html
+import io
 import logging
 import re
 from collections import defaultdict
 from datetime import datetime, timedelta
-
-import csv
-import io
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
@@ -34,7 +34,7 @@ from common.db import (
 )
 
 from common.districts import add_district_alias, list_district_aliases, remove_district_alias
-from common.ai import ai_features_enabled, ai_usage_summary
+from common.ai import ai_analyze_market_trends, ai_features_enabled, ai_usage_summary
 from common.ai_agent import concierge_rate_limited, concierge_turn
 
 from web.auth import check_auth, get_current_tg_user
@@ -918,6 +918,32 @@ def api_admin_ai_usage(user: str = Depends(check_auth)):
 @router.get("/api/admin/ai-accuracy")
 def api_admin_ai_accuracy(days: int = Query(7), user: str = Depends(check_auth)):
     return ai_accuracy_summary(days)
+
+
+@router.get("/api/admin/usd-rate-history")
+def api_usd_rate_history(days: int = Query(90), user: str = Depends(check_auth)):
+    return get_usd_rate_history(days)
+
+
+@router.get("/api/admin/district-price-history")
+def api_district_price_history(district: str = Query(...), days: int = Query(90), user: str = Depends(check_auth)):
+    return get_district_price_history(district, days)
+
+
+@router.post("/api/admin/market-analysis")
+async def api_market_analysis(district: str = Query(...), user: str = Depends(check_auth)):
+    usd_rows = get_usd_rate_history(90)
+    price_rows = get_district_price_history(district, 90)
+    if not usd_rows and not price_rows:
+        return {"analysis": None}
+    lines = [f"Dollar kursi tarixi (so'nggi {len(usd_rows)} ta o'lchov):"]
+    lines += [f"  {r['recorded_at'][:10]}: {r['rate']} so'm" for r in usd_rows[-30:]]
+    lines.append(f"\n\"{district}\" tumani o'rtacha narx tarixi (so'nggi {len(price_rows)} ta o'lchov):")
+    lines += [f"  {r['recorded_at'][:10]}: {r['avg_price_som']:,} so'm ({r['listing_count']} ta e'lon)" for r in price_rows[-30:]]
+    history_text = "\n".join(lines)
+    loop = asyncio.get_event_loop()
+    analysis = await loop.run_in_executor(None, ai_analyze_market_trends, history_text)
+    return {"analysis": analysis}
 
 
 def _csv_response(filename: str, header: list, rows: list) -> Response:
