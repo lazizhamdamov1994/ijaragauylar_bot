@@ -727,10 +727,10 @@ def render_ai_chat_widget(lang: str = DEFAULT_LANG) -> str:
     tugma ko'rinadi - ochilganda mos xabar ko'rsatiladi (botdagi bilan bir
     xil "graceful degrade" tamoyili)."""
     return f"""<div id="ai-chat-widget">
-  <button id="ai-chat-toggle" type="button" aria-label="{t(lang,'ai_chat_title')}">\U0001F916</button>
+  <button id="ai-chat-toggle" type="button" aria-label="{t(lang,'ai_chat_title')}">\U0001F916<span class="ai-toggle-dot"></span></button>
   <div id="ai-chat-panel" class="ai-chat-hidden">
     <div class="ai-chat-header">
-      <span>\U0001F916 {t(lang,'ai_chat_title')}</span>
+      <span>\U0001F916 <span>{t(lang,'ai_chat_title')}<span class="ai-status">\U0001F7E2 Onlayn - darhol javob beradi</span></span></span>
       <button id="ai-chat-close" type="button" aria-label="close">&times;</button>
     </div>
     <div id="ai-chat-messages"></div>
@@ -742,48 +742,83 @@ def render_ai_chat_widget(lang: str = DEFAULT_LANG) -> str:
   </div>
 </div>
 <style>
-#ai-chat-widget {{ position: fixed; right: 18px; bottom: 18px; z-index: 200; }}
+#ai-chat-widget {{ position: fixed; right: 20px; bottom: 20px; z-index: 200; }}
 #ai-chat-toggle {{
-  width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer;
-  background: var(--brand); color: #fff; font-size: 24px; box-shadow: var(--shadow-lg);
-  display: flex; align-items: center; justify-content: center; transition: transform .15s;
+  width: 60px; height: 60px; border-radius: 50%; border: none; cursor: pointer;
+  background: linear-gradient(135deg, var(--brand) 0%, #FF6B8B 100%); color: #fff; font-size: 25px;
+  box-shadow: 0 8px 24px rgba(255,59,92,.38), 0 2px 8px rgba(16,24,38,.12);
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .22s cubic-bezier(.34,1.56,.64,1), box-shadow .22s ease;
+  position: relative;
 }}
-#ai-chat-toggle:hover {{ transform: scale(1.06); }}
+#ai-chat-toggle::before {{
+  content: ''; position: absolute; inset: -6px; border-radius: 50%;
+  border: 2px solid rgba(255,59,92,.35); animation: aiPulseRing 2.4s infinite;
+}}
+@keyframes aiPulseRing {{ 0% {{ transform: scale(.92); opacity: .9; }} 70% {{ transform: scale(1.22); opacity: 0; }} 100% {{ opacity: 0; }} }}
+#ai-chat-toggle:hover {{ transform: scale(1.08) rotate(-4deg); box-shadow: 0 10px 30px rgba(255,59,92,.45), 0 2px 8px rgba(16,24,38,.12); }}
+#ai-chat-toggle .ai-toggle-dot {{
+  position: absolute; top: 2px; right: 2px; width: 13px; height: 13px; border-radius: 50%;
+  background: #22C55E; border: 2.5px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}}
 #ai-chat-panel {{
-  position: absolute; right: 0; bottom: 68px; width: 340px; max-width: calc(100vw - 32px);
-  height: 460px; max-height: calc(100vh - 120px); background: #fff; border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg); border: 1px solid var(--line); display: flex; flex-direction: column;
-  overflow: hidden;
+  position: absolute; right: 0; bottom: 76px; width: 366px; max-width: calc(100vw - 32px);
+  height: 500px; max-height: calc(100vh - 130px); background: #fff; border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(16,24,38,.22), 0 4px 16px rgba(16,24,38,.08);
+  border: 1px solid var(--line); display: flex; flex-direction: column;
+  overflow: hidden; transform-origin: bottom right;
+  animation: aiPanelIn .28s cubic-bezier(.2,.9,.25,1.2);
 }}
+@keyframes aiPanelIn {{ from {{ opacity: 0; transform: scale(.9) translateY(14px); }} to {{ opacity: 1; transform: scale(1) translateY(0); }} }}
 .ai-chat-hidden {{ display: none !important; }}
 .ai-chat-header {{
-  background: var(--brand); color: #fff; padding: 14px 16px; font-weight: 700; font-size: 14.5px;
-  display: flex; align-items: center; justify-content: space-between;
+  background: linear-gradient(120deg, var(--brand) 0%, #E01E45 55%, #C81640 100%); color: #fff;
+  padding: 16px 18px; font-weight: 800; font-size: 15px; letter-spacing: -.1px;
+  display: flex; align-items: center; justify-content: space-between; position: relative; overflow: hidden;
 }}
-.ai-chat-header button {{ background: none; border: none; color: #fff; font-size: 20px; cursor: pointer; line-height: 1; }}
-#ai-chat-messages {{ flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }}
-.ai-chat-bubble {{ max-width: 84%; padding: 9px 13px; border-radius: var(--radius); font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }}
-.ai-chat-bubble.user {{ align-self: flex-end; background: var(--brand); color: #fff; border-bottom-right-radius: 4px; }}
-.ai-chat-bubble.ai {{ align-self: flex-start; background: var(--bg-soft); color: var(--ink); border-bottom-left-radius: 4px; }}
+.ai-chat-header::after {{
+  content: ''; position: absolute; top: -60%; right: -10%; width: 140px; height: 220%;
+  background: rgba(255,255,255,.08); transform: rotate(20deg);
+}}
+.ai-chat-header span {{ display: flex; align-items: center; gap: 8px; position: relative; z-index: 1; }}
+.ai-chat-header span .ai-status {{ font-size: 10.5px; font-weight: 600; opacity: .85; display: block; margin-top: 1px; }}
+.ai-chat-header button {{
+  background: rgba(255,255,255,.16); border: none; color: #fff; font-size: 18px; cursor: pointer; line-height: 1;
+  width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  transition: background .15s ease; position: relative; z-index: 1;
+}}
+.ai-chat-header button:hover {{ background: rgba(255,255,255,.28); }}
+#ai-chat-messages {{ flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 11px; background: #FAFBFD; }}
+.ai-chat-bubble {{
+  max-width: 84%; padding: 10px 14px; border-radius: 15px; font-size: 13.5px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word; box-shadow: 0 1px 2px rgba(16,24,38,.05); animation: aiBubbleIn .18s ease;
+}}
+@keyframes aiBubbleIn {{ from {{ opacity: 0; transform: translateY(4px); }} to {{ opacity: 1; transform: translateY(0); }} }}
+.ai-chat-bubble.user {{ align-self: flex-end; background: linear-gradient(135deg, var(--brand), #E01E45); color: #fff; border-bottom-right-radius: 4px; }}
+.ai-chat-bubble.ai {{ align-self: flex-start; background: #fff; border: 1px solid var(--line); color: var(--ink); border-bottom-left-radius: 4px; }}
 .ai-chat-bubble.ai a {{ color: var(--brand-dark); font-weight: 600; }}
-.ai-chat-typing {{ padding: 0 14px 8px; display: flex; gap: 4px; }}
+.ai-chat-typing {{ padding: 0 16px 10px; display: flex; gap: 4px; }}
 .ai-chat-typing span {{ width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: aiTypingBlink 1.2s infinite ease-in-out; }}
 .ai-chat-typing span:nth-child(2) {{ animation-delay: .2s; }}
 .ai-chat-typing span:nth-child(3) {{ animation-delay: .4s; }}
 @keyframes aiTypingBlink {{ 0%, 80%, 100% {{ opacity: .25; }} 40% {{ opacity: 1; }} }}
-.ai-chat-input-row {{ display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); }}
+.ai-chat-input-row {{ display: flex; gap: 9px; padding: 12px; border-top: 1px solid var(--line); background: #fff; }}
 .ai-chat-input-row input {{
-  flex: 1; border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 9px 14px;
-  font-size: 13.5px; outline: none; font-family: inherit;
+  flex: 1; border: 1.5px solid var(--line); border-radius: var(--radius-pill); padding: 10px 15px;
+  font-size: 13.5px; outline: none; font-family: inherit; transition: border-color .15s ease, box-shadow .15s ease;
 }}
-.ai-chat-input-row input:focus {{ border-color: var(--brand); }}
+.ai-chat-input-row input:focus {{ border-color: var(--brand); box-shadow: 0 0 0 3px rgba(255,59,92,.12); }}
 .ai-chat-input-row button {{
-  width: 38px; height: 38px; border-radius: 50%; border: none; background: var(--brand); color: #fff;
-  font-size: 15px; cursor: pointer; flex-shrink: 0;
+  width: 40px; height: 40px; border-radius: 50%; border: none;
+  background: linear-gradient(135deg, var(--brand), #E01E45); color: #fff;
+  font-size: 15px; cursor: pointer; flex-shrink: 0; box-shadow: 0 4px 12px rgba(255,59,92,.32);
+  transition: transform .15s ease;
 }}
+.ai-chat-input-row button:hover {{ transform: scale(1.07); }}
+.ai-chat-input-row button:active {{ transform: scale(.96); }}
 @media (max-width: 640px) {{
-  #ai-chat-widget {{ right: 12px; bottom: 12px; }}
-  #ai-chat-panel {{ width: calc(100vw - 24px); height: calc(100vh - 140px); bottom: 64px; }}
+  #ai-chat-widget {{ right: 14px; bottom: 14px; }}
+  #ai-chat-panel {{ width: calc(100vw - 24px); height: calc(100vh - 150px); bottom: 72px; }}
 }}
 </style>
 <script>
