@@ -433,14 +433,22 @@ ADMIN_HTML = """<!DOCTYPE html>
 
   <div id="tab-blocked" class="tab-page">
     <div class="page-head"><h1>\U0001F6AB Bloklangan raqamlar</h1></div>
+    <div class="panel-sub" style="margin-bottom:16px;">Bu raqamlardan yangi e'lon/to'lov kelsa, moderatorlarga ogohlantirish ko'rsatiladi - avtomatik rad etilmaydi, har doim qo'lda tekshiriladi</div>
     <div class="panel" style="margin-bottom:16px;">
       <div class="inline-form">
         <div class="form-row"><label>Telefon raqami</label><input id="block-phone-input" type="text" placeholder="+998901234567"></div>
         <div class="form-row"><label>Sababi</label><input id="block-reason-input" type="text" placeholder="Masalan: yolg'on e'lon"></div>
-        <button class="btn btn-primary" onclick="addBlockedPhone()">Bloklash</button>
+        <button class="btn btn-primary" onclick="addBlockedPhone()">\U0001F6AB Bloklash</button>
       </div>
     </div>
-    <div id="blocked-list"><div class="empty-note">Yuklanmoqda...</div></div>
+    <div class="panel">
+      <div class="table-scroll">
+        <table class="visit-table" id="blocked-table">
+          <thead><tr><th>Telefon raqami</th><th>Sababi</th><th>Qachon</th><th></th></tr></thead>
+          <tbody><tr><td colspan="4" class="empty-note">Yuklanmoqda...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div id="tab-districts" class="tab-page">
@@ -1133,16 +1141,21 @@ document.getElementById('usersearch-q') && document.getElementById('usersearch-q
 async function loadBlocked() {
   const res = await fetch('/api/admin/blocked-phones');
   const rows = await res.json();
-  const el = document.getElementById('blocked-list');
-  el.innerHTML = rows.length ? rows.map(r => `
-    <div class="sr-card">
-      <div class="sr-top"><div class="sr-name">${r.phone}</div></div>
-      <div class="sr-meta">\U0001F4DD ${r.reason || '—'}<br>\U0001F553 ${(r.blocked_at || '').slice(0, 16)}</div>
-      <div class="sr-actions">
-        <button class="approve" onclick="unblockPhoneAction('${r.phone}')">✅ Blokdan chiqarish</button>
-      </div>
-    </div>
-  `).join('') : `<div class="empty-note">Bloklangan raqam yo'q</div>`;
+  const tbody = document.querySelector('#blocked-table tbody');
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="4" class="empty-note">Bloklangan raqam yo'q</td></tr>`; return; }
+  tbody.innerHTML = rows.map(r => {
+    const digits = (r.phone || '').replace(/\D/g, '');
+    return `
+    <tr>
+      <td><b>${r.phone}</b></td>
+      <td>${r.reason || '—'}</td>
+      <td>${(r.blocked_at || '').slice(0, 16)}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn btn-secondary" style="padding:5px 10px;font-size:11.5px;" onclick="editBlockedPhoneAction('${digits}', '${(r.reason || '').replace(/'/g, "\\'")}')">✏️ Tahrirlash</button>
+        <button class="btn btn-danger" style="padding:5px 10px;font-size:11.5px;" onclick="unblockPhoneAction('${digits}')">✅ Blokdan chiqarish</button>
+      </td>
+    </tr>`;
+  }).join('');
 }
 async function addBlockedPhone() {
   const phone = document.getElementById('block-phone-input').value.trim();
@@ -1154,8 +1167,15 @@ async function addBlockedPhone() {
   document.getElementById('block-reason-input').value = '';
   loadBlocked();
 }
-async function unblockPhoneAction(phone) {
-  await fetch(`/api/admin/blocked-phones/${encodeURIComponent(phone)}/unblock`, { method: 'POST' });
+async function unblockPhoneAction(digits) {
+  await fetch(`/api/admin/blocked-phones/${digits}/unblock`, { method: 'POST' });
+  loadBlocked();
+}
+async function editBlockedPhoneAction(digits, currentReason) {
+  const reason = prompt('Yangi sababni yozing:', currentReason);
+  if (reason === null || !reason.trim()) return;
+  const res = await fetch(`/api/admin/blocked-phones/${digits}/edit?reason=${encodeURIComponent(reason.trim())}`, { method: 'POST' });
+  if (!res.ok) { alert("Saqlab bo'lmadi."); return; }
   loadBlocked();
 }
 

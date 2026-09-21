@@ -17,7 +17,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMa
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, ConversationHandler
 
-from common.ai import ai_check_receipt, ai_features_enabled, ai_valuate_property
+from common.ai import MAX_VALUATION_PHOTOS, ai_check_receipt, ai_features_enabled, ai_valuate_property
 from common.ai_agent import find_comparable_listings
 from common.config import ADMIN_IDS, CARD_HOLDER
 from common.db import (
@@ -37,8 +37,6 @@ from bot.helpers import *  # noqa: F401,F403
 from bot.fraud_detection import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
-
-MAX_VALUATION_PHOTOS = 3
 
 _PHOTO_KEYBOARD = ReplyKeyboardMarkup([[BTN_VALUATION_DONE_PHOTOS], [BTN_VALUATION_SKIP_PHOTOS]], resize_keyboard=True)
 

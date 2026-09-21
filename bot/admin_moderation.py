@@ -47,6 +47,33 @@ def log_channel_post(listing_id: int, message_id: int) -> None:
     conn.close()
 
 
+async def notify_admin_of_moderator_listing(context: ContextTypes.DEFAULT_TYPE, listing_id: int, listing: dict, submitter, rasmlar: list) -> None:
+    """Moderator (TO'LIQ ADMIN EMAS) o'z e'lonini xodim sifatida to'g'ridan-
+    to'g'ri kanalga joylaganida (tezlik uchun qayta tasdiqlash so'ralmaydi -
+    bot/flow_listing.py'dagi tasdiqlash_ok va bot/flow_quick.py'dagi
+    quick_post) - admin baribir NAZORAT uchun rasmlar bilan birga qisqa
+    xabar oladi. Bu FAQAT ma'lumot uchun - hech qanday amal talab
+    qilinmaydi, e'lon allaqachon jonli va tasdiqlash/rad etish tugmasi
+    YO'Q (aks holda moderator ishi ikki marta tekshirilayotgandek bo'lib,
+    "xodim uchun tezkor yo'l" degan g'oyaning o'ziga zid bo'lardi)."""
+    if not ADMIN_IDS:
+        return
+    caption = (
+        f"\U0001F464 <b>Moderator e'lon joyladi</b> (xodim sifatida, avtomatik - tekshiruvsiz)\n\n"
+        f"Kim: {esc(submitter.full_name)} (@{esc(submitter.username) or 'yo`q'})\n"
+        f"\U0001F4CD {esc(listing.get('manzil') or '')}\n"
+        f"\U0001F4B0 {esc(listing.get('narx') or '')}\n"
+        f"\U0001F194 E'lon: #{listing_id}"
+    )
+    for admin_id in ADMIN_IDS:
+        try:
+            if rasmlar:
+                await send_photos(context, admin_id, rasmlar)
+            await send_with_retry(context.bot.send_message, admin_id, caption, parse_mode=ParseMode.HTML)
+        except Exception:
+            logger.exception("Moderator e'loni haqida adminga (%s) FYI xabar yuborib bo'lmadi", admin_id)
+
+
 async def send_listing_to_channel(context: ContextTypes.DEFAULT_TYPE, listing: dict):
     caption = build_caption(listing, context.bot.username)
     keyboard = channel_keyboard(listing["id"], context.bot.username, listing.get("latitude"), listing.get("longitude"))

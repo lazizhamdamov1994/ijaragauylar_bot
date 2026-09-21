@@ -71,6 +71,7 @@ from bot.db import (
     reject_subscription,
     stats_for_period,
     unblock_phone,
+    update_blocked_phone_reason,
     update_listing_status,
 )
 from bot.fraud_detection import (
@@ -775,9 +776,37 @@ def api_admin_block_phone(phone: str = Query(...), reason: str = Query(...), use
     return {"ok": True}
 
 
-@router.post("/api/admin/blocked-phones/{phone}/unblock")
-def api_admin_unblock_phone(phone: str, user: str = Depends(check_auth)):
-    unblock_phone(phone)
+# MUHIM: telefon raqami URL YO'LIDA endi FAQAT raqamlar (masalan
+# "998901234567") ko'rinishida uzatiladi, "+" belgisisiz - bot
+# tomonidagi bir xil, allaqachon sinovdan o'tgan xavfsiz naqsh bilan bir
+# xil (bot/admin_panel.py'dagi unblock_/blockcard_ callback_data'lari ham
+# shunday qiladi). Sabab: "+" belgisi ba'zi proksi/server sozlamalarida
+# so'rov yo'lida "%2B" -> bo'sh joy kabi noto'g'ri talqin qilinishi mumkin
+# - bu holda o'chirish/tahrirlash amali raqamni topolmay, "uzilib qolgandek"
+# ishlamay qoladi. Faqat raqamlar hech qanday encoding muammosiga duch
+# kelmaydi.
+
+@router.post("/api/admin/blocked-phones/{digits}/unblock")
+def api_admin_unblock_phone(digits: str, user: str = Depends(check_auth)):
+    digits_only = re.sub(r"\D", "", digits)
+    if not digits_only:
+        raise HTTPException(status_code=400, detail="invalid_phone")
+    unblock_phone("+" + digits_only)
+    return {"ok": True}
+
+
+@router.post("/api/admin/blocked-phones/{digits}/edit")
+def api_admin_edit_blocked_phone(digits: str, reason: str = Query(...), user: str = Depends(check_auth)):
+    digits_only = re.sub(r"\D", "", digits)
+    reason = reason.strip()[:300]
+    if not digits_only:
+        raise HTTPException(status_code=400, detail="invalid_phone")
+    if not reason:
+        raise HTTPException(status_code=400, detail="empty_reason")
+    phone = "+" + digits_only
+    if not get_blocked_phone(phone):
+        raise HTTPException(status_code=404, detail="not_found")
+    update_blocked_phone_reason(phone, reason)
     return {"ok": True}
 
 

@@ -629,7 +629,7 @@ def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
       <a href="/" class="nav-link">{t(lang,'nav_home')}</a>
       <a href="/subarenda" class="nav-link">{t(lang,'nav_subarenda')}</a>
       <a href="/xarita" class="nav-link">{icon('map', 16)} {t(lang,'nav_map_title')}</a>
-      <a href="/baholash" class="nav-link">{icon('bolt', 16)} AI baholash</a>
+      <a href="/baholash" class="nav-link">{icon('bolt', 16)} Uyni baholash</a>
       {switcher}
       <a href="/kabinet" class="nav-link nav-account-link" title="{t(lang,'nav_kabinet_title')}">{icon('user', 17)} {t(lang,'nav_account_label')}</a>
       <a href="/elon-joylash" class="btn-cta">{icon('sparkle', 14)} {t(lang,'nav_post_cta')}</a>
@@ -640,7 +640,7 @@ def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
     <a href="/">{icon('home', 17)} {t(lang,'nav_home')}</a>
     <a href="/elon-joylash">{icon('sparkle', 17)} {t(lang,'mobile_post')}</a>
     <a href="/xarita">{icon('map', 17)} {t(lang,'nav_map_title')}</a>
-    <a href="/baholash">{icon('bolt', 17)} AI baholash</a>
+    <a href="/baholash">{icon('bolt', 17)} Uyni baholash</a>
     <a href="/subarenda">{icon('coin', 17)} {t(lang,'nav_subarenda')}</a>
     <a href="/kabinet">{icon('user', 17)} {t(lang,'nav_account_label')}</a>
     <div class="mobile-lang-label">{LANG_META[lang]}</div>
@@ -702,7 +702,7 @@ def render_footer(lang: str = DEFAULT_LANG) -> str:
         <a href="/">{t(lang,'nav_home')}</a>
         <a href="/elon-joylash">{t(lang,'mobile_post')}</a>
         <a href="/xarita">{t(lang,'nav_map_title')}</a>
-        <a href="/baholash">AI baholash</a>
+        <a href="/baholash">Uyni baholash</a>
         <a href="/bozor-yangiliklari">Bozor yangiliklari</a>
         <a href="/subarenda">{t(lang,'nav_subarenda')}</a>
         <a href="/kabinet">{t(lang,'nav_account_label')}</a>

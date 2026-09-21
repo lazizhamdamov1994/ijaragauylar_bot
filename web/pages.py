@@ -1638,14 +1638,14 @@ def baholash_page(request: Request):
     html = f"""<!DOCTYPE html>
 <html lang="{lang}">
 <head>
-{render_head("AI uy baholash - Ijaraga Uylar", "AI yordamida uyingiz uchun taxminiy ijara narxini bilib oling - shu tumandagi haqiqiy e'lonlarga asoslangan.", "/baholash", lang=lang)}
+{render_head("Uyni baholash - Ijaraga Uylar", "AI yordamida uyingiz uchun taxminiy ijara narxini bilib oling - shu tumandagi haqiqiy e'lonlarga asoslangan.", "/baholash", lang=lang)}
 </head>
 <body>
 {render_header(lang, "/baholash")}
 
 <section class="form-page-hero">
   <div class="wrap">
-    <h1>{icon('sparkle', 26)} AI uy baholash</h1>
+    <h1>{icon('sparkle', 26)} Uyni baholash</h1>
     <p>Bir necha savolga javob bering - AI shu tuman/xonadagi HAQIQIY faol e'lonlarga asoslanib, taxminiy ijara narxini aytadi.</p>
   </div>
 </section>

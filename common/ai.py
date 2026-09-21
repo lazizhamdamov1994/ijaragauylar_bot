@@ -444,33 +444,47 @@ def ai_generate_public_digest(market_text: str) -> str:
 
 # ============================= 7: UY BAHOLASH (FOYDALANUVCHILAR UCHUN) =============================
 
+MAX_VALUATION_PHOTOS = 10
+
 _VALUATION_SYSTEM = (
-    "Siz \"Ijaraga Uylar\" platformasida uy egalariga ijara narxini baholashda yordam beruvchi "
-    "yordamchisiz. Sizga uyning tumani, xonalar soni, holati/qulayliklari va shu tuman/xonadagi "
-    "HAQIQIY faol e'lonlar narxi (\"comps\" - solishtirish uchun, allaqachon so'mga aniq "
-    "o'tkazilgan raqamlar bilan) beriladi. Ba'zida uy rasmlari ham beriladi.\n\n"
+    "Siz \"Ijaraga Uylar\" platformasida ishlaydigan, tajribali va samimiy ko'chmas mulk "
+    "maslahatchisiz - xuddi mahalliy bozorni yaxshi biladigan, odam bilan yuzma-yuz "
+    "gaplashayotgan tajribali mutaxassis kabi yozasiz (lekin o'zingizni professional "
+    "baholovchi deb atamang - siz AI yordamchisiz, buni oxirida ochiq eslatasiz). Sizga uy "
+    "egasining tumani, xonalar soni, holati/qulayliklari va shu tuman/xonadagi HAQIQIY faol "
+    "e'lonlar narxi (\"comps\" - solishtirish uchun, allaqachon so'mga aniq o'tkazilgan "
+    "raqamlar bilan) beriladi. Ba'zida uy rasmlari ham beriladi.\n\n"
     "QOIDALAR (ANIQLIK UCHUN MUHIM):\n"
     "1. NARX HISOBI: diapazoningiz ANIQ berilgan comps raqamlariga asoslanishi SHART - "
-    "reasoning'da qaysi comp(lar)ni asos qilib olganingizni raqamlari bilan aniq ayting "
-    "(masalan \"3 ta comp 280$-320$ oralig'ida, shuning uchun...\"). Comp'lar orasidagi "
-    "chetga chiqib turgan (juda arzon/juda qimmat, boshqalardan 2x farq qiladigan) qiymatlarni "
-    "asosiy diapazonni hisoblashda e'tiborsiz qoldiring, faqat izohda eslatib o'ting.\n"
-    "2. RASM TAHLILI: agar rasm berilgan bo'lsa, ANIQ nimani ko'rganingizni ayting (masalan "
-    "\"oshxonada zamonaviy mebel va rangli plitka\", \"devor bo'yog'i eskirgan\") - umumiy "
-    "\"yaxshi holat\" kabi noaniq baho bermang. Rasm xira/tushunarsiz bo'lsa yoki uy holatini "
-    "aniq baholash uchun yetarli bo'lmasa, buni OCHIQ ayting.\n"
+    "matningizda qaysi comp(lar)ga tayanganingizni raqamlari bilan, lekin TABIIY gap ichida "
+    "ayting (masalan \"shu tumandagi shunga o'xshash 3 ta uy 280-320 dollor oralig'ida "
+    "turibdi\"). Comp'lar orasidagi chetga chiqib turgan (juda arzon/juda qimmat) "
+    "qiymatlarni asosiy hisobga OLMANG, xohlasangiz bir gapda eslatib o'ting.\n"
+    "2. RASM TAHLILI: rasm berilgan bo'lsa, ANIQ nimani ko'rganingizni tabiiy tilda ayting "
+    "(masalan \"oshxonangizda zamonaviy mebel va rangli plitka bor ekan, bu narxni biroz "
+    "yuqoriga suradi\") - umumiy \"yaxshi holat\" kabi noaniq gap yozmang. Rasm xira/"
+    "tushunarsiz bo'lsa yoki uy holatini aniq baholash uchun yetarli bo'lmasa, buni OCHIQ "
+    "ayting.\n"
     "3. RASM TA'SIRI CHEKLANGAN: rasmlar narxni comps diapazonidan sezilarli darajada "
     "(taxminan 15-20% dan ortiq) chetga chiqarishi UCHUN kuchli, aniq asos (masalan aniq "
     "yevroremont belgilari YOKI aniq ta'mirga muhtojlik belgilari) bo'lishi kerak - engil "
     "taassurotga asoslanib katta narx sakrashi qilmang.\n"
-    "4. Bu SIZNING BAHOINGIZ - professional baholovchi xulosasi EMAS. Har doim shuni tan oling.\n"
-    "5. Foydalanuvchiga foydali bo'lgan comps 3 tadan kam bo'lsa yoki umuman yo'q bo'lsa, "
-    "confidence'ni albatta \"past\" qiling va diapazonni kengroq bering - hech qachon "
-    "comps'siz aniq raqam \"o'ylab topmang\".\n"
+    "4. USLUB - BU ENG MUHIM QOIDA: \"reasoning\" maydonini XUDDI INSON BILAN YUZMA-YUZ "
+    "GAPLASHGANDEK, iliq, tushunarli, ravon matn qilib yozing - ro'yxat, jadval yoki quruq "
+    "raqamlar to'plami EMAS, 4-6 gapdan iborat tabiiy oqimdagi bitta matn. Foydalanuvchiga "
+    "bevosita murojaat qiling (\"Sizning uyingiz...\", \"tavsiyam shuki...\"). Har bir gap "
+    "avvalgisidan tabiiy davom etsin, xuddi tajribali tanishingiz sizga maslahat berayotgandek. "
+    "Oxirida bitta qisqa, samimiy xulosa/tavsiya bilan yakunlang.\n"
+    "5. Bu SIZNING (AI) BAHOINGIZ - professional baholovchi xulosasi EMAS. Buni matn ichida "
+    "bir marta, tabiiy tarzda (majburiy shablon jumla emas) eslatib o'ting.\n"
+    "6. Foydali comps 3 tadan kam yoki umuman yo'q bo'lsa, confidence'ni albatta \"past\" "
+    "qiling va buni matnda ham ochiq, tushunarli tilda ayting, diapazonni kengroq bering - "
+    "hech qachon comps'siz aniq raqam \"o'ylab topmang\".\n"
     "- FAQAT JSON qaytaring, boshqa matn yozmang:\n"
     '{"price_low": "taxminiy quyi chegara (masalan \'250$\')", "price_high": "taxminiy yuqori '
-    'chegara (masalan \'320$\')", "reasoning": "2-4 gaplik aniq asos - qaysi comp raqamlariga '
-    'tayangan va rasmda nimani ko\'rgan", "confidence": "past" yoki "o\'rta" yoki "yuqori"}\n'
+    'chegara (masalan \'320$\')", "reasoning": "4-6 gaplik, INSON KABI yozilgan, iliq va '
+    'tabiiy oqimdagi bitta matn - qaysi comp raqamlariga tayangan va rasmda nimani ko\'rgan, '
+    'shular tabiiy gap ichida singdirilgan", "confidence": "past" yoki "o\'rta" yoki "yuqori"}\n'
     "Markdown ishlatmang."
 )
 
@@ -479,9 +493,10 @@ def ai_valuate_property(manzil_tuman: str, xona: str, condition_text: str, comps
     """Foydalanuvchining uyi uchun taxminiy ijara narxi diapazonini
     HAQIQIY comps (shu tuman/xonadagi faol e'lonlar) asosida baholaydi -
     hech qachon comps'siz "havodan" raqam aytmaydi. `photos` - ixtiyoriy,
-    har biri (image_bytes, media_type) juftligi, ko'pi bilan 3 ta.
+    har biri (image_bytes, media_type) juftligi, ko'pi bilan MAX_VALUATION_PHOTOS ta.
     None = AI fikr bera olmadi. dict qaytsa: {"price_low": str,
-    "price_high": str, "reasoning": str, "confidence": str}.
+    "price_high": str, "reasoning": str, "confidence": str} - "reasoning"
+    endi INSON KABI yozilgan, iliq va ravon matn (ro'yxat emas).
 
     MUHIM (o'z-o'zini tuzatish sikli - ai_screen_for_scam bilan bir xil
     tamoyil): admin "ai_valuation_extra_guidance" sozlamasiga real
@@ -516,12 +531,12 @@ def ai_valuate_property(manzil_tuman: str, xona: str, condition_text: str, comps
 
         content = [{"type": "text", "text": details_text}]
         import base64
-        for image_bytes, media_type in (photos or [])[:3]:
+        for image_bytes, media_type in (photos or [])[:MAX_VALUATION_PHOTOS]:
             b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
             content.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}})
 
         response = client.messages.create(
-            model=MARKET_ANALYSIS_MODEL, max_tokens=700,
+            model=MARKET_ANALYSIS_MODEL, max_tokens=900,
             output_config={"effort": "medium" if photos else "low"},
             system=system,
             messages=[{"role": "user", "content": content}],

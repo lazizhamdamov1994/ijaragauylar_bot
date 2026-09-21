@@ -494,6 +494,13 @@ def unblock_phone(phone: str) -> None:
     conn.close()
 
 
+def update_blocked_phone_reason(phone: str, reason: str) -> None:
+    conn = db()
+    conn.execute("UPDATE blocked_phones SET reason = ? WHERE phone = ?", (reason, phone))
+    conn.commit()
+    conn.close()
+
+
 # get_blocked_phone() endi common/db.py'dan import qilinadi (yuqoridagi import bloki).
 
 

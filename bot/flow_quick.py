@@ -548,6 +548,11 @@ async def quick_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update_listing_status(listing_id, "approved", channel_msg_id=channel_msg_id)
         listing["channel_msg_id"] = channel_msg_id
         await notify_location_alert_matches(context, listing)
+        if is_moderator(user.id) and not is_admin(user.id):
+            try:
+                await notify_admin_of_moderator_listing(context, listing_id, listing, user, data.get("rasmlar") or [])
+            except Exception:
+                logger.exception("Moderator e'loni haqida admin FYI xabarida xatolik")
         await context.bot.send_message(chat_id, f"\u2705 E'lon #{listing_id} kanalga joylandi.", reply_markup=main_menu_keyboard(update.effective_user.id))
     context.user_data.clear()
     return ConversationHandler.END

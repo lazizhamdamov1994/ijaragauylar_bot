@@ -567,6 +567,11 @@ async def tasdiqlash_ok(update: Update, context: ContextTypes.DEFAULT_TYPE):
             update_listing_status(listing_id, "approved", channel_msg_id=channel_msg_id)
             listing["channel_msg_id"] = channel_msg_id
             await notify_location_alert_matches(context, listing)
+            if is_moderator(user.id) and not is_admin(user.id):
+                try:
+                    await notify_admin_of_moderator_listing(context, listing_id, listing, user, data.get("rasmlar") or [])
+                except Exception:
+                    logger.exception("Moderator e'loni haqida admin FYI xabarida xatolik")
             await context.bot.send_message(
                 update.effective_chat.id,
                 f"\u2705 Xodim sifatida e'loningiz (#{listing_id}) to'lovsiz va tekshiruvsiz, to'g'ridan-to'g'ri kanalga joylandi.",
