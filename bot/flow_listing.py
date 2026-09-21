@@ -508,7 +508,7 @@ async def _generate_and_send_slideshow(
             logger.warning("Slaydshov uchun rasm yuklab bo'lmadi (e'lon #%s)", listing_id)
             return
 
-        video = await build_slideshow_video(photo_bytes, manzil, narx)
+        video = await build_slideshow_video(photo_bytes, manzil, narx, xona)
         if video is None:
             logger.warning("Slaydshov video yasalmadi (e'lon #%s)", listing_id)
             return

@@ -26,8 +26,6 @@ import tempfile
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
-from common.watermark import load_logo
-
 logger = logging.getLogger(__name__)
 
 CANVAS_W, CANVAS_H = 1080, 1920  # Instagram Reels/Stories uchun tik (9:16) format
@@ -131,161 +129,133 @@ def _shrink_font_to_fit(draw, text: str, base_size: int, max_width: int, min_siz
     return font, (trimmed.rstrip() + "..." if trimmed else text[:1])
 
 
-def _centered_text_with_dot(draw, y, text, font, fill, dot_color):
-    """Manzil qatori uchun - emoji shrift bilan har doim ham to'g'ri
-    chiqmagani uchun (ba'zi serverlarda "quti" bo'lib chiqadi), oldida
-    chizilgan rangli nuqta ishlatiladi - shrift'ga bog'liq emas, ishonchli."""
-    bbox = draw.textbbox((0, 0), text, font=font)
-    text_w = bbox[2] - bbox[0]
-    dot_r, gap = 8, 16
-    total_w = dot_r * 2 + gap + text_w
-    x0 = (CANVAS_W - total_w) // 2
-    text_h = bbox[3] - bbox[1]
-    dot_cy = y - bbox[1] + text_h // 2
-    draw.ellipse([x0, dot_cy - dot_r, x0 + dot_r * 2, dot_cy + dot_r], fill=(*dot_color, 255))
-    tx = x0 + dot_r * 2 + gap
-    draw.text((tx, y), text, font=font, fill=fill)
 
+# ===== "Stiker" kartalar (BEZMAKLER uslubidagi shablon) =====
+# Laziz yuborgan namuna post (pushti "BEZMAKLER" + ko'k manzil/narx +
+# yashil "Uy egasi raqami" kartalari, rasm ustiga suzuvchi) asosida
+# qurilgan: HAR BIR karta QATTIQ (to'liq xira bo'lmagan) rangli fonga ega
+# yumaloq burchakli "stiker" - ostidagi rasm nima bo'lishidan qat'iy
+# nazar, kontrast har doim bir xil va professional ko'rinadi. Uchchala
+# karta ham HAMMASI BIRDAN, video boshidanoq ko'rinadi (ketma-ket
+# "ochilish" yo'q - zamonaviy Reels formatiga mos).
+STICKER_PINK = BRAND_ACCENT       # sarlavha ("MAKLERSIZ UY")
+STICKER_BLUE = (33, 118, 255)     # manzil + xona/narx
+STICKER_GREEN = (22, 163, 74)     # CTA ("Uy egasi raqami...")
 
-def _draw_price_chip(draw, cy: int, text: str, font):
-    pad_x, pad_y = 46, 20
-    bbox = draw.textbbox((0, 0), text, font=font)
-    w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    chip_w, chip_h = w + pad_x * 2, h + pad_y * 2
-    x0 = (CANVAS_W - chip_w) // 2
-    y0 = cy - chip_h // 2
-    draw.rounded_rectangle(
-        [x0, y0 + 5, x0 + chip_w, y0 + chip_h + 5], radius=chip_h // 2, fill=(0, 0, 0, 70),
-    )
-    draw.rounded_rectangle(
-        [x0, y0, x0 + chip_w, y0 + chip_h], radius=chip_h // 2, fill=(*BRAND_ACCENT, 255),
-    )
-    draw.text((x0 + pad_x - bbox[0], y0 + pad_y - bbox[1]), text, font=font, fill=(255, 255, 255, 255))
+STICKER_MARGIN_X = 64
+STICKER_X0, STICKER_X1 = STICKER_MARGIN_X, CANVAS_W - STICKER_MARGIN_X
+STICKER_RADIUS = 30
 
+TITLE_BOX_TOP = 100
+TITLE_BOX_H = 132
+TITLE_BOX_BOTTOM = TITLE_BOX_TOP + TITLE_BOX_H
 
-# ===== Sarlavha kartasi ("branded card") =====
-# ENG MUHIM tuzatish: avvalgi versiya matnni faqat yumshoq gradient ustiga
-# chizardi - shuning uchun rasm och/och-bo'lakli bo'lsa, matn deyarli
-# o'qilmas darajada aralashib ketardi (kontrast rasmga bog'liq bo'lib
-# qolgan edi). Endi matn HAR DOIM QATTIQ (deyarli to'liq xira) yumaloq
-# burchakli karta ustiga chiziladi - ostidagi rasm nima bo'lishidan qat'iy
-# nazar, kontrast har doim bir xil va professional ko'rinadi.
-CARD_W, CARD_H = 860, 620
-_CARD_CENTER = CANVAS_H // 2  # 960 - Instagram Reels'da ko'z avval shu joyga tushadi
-CARD_X0, CARD_X1 = (CANVAS_W - CARD_W) // 2, (CANVAS_W + CARD_W) // 2
-CARD_TOP, CARD_BOTTOM = _CARD_CENTER - CARD_H // 2, _CARD_CENTER + CARD_H // 2
-CARD_RADIUS = 40
-CARD_FILL = (13, 12, 22, 232)
+INFO_BOX_TOP = TITLE_BOX_BOTTOM + 26
+INFO_BOX_H = 236
+INFO_BOX_BOTTOM = INFO_BOX_TOP + INFO_BOX_H
 
-LOGO_TOP = CARD_TOP + 46
-LOGO_MAX_H = 96
-TITLE_Y = LOGO_TOP + LOGO_MAX_H + 30
-ACCENT_BAR_Y = TITLE_Y + 84
-ADDRESS_Y = ACCENT_BAR_Y + 42
-PRICE_CY = ADDRESS_Y + 150
-
-# Pastki CTA banneri - Instagram'ning o'z pastki UI'si (izoh, like/share
+# Pastki CTA stikeri - Instagram'ning o'z pastki UI'si (izoh, like/share
 # ikonalari) odatda eng pastki ~220px'ni yopib qo'yadi, shuning uchun
-# banner ANIQ shu chegaradan yuqorida, "xavfsiz zona"da joylashadi.
+# stiker ANIQ shu chegaradan yuqorida, "xavfsiz zona"da joylashadi
+# (haqiqiy sinov videosida tekshirilgan/tasdiqlangan chegaralar).
 CTA_BANNER_TOP, CTA_BANNER_BOTTOM = 1560, 1750
 CTA_LINE1 = "UY EGASI RAQAMI"
 CTA_LINE2 = "TELEGRAM KANALIMIZDA"
 
 
-def _paste_logo_centered(overlay: Image.Image, cy_top: int, max_h: int, opacity: float = 1.0) -> int:
-    """Logotipni (agar topilsa) markazlashtirib, berilgan balandlikda
-    joylaydi - qaysi balandlikda tugaganini (pastki chegara y) qaytaradi,
-    shundan keyingi elementlar shu asosda joylashtiriladi. Logo topilmasa,
-    hech narsa chizmay, faqat max_h'ni pastki chegara sifatida qaytaradi
-    (joylashuv barqaror qoladi, logo bor-yo'qligidan qat'iy nazar)."""
-    logo = load_logo()
-    if logo is None:
-        return cy_top + max_h
-    ratio = max_h / logo.height
-    logo_w = max(int(logo.width * ratio), 1)
-    resized = logo.resize((logo_w, max_h), Image.LANCZOS)
-    if opacity < 1.0:
-        alpha = resized.split()[-1].point(lambda p: int(p * opacity))
-        resized.putalpha(alpha)
-    overlay.alpha_composite(resized, ((CANVAS_W - logo_w) // 2, cy_top))
-    return cy_top + max_h
-
-
-def _draw_branded_card(canvas: Image.Image) -> Image.Image:
-    """Qattiq (opaque), yumaloq burchakli, yumshoq soyali karta - sarlavha
-    matni doim shu karta ustiga chiziladi (_draw_intro_frame)."""
-    canvas = canvas.convert("RGBA")
-    overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+def _draw_sticker_box(overlay: Image.Image, x0: int, y0: int, x1: int, y1: int, fill: tuple, radius: int = STICKER_RADIUS) -> None:
+    """Qattiq rangli, yumaloq burchakli "stiker" karta - ortida yumshoq
+    soya bilan (rasm ustida suzayotgandek, professional chuqurlik hissi
+    beradi)."""
     draw = ImageDraw.Draw(overlay)
-    # Karta ortidagi yumshoq soya (biroz pastroq va kattaroq, xira qora).
-    draw.rounded_rectangle(
-        [CARD_X0 - 6, CARD_TOP + 10, CARD_X1 + 6, CARD_BOTTOM + 16], radius=CARD_RADIUS + 6, fill=(0, 0, 0, 60),
-    )
-    draw.rounded_rectangle([CARD_X0, CARD_TOP, CARD_X1, CARD_BOTTOM], radius=CARD_RADIUS, fill=CARD_FILL)
-    # Brend rangidagi yupqa chekka chiziq - kartaning "dizayn qilingan"
-    # ekanini ta'kidlaydi (tasodifiy quti emas).
-    draw.rounded_rectangle(
-        [CARD_X0, CARD_TOP, CARD_X1, CARD_BOTTOM], radius=CARD_RADIUS, outline=(*BRAND_ACCENT, 140), width=2,
-    )
-    return Image.alpha_composite(canvas, overlay)
+    draw.rounded_rectangle([x0 - 4, y0 + 8, x1 + 4, y1 + 14], radius=radius + 4, fill=(0, 0, 0, 70))
+    draw.rounded_rectangle([x0, y0, x1, y1], radius=radius, fill=(*fill, 255))
+
+
+def _draw_phone_icon(overlay: Image.Image, cx: int, cy: int, badge_r: int, icon_color: tuple) -> None:
+    """Telefon ikonkasini shrift/emoji'ga BUTUNLAY bog'liq bo'lmagan holda,
+    sof PIL geometriyasi orqali chizadi (manzil qatoridagi rangli nuqta
+    bilan bir xil sabab - ba'zi serverlarda emoji "quti" bo'lib chiqishi
+    mumkin, bu esa HAR DOIM, har qanday serverda bir xil chiqadi)."""
+    draw = ImageDraw.Draw(overlay)
+    draw.ellipse([cx - badge_r, cy - badge_r, cx + badge_r, cy + badge_r], fill=(255, 255, 255, 255))
+    s = int(badge_r * 1.7)
+    tmp = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    td = ImageDraw.Draw(tmp)
+    bar_w = s * 0.22
+    bx0, bx1 = s * 0.5 - bar_w / 2, s * 0.5 + bar_w / 2
+    by0, by1 = s * 0.2, s * 0.8
+    td.rounded_rectangle([bx0, by0, bx1, by1], radius=bar_w / 2, fill=icon_color)
+    end_r = bar_w * 0.68
+    td.ellipse([s * 0.5 - end_r, by0 - end_r * 0.4, s * 0.5 + end_r, by0 + end_r * 1.2], fill=icon_color)
+    td.ellipse([s * 0.5 - end_r, by1 - end_r * 1.2, s * 0.5 + end_r, by1 + end_r * 0.4], fill=icon_color)
+    tmp = tmp.rotate(-45, resample=Image.BICUBIC, expand=True)
+    overlay.alpha_composite(tmp, (int(cx - tmp.width / 2), int(cy - tmp.height / 2)))
 
 
 def _draw_cta_banner(canvas: Image.Image) -> Image.Image:
-    """ENG MUHIM tuzatish: bu banner HAR BIR kadrga (birinchi rasmning
-    sarlavha kartasidan tortib, oxirgi rasmgacha) qo'yiladi - shuning
-    uchun tomoshabin "Telegram kanalimizda" degan xabarni FAQAT 1 soniya
-    ko'rib qolib ketmaydi, balki VIDEO OXIRIGACHA (bir necha soniya davomida)
+    """Yashil CTA stikeri - HAR BIR kadrga (birinchi rasmning sarlavha
+    stikerlaridan tortib, oxirgi rasmgacha) qo'yiladi - shuning uchun
+    tomoshabin "Telegram kanalimizda" degan xabarni FAQAT 1 soniya ko'rib
+    qolib ketmaydi, balki VIDEO OXIRIGACHA (bir necha soniya davomida)
     doimiy ko'rib boradi - Instagram reels'larda odam oqimini haydashning
     asosiy omili shu."""
     canvas = canvas.convert("RGBA")
     overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    _draw_sticker_box(overlay, STICKER_X0, CTA_BANNER_TOP, STICKER_X1, CTA_BANNER_BOTTOM, STICKER_GREEN)
+
+    icon_cy = (CTA_BANNER_TOP + CTA_BANNER_BOTTOM) // 2
+    _draw_phone_icon(overlay, STICKER_X0 + 76, icon_cy, badge_r=34, icon_color=(*STICKER_GREEN, 255))
+
     draw = ImageDraw.Draw(overlay)
-
-    draw.rectangle([(0, CTA_BANNER_TOP - 6), (CANVAS_W, CTA_BANNER_TOP)], fill=(0, 0, 0, 60))  # yupqa "soya" chizig'i
-    draw.rectangle([(0, CTA_BANNER_TOP), (CANVAS_W, CTA_BANNER_BOTTOM)], fill=(*BRAND_ACCENT, 255))
-
-    line1_font = _load_font(52)
-    line2_font = _load_font(42)
-    _centered_text(draw, CTA_BANNER_TOP + 18, CTA_LINE1, line1_font, fill=(255, 255, 255, 255))
-    _centered_text(draw, CTA_BANNER_TOP + 88, CTA_LINE2, line2_font, fill=(255, 255, 255, 255))
+    line1_font = _load_font(48)
+    line2_font = _load_font(40)
+    _centered_text(draw, CTA_BANNER_TOP + 30, CTA_LINE1, line1_font, fill=(255, 255, 255, 255))
+    _centered_text(draw, CTA_BANNER_TOP + 98, CTA_LINE2, line2_font, fill=(255, 255, 255, 255))
 
     return Image.alpha_composite(canvas, overlay).convert("RGB")
 
 
-def _draw_intro_frame(canvas: Image.Image, manzil: str, narx: str) -> Image.Image:
-    """Sarlavha kartasi - sarlavha, manzil VA narx HAMMASI BIRDAN, video
-    boshidanoq ko'rinadi (avvalgi versiyada bu 3 ta alohida kadrda
-    ketma-ket "ochilib" chiqardi - Instagram Reels formatiga mos emas edi,
-    tomoshabin birinchi soniyalardayoq to'liq ma'lumotni ko'rishi kerak).
-    Pastki CTA banneri ALOHIDA (_draw_cta_banner) - bu kadrga ham, qolgan
-    barcha rasmlarga ham qo'shiladi (build_slideshow_video ichida)."""
-    canvas = _draw_branded_card(canvas)
+def _draw_intro_frame(canvas: Image.Image, manzil: str, narx: str, xona: str = "") -> Image.Image:
+    """Ikkita sarlavha stikeri (pushti "MAKLERSIZ UY" + ko'k manzil/xona/
+    narx) - HAMMASI BIRDAN, video boshidanoq ko'rinadi (avvalgi versiyada
+    bu ketma-ket "ochilib" chiqardi - Instagram Reels formatiga mos emas
+    edi). Pastki yashil CTA stikeri ALOHIDA (_draw_cta_banner) - bu kadrga
+    ham, qolgan barcha rasmlarga ham qo'shiladi (build_slideshow_video
+    ichida)."""
+    canvas = canvas.convert("RGBA")
     overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    _paste_logo_centered(overlay, LOGO_TOP, LOGO_MAX_H)
+    # ---- Pushti sarlavha stikeri ----
+    _draw_sticker_box(overlay, STICKER_X0, TITLE_BOX_TOP, STICKER_X1, TITLE_BOX_BOTTOM, STICKER_PINK)
+    title_font = _load_font(64)
+    title_bbox = draw.textbbox((0, 0), "MAKLERSIZ UY", font=title_font)
+    title_h = title_bbox[3] - title_bbox[1]
+    title_y = TITLE_BOX_TOP + (TITLE_BOX_H - title_h) // 2 - title_bbox[1]
+    _draw_spaced_text(draw, CANVAS_W // 2, title_y, "MAKLERSIZ UY", title_font, fill=(255, 255, 255, 255), tracking=4, shadow=False)
 
-    title_font = _load_font(74)
+    # ---- Ko'k manzil + xona/narx stikeri ----
+    _draw_sticker_box(overlay, STICKER_X0, INFO_BOX_TOP, STICKER_X1, INFO_BOX_BOTTOM, STICKER_BLUE)
+    box_inner_w = (STICKER_X1 - STICKER_X0) - 90
 
-    _draw_spaced_text(draw, CANVAS_W // 2, TITLE_Y, "MAKLERSIZ UY", title_font, fill=(255, 255, 255, 255), tracking=7)
-    bar_w = 110
-    draw.rounded_rectangle(
-        [(CANVAS_W - bar_w) // 2, ACCENT_BAR_Y, (CANVAS_W + bar_w) // 2, ACCENT_BAR_Y + 5],
-        radius=3, fill=(*BRAND_ACCENT, 255),
-    )
-
-    # MUHIM: uzun manzillar/narxlar branded kartadan (CARD_W) tashqariga
-    # chiqib ketmasligi uchun shrift o'lchami dinamik ravishda mosligicha
-    # kamaytiriladi (avval qattiq belgi-soni bo'yicha kesish - [:42] -
-    # ishlatilgan edi, bu uzun so'zli manzillarda hali ham matn kartadan
-    # oshib ketishiga olib kelardi - haqiqiy sinov videosida topilgan xato).
     addr_text = (manzil or "").strip()
-    addr_font, addr_text = _shrink_font_to_fit(draw, addr_text, 48, CARD_W - 140, min_size=28, extra_width=32)
-    _centered_text_with_dot(draw, ADDRESS_Y, addr_text, addr_font, fill=(225, 228, 238, 255), dot_color=BRAND_ACCENT)
+    addr_font, addr_text = _shrink_font_to_fit(draw, addr_text, 50, box_inner_w, min_size=30)
+    addr_bbox = draw.textbbox((0, 0), addr_text, font=addr_font)
+    addr_h = addr_bbox[3] - addr_bbox[1]
 
-    price_text = (narx or "").strip()
-    price_font, price_text = _shrink_font_to_fit(draw, price_text, 58, CARD_W - 160, min_size=32)
-    _draw_price_chip(draw, PRICE_CY, price_text, price_font)
+    line2_parts = [p for p in [(xona or "").strip(), (narx or "").strip()] if p]
+    line2_text = " · ".join(line2_parts) or "Narxi: kelishiladi"
+    line2_font, line2_text = _shrink_font_to_fit(draw, line2_text, 58, box_inner_w, min_size=32)
+    line2_bbox = draw.textbbox((0, 0), line2_text, font=line2_font)
+    line2_h = line2_bbox[3] - line2_bbox[1]
+
+    gap = 22
+    block_h = addr_h + gap + line2_h
+    addr_y = INFO_BOX_TOP + (INFO_BOX_H - block_h) // 2 - addr_bbox[1]
+    line2_y = addr_y + addr_h + gap - (line2_bbox[1] - addr_bbox[1])
+    _centered_text(draw, addr_y, addr_text, addr_font, fill=(255, 255, 255, 255))
+    _centered_text(draw, line2_y, line2_text, line2_font, fill=(255, 255, 255, 255))
 
     return Image.alpha_composite(canvas, overlay).convert("RGB")
 
@@ -339,9 +309,9 @@ def _build_video_filter_complex(frame_paths: list[tuple[str, float]]) -> tuple[s
     return ";".join(filters), prev_label
 
 
-async def build_slideshow_video(photos: list[bytes], manzil: str, narx: str) -> bytes | None:
-    """1-rasm ustida sarlavha+manzil+narx BIRDANIGA (video boshidanoq)
-    ko'rinadigan branded karta, qolgan rasmlar - har biri sekin
+async def build_slideshow_video(photos: list[bytes], manzil: str, narx: str, xona: str = "") -> bytes | None:
+    """1-rasm ustida sarlavha+manzil+xona+narx BIRDANIGA (video boshidanoq)
+    ko'rinadigan "stiker" kartalar, qolgan rasmlar - har biri sekin
     zumlanadigan (Ken Burns) va bir-biriga yumshoq eriydigan (crossfade)
     kadrlar - zamonaviy Instagram Reels formatiga mos, OVOZSIZ mp4 video
     yasaydi."""
@@ -356,7 +326,7 @@ async def build_slideshow_video(photos: list[bytes], manzil: str, narx: str) -> 
 
                 try:
                     first = _fit_frame(photos[0])
-                    frame = _draw_cta_banner(_draw_intro_frame(first, manzil, narx))
+                    frame = _draw_cta_banner(_draw_intro_frame(first, manzil, narx, xona))
                     path = os.path.join(tmpdir, "frame_intro.jpg")
                     frame.save(path, format="JPEG", quality=92)
                     frame_paths.append((path, INTRO_SECONDS))
