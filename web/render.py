@@ -151,6 +151,16 @@ TRANSLATIONS = {
     "sort_arzon": {"uz": "Eng arzon", "ru": "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0434\u0435\u0448\u0451\u0432\u044b\u0435", "en": "Cheapest"},
     "sort_qimmat": {"uz": "Eng qimmat", "ru": "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0434\u043e\u0440\u043e\u0433\u0438\u0435", "en": "Most expensive"},
     "ai_chat_title": {"uz": "AI yordamchi", "ru": "\u0418\u0418-\u043f\u043e\u043c\u043e\u0449\u043d\u0438\u043a", "en": "AI assistant"},
+    "hero_ai_cta_title": {
+        "uz": "\U0001F916 AI yordamchidan so'rang",
+        "ru": "\U0001F916 \u0421\u043f\u0440\u043e\u0441\u0438\u0442\u0435 \u0418\u0418-\u043f\u043e\u043c\u043e\u0449\u043d\u0438\u043a\u0430",
+        "en": "\U0001F916 Ask the AI assistant",
+    },
+    "hero_ai_cta_sub": {
+        "uz": "\u00abChilonzorda 2 xonali, 300$ gacha\u00bb kabi yozing - bir necha soniyada mos uylarni topib beradi",
+        "ru": "\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435, \u043d\u0430\u043f\u0440\u0438\u043c\u0435\u0440 \u00ab2-\u043a\u043e\u043c\u043d\u0430\u0442\u043d\u0430\u044f \u0432 \u0427\u0438\u043b\u0430\u043d\u0437\u0430\u0440\u0435, \u0434\u043e $300\u00bb \u2014 \u0437\u0430 \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u043e \u0441\u0435\u043a\u0443\u043d\u0434 \u043f\u043e\u0434\u0431\u0435\u0440\u0451\u0442 \u0432\u0430\u0440\u0438\u0430\u043d\u0442\u044b",
+        "en": "Try \u00ab2-room in Chilonzor, up to $300\u00bb - it finds matching places in seconds",
+    },
     "ai_chat_welcome": {
         "uz": "Salom! Menga qanday uy kerakligini yozing - masalan \u00abChilonzorda 2 xonali, 300$ gacha\u00bb.",
         "ru": "\u041f\u0440\u0438\u0432\u0435\u0442! \u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435, \u043a\u0430\u043a\u043e\u0435 \u0436\u0438\u043b\u044c\u0451 \u0432\u0430\u043c \u043d\u0443\u0436\u043d\u043e \u2014 \u043d\u0430\u043f\u0440\u0438\u043c\u0435\u0440 \u00ab2-\u043a\u043e\u043c\u043d\u0430\u0442\u043d\u0430\u044f \u0432 \u0427\u0438\u043b\u0430\u043d\u0437\u0430\u0440\u0435, \u0434\u043e $300\u00bb.",

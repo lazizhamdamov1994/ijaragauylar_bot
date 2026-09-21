@@ -258,6 +258,13 @@ def _listings_page(
       <button type="submit">{icon('search', 16)} {t(lang,'search_btn')}</button>
     </form>
     <div class="rt-tabs">{rt_tabs_html}</div>
+    <button type="button" class="hero-ai-cta" onclick="document.getElementById('ai-chat-toggle').click()">
+      <span class="hero-ai-cta-icon">{icon('sparkle', 20)}</span>
+      <span>
+        <span class="hero-ai-cta-title">{t(lang,'hero_ai_cta_title')}</span>
+        <span class="hero-ai-cta-sub">{t(lang,'hero_ai_cta_sub')}</span>
+      </span>
+    </button>
   </div>
 </section>
 
