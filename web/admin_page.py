@@ -1144,7 +1144,7 @@ async function loadBlocked() {
   const tbody = document.querySelector('#blocked-table tbody');
   if (!rows.length) { tbody.innerHTML = `<tr><td colspan="4" class="empty-note">Bloklangan raqam yo'q</td></tr>`; return; }
   tbody.innerHTML = rows.map(r => {
-    const digits = (r.phone || '').replace(/\D/g, '');
+    const digits = (r.phone || '').replace(/\\D/g, '');
     return `
     <tr>
       <td><b>${r.phone}</b></td>
