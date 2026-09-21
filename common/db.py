@@ -164,6 +164,7 @@ def migrate_schema() -> None:
             "sender_phone": "TEXT", "payment_receipt": "TEXT", "price_charged": "INTEGER",
             "is_quick": "INTEGER DEFAULT 0", "raw_text": "TEXT", "last_confirmed_at": "TEXT",
             "expired": "INTEGER DEFAULT 0", "stale_reports": "INTEGER DEFAULT 0", "receipt_warning": "TEXT",
+            "ai_scam_warning": "TEXT",
             "buttons_fixed": "INTEGER DEFAULT 0", "latitude": "REAL", "longitude": "REAL",
             "category": "TEXT DEFAULT 'egadan'", "rental_type": "TEXT DEFAULT 'uzoq_muddat'",
             "source": "TEXT DEFAULT 'bot'",

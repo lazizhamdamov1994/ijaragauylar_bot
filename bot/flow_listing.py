@@ -686,11 +686,13 @@ async def submit_listing_to_admin(context: ContextTypes.DEFAULT_TYPE, listing_id
     # jarayoni hech qachon bunga bog'liq bo'lmaydi (moderator baribir
     # qo'lda tekshirib, o'zi qaror qiladi).
     ai_warning = ""
+    scam = None
     try:
         loop = asyncio.get_event_loop()
         scam = await loop.run_in_executor(None, ai_screen_for_scam, caption)
         if scam and scam.get("suspicious"):
             ai_warning += f"\U0001F916\u26a0\ufe0f <b>AI: shubhali belgilar topildi</b> \u2014 {esc(scam.get('reason') or '')}\n\n"
+            set_listing_scam_warning(listing_id, scam.get("reason") or "")
     except Exception:
         logger.exception("AI firibgarlik skriningida xatolik")
 
@@ -703,6 +705,7 @@ async def submit_listing_to_admin(context: ContextTypes.DEFAULT_TYPE, listing_id
                 )
                 if receipt_check and not receipt_check.get("matches"):
                     ai_warning += f"\U0001F916\u26a0\ufe0f <b>AI: chekda nomuvofiqlik</b> \u2014 {esc(receipt_check.get('note') or '')}\n\n"
+                    set_listing_receipt_warning(listing_id, receipt_check.get("note") or "")
         except Exception:
             logger.exception("AI to'lov cheki tekshiruvida xatolik")
 

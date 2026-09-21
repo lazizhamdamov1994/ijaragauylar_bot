@@ -16,9 +16,8 @@ MUHIM chegaralar (common/ai.py bilan bir xil tamoyil):
 """
 import json
 import logging
-import re
 
-from common.ai import AI_MODEL, _get_client, _log_usage, ai_features_enabled
+from common.ai import AI_MODEL, _get_client, _log_usage, ai_features_enabled, strip_markdown
 from common.db import count_today_ai_chat_messages, get_setting, log_ai_chat_message
 
 logger = logging.getLogger(__name__)
@@ -102,19 +101,6 @@ def _concierge_system_prompt() -> str:
     )
 
 
-_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^\s)]+)\)")
-
-
-def _sanitize_reply(text: str) -> str:
-    """AI vaqti-vaqti bilan qoidaga qaramay Markdown yozib qo'yishi mumkin
-    (masalan **havola**) - bot/veb xabarlari oddiy matn sifatida yuborilgani
-    uchun bu belgilar havolaga yopishib, buzilgan URL hosil qiladi. Shuning
-    uchun qo'shimcha himoya sifatida bu yerda tozalab qo'yamiz."""
-    text = _MD_LINK_RE.sub(lambda m: f"{m.group(1)}: {m.group(2)}", text)
-    text = text.replace("**", "").replace("__", "")
-    return text
-
-
 def concierge_rate_limited(user_key: str, platform: str) -> bool:
     try:
         limit = int(get_setting("ai_concierge_daily_limit", "30"))
@@ -164,7 +150,7 @@ async def concierge_turn(user_key: str, platform: str, history: list, user_messa
 
             text = next((b.text for b in response.content if b.type == "text"), "")
             messages.append({"role": "assistant", "content": response.content})
-            return _sanitize_reply(text), messages
+            return strip_markdown(text), messages
 
         return "Kechirasiz, so'rovingizni birroz soddaroq qayta yozib ko'ring.", messages
     except Exception:

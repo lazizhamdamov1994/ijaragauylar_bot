@@ -28,7 +28,7 @@ from common.db import db, get_favorite_listing_ids, get_price_history, get_setti
 from common.telegram_media import watermark_photo_bytes_list
 from common.ai import ai_features_enabled, ai_screen_for_scam
 
-from bot.db import get_listing, update_listing_status
+from bot.db import get_listing, set_listing_scam_warning, update_listing_status
 from bot.admin_moderation import log_channel_post
 
 from web.auth import _client_ip, get_current_tg_user, is_web_subscribed
@@ -1342,6 +1342,7 @@ async def notify_admins_new_web_listing(listing_id: int, d: dict, file_ids: list
         scam = await loop.run_in_executor(None, ai_screen_for_scam, caption)
         if scam and scam.get("suspicious"):
             ai_warning = f"\U0001F916⚠️ <b>AI: shubhali belgilar topildi</b> — {esc_html(scam.get('reason') or '')}\n\n"
+            set_listing_scam_warning(listing_id, scam.get("reason") or "")
     except Exception:
         logger.exception("AI firibgarlik skriningida xatolik (veb e'lon)")
 

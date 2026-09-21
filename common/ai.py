@@ -28,9 +28,17 @@ from common.db import db, get_setting, now_str
 logger = logging.getLogger(__name__)
 
 AI_MODEL = "claude-haiku-4-5"
-# Haiku 4.5 narxi (1 mln token uchun, USD) - taxminiy xarajatni hisoblash uchun.
-_INPUT_COST_PER_MTOK = 1.00
-_OUTPUT_COST_PER_MTOK = 5.00
+# Har bir model uchun narx (1 mln token uchun, USD: kirish, chiqish) -
+# taxminiy xarajatni hisoblash uchun. Ko'pchilik funksiya arzon Haiku
+# modelidan foydalanadi (yuqori hajm); faqat sifat muhim bo'lgan, kam
+# chaqiriladigan funksiyalar (masalan kunlik AI hisobot) kuchliroq
+# Opus 5'dan foydalanadi.
+OPS_REPORT_MODEL = "claude-opus-5"
+_MODEL_PRICING = {
+    "claude-haiku-4-5": (1.00, 5.00),
+    "claude-opus-5": (5.00, 25.00),
+}
+_DEFAULT_PRICING = _MODEL_PRICING[AI_MODEL]
 
 _client = None
 _client_tried = False
@@ -56,11 +64,12 @@ def ai_features_enabled() -> bool:
     return bool(ANTHROPIC_API_KEY) and get_setting("ai_features_enabled", "0") == "1"
 
 
-def _log_usage(feature: str, usage=None, ok: bool = True) -> None:
+def _log_usage(feature: str, usage=None, ok: bool = True, model: str = None) -> None:
     try:
         input_tokens = getattr(usage, "input_tokens", 0) or 0
         output_tokens = getattr(usage, "output_tokens", 0) or 0
-        cost = (input_tokens / 1_000_000) * _INPUT_COST_PER_MTOK + (output_tokens / 1_000_000) * _OUTPUT_COST_PER_MTOK
+        input_cost_per_mtok, output_cost_per_mtok = _MODEL_PRICING.get(model, _DEFAULT_PRICING)
+        cost = (input_tokens / 1_000_000) * input_cost_per_mtok + (output_tokens / 1_000_000) * output_cost_per_mtok
         conn = db()
         conn.execute(
             "INSERT INTO ai_usage_log (feature, input_tokens, output_tokens, cost_usd, ok, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -70,6 +79,20 @@ def _log_usage(feature: str, usage=None, ok: bool = True) -> None:
         conn.close()
     except Exception:
         logger.exception("AI xarajat logini yozib bo'lmadi")
+
+
+_MD_LINK_RE = re.compile(r"\[([^\]]+)\]\((https?://[^\s)]+)\)")
+
+
+def strip_markdown(text: str) -> str:
+    """AI vaqti-vaqti bilan qoidaga qaramay Markdown yozib qo'yishi mumkin
+    (masalan **havola**) - bot/veb xabarlari oddiy matn sifatida yuborilgani
+    uchun bu belgilar havolaga yopishib, buzilgan URL hosil qiladi. Shuning
+    uchun har bir foydalanuvchiga ko'rinadigan AI javobi (concierge,
+    hisobot va h.k.) shu orqali qo'shimcha tozalanadi."""
+    text = _MD_LINK_RE.sub(lambda m: f"{m.group(1)}: {m.group(2)}", text)
+    text = text.replace("**", "").replace("__", "")
+    return text
 
 
 def _extract_json(text: str):
@@ -216,6 +239,55 @@ def ai_check_receipt(image_bytes: bytes, media_type: str, expected_amount: int, 
     except Exception:
         logger.exception("ai_check_receipt xatolik")
         _log_usage("check_receipt", ok=False)
+        return None
+
+
+# ============================= 4: KUNLIK AI BOSHQARUV HISOBOTI =============================
+
+_OPS_REPORT_SYSTEM = (
+    "Siz \"Ijaraga Uylar\" (ijaragauylar.uz) platformasining AI boshqaruv yordamchisisiz. "
+    "Platforma egasi davlat ishida band, kuniga bir marta sizning qisqa hisobotingizni o'qiydi - "
+    "boshqa hech narsani faol kuzatib turmaydi. Sizga bugungi/joriy raqamlar beriladi.\n\n"
+    "QOIDALAR:\n"
+    "- FAQAT berilgan raqamlar asosida yozing - hech qanday raqam yoki faktni o'zingizdan "
+    "o'ylab topmang yoki taxmin qilmang.\n"
+    "- Qisqa, aniq, o'zbek tilida yozing (4-6 gap, executive-brief uslubida) - uzun tahlil emas.\n"
+    "- Avval eng muhim natijani ayting (o'sish/pasayish, daromad), keyin agar raqamlarda real "
+    "muammo ko'rinsa (masalan ko'p rad etilgan e'lon, AI ko'p firibgarlik topgan, o'sish sust) - "
+    "shuni ochiq ayting.\n"
+    "- Oxirida 1-2 ta ANIQ, amalga oshirish mumkin bo'lgan tavsiya bering (masalan qaysi sozlamani "
+    "o'zgartirish, qayerga e'tibor qaratish) - umumiy \"yaxshiroq ishlang\" kabi bo'sh gap emas.\n"
+    "- Hech qanday Markdown belgisidan foydalanmang (**, __, #, [matn](havola)) - javobingiz "
+    "Telegram'da oddiy matn sifatida yuboriladi."
+)
+
+
+def ai_generate_ops_report(stats_text: str) -> str:
+    """Kunlik/haftalik raqamlardan (oldindan tayyorlangan, o'qilishi oson matn
+    blok - bot/jobs.py'dagi collect_ops_report_stats() yasaydi) qisqa AI
+    tahlili + tavsiyalar yozadi. None = AI fikr bera olmadi (o'chirilgan/
+    xatolik) - bu holatda chaqiruvchi (job_ai_daily_report) raqamlarning
+    o'zini, sharhsiz, standart shablon bilan yuborishga o'tadi - egasi
+    hech qachon hisobotsiz qolmaydi."""
+    if not ai_features_enabled() or not (stats_text or "").strip():
+        return None
+    client = _get_client()
+    if not client:
+        return None
+    try:
+        response = client.messages.create(
+            model=OPS_REPORT_MODEL, max_tokens=1500,
+            output_config={"effort": "low"},
+            system=_OPS_REPORT_SYSTEM,
+            messages=[{"role": "user", "content": stats_text}],
+        )
+        _log_usage("ops_report", response.usage, ok=True, model=OPS_REPORT_MODEL)
+        text = next((b.text for b in response.content if b.type == "text"), "")
+        text = strip_markdown(text).strip()
+        return text or None
+    except Exception:
+        logger.exception("ai_generate_ops_report xatolik")
+        _log_usage("ops_report", ok=False, model=OPS_REPORT_MODEL)
         return None
 
 

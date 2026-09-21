@@ -167,6 +167,7 @@ ADMIN_HTML = """<!DOCTYPE html>
   .sr-status.yangi { background: var(--brand-light); color: var(--brand); }
   .sr-status.bogl { background: #E8F1FE; color: #2563EB; }
   .sr-status.yopiq { background: var(--bg); color: var(--muted); }
+  .ai-warn-badge { background: #FFF3CD; color: #92600B; font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 8px; margin: 8px 0; }
 
   /* ===== ADMIN: forms, buttons, modal (Kutilmoqda/Obunachilar/Xavfli/Qidiruv/Bloklangan/Sozlamalar) ===== */
   .form-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
@@ -683,6 +684,7 @@ async function loadPending() {
         <div class="sr-name">${l.manzil || (l.raw_text || '').slice(0, 60) || 'Nomsiz'} — ${l.narx || ''}</div>
         <span class="sr-status yangi">#${l.id}</span>
       </div>
+      ${(l.ai_scam_warning || l.receipt_warning) ? `<div class="ai-warn-badge">\U0001F916⚠️ AI ogohlantirishi: ${[l.ai_scam_warning, l.receipt_warning].filter(Boolean).join(' · ')}</div>` : ''}
       <div class="sr-meta">
         \U0001F464 ${l.full_name || 'Nomsiz'}${l.username ? ' · @' + l.username : ''}<br>
         \U0001F4DE ${l.telefon || '-'} · \U0001F553 ${l.created_at}<br>
@@ -703,6 +705,7 @@ async function loadPending() {
         <div class="sr-name">${s.full_name || 'Nomsiz'}${s.username ? ' · @' + s.username : ''}</div>
         <span class="sr-status yangi">#${s.id}</span>
       </div>
+      ${s.receipt_warning ? `<div class="ai-warn-badge">\U0001F916⚠️ AI ogohlantirishi: ${s.receipt_warning}</div>` : ''}
       <div class="sr-meta">\U0001F194 user_id: ${s.user_id} · \U0001F553 ${s.created_at}</div>
       ${s.receipt_photo ? `<div class="photo-thumbs"><img src="/photo/${s.receipt_photo}" loading="lazy"></div>` : ''}
       <div class="sr-actions">

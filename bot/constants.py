@@ -152,6 +152,11 @@ SETTINGS_FIELDS = {
         "hint": "Bitta foydalanuvchi/mehmon bir kunda AI yordamchiga nechta xabar yozishi mumkinligini yozing. Masalan: 30",
         "kind": "int",
     },
+    "ai_ops_report_enabled": {
+        "label": "\U0001F4C8 Kunlik AI boshqaruv hisoboti",
+        "hint": "Yoqilsa, har kuni kechqurun AI tahlili + tavsiyalar bilan qisqa hisobot adminlarga yuboriladi.",
+        "kind": "bool",
+    },
 }
 
 

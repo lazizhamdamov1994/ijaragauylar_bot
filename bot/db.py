@@ -187,6 +187,20 @@ def set_listing_receipt_warning(listing_id: int, warning: str) -> None:
     conn.close()
 
 
+def set_listing_scam_warning(listing_id: int, reason: str) -> None:
+    conn = db()
+    conn.execute("UPDATE listings SET ai_scam_warning = ? WHERE id = ?", (reason, listing_id))
+    conn.commit()
+    conn.close()
+
+
+def set_subscription_receipt_warning(subscription_id: int, warning: str) -> None:
+    conn = db()
+    conn.execute("UPDATE subscriptions SET receipt_warning = ? WHERE id = ?", (warning, subscription_id))
+    conn.commit()
+    conn.close()
+
+
 
 def confirm_listing_still_available(listing_id: int) -> None:
     conn = db()

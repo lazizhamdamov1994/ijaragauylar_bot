@@ -158,6 +158,7 @@ async def subscription_receipt(update: Update, context: ContextTypes.DEFAULT_TYP
                 receipt_check = await loop.run_in_executor(None, ai_check_receipt, receipt_bytes, "image/jpeg", price, CARD_HOLDER)
                 if receipt_check and not receipt_check.get("matches"):
                     ai_note = f"\n\n\U0001F916⚠️ <b>AI: chekda nomuvofiqlik</b> — {esc(receipt_check.get('note') or '')}"
+                    set_subscription_receipt_warning(sub_id, receipt_check.get("note") or "")
         except Exception:
             logger.exception("AI obuna chekini tekshirishda xatolik")
 
