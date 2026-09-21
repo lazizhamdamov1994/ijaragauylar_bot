@@ -66,7 +66,11 @@ logger = logging.getLogger(__name__)
     VIEWING_TIME_WAIT,
     DISTALIAS_ADD_WAIT,
     AI_CONCIERGE_CHAT,
-) = range(39)
+    VALUATION_DISTRICT_WAIT,
+    VALUATION_XONA,
+    VALUATION_CONDITION,
+    VALUATION_PHOTOS,
+) = range(43)
 
 BTN_ELON = "\U0001F4DD E'lon berish"
 BTN_LISTINGS = "\U0001F4CB Mening e'lonlarim"
@@ -92,6 +96,9 @@ BTN_USER_SEARCH = "\U0001F50E Qidirish"
 BTN_DISTRICT_ALIASES = "\U0001F5FA Tuman kalit so'zlari"
 BTN_AI_CONCIERGE = "\U0001F916 AI yordamchi"
 BTN_AI_CONCIERGE_END = "\U0001F51A Suhbatni tugatish"
+BTN_VALUATION = "\U0001F3F7 Uyimni baholash (AI)"
+BTN_VALUATION_SKIP_PHOTOS = "➡️ Rasmsiz davom etish"
+BTN_VALUATION_DONE_PHOTOS = "✅ Tayyor, baholang"
 
 STEPS = [
     {"state": MANZIL, "field": "manzil", "prompt": "\U0001F4CD <b>Manzil</b> (Адрес):", "kind": "text", "maxlen": 250},

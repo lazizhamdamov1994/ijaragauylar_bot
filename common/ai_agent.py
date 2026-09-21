@@ -74,6 +74,22 @@ def _search_listings_tool(hudud: str = "", xona: str = "", rental_type: str = ""
     return {"jami_topildi": total, "korsatilgan": results}
 
 
+def find_comparable_listings(district: str, xona: str = "", limit: int = 8) -> list:
+    """Uy baholash (ai_valuate_property) uchun - berilgan tuman/xonadagi
+    HAQIQIY faol e'lonlarni topadi (comps), shu orqali AI'ning bahosi
+    o'ylab topilgan emas, real bozor ma'lumotiga asoslanadi. Bot ushbu
+    funksiyani ishlatadi (o'zi to'g'ridan-to'g'ri web/ dan import
+    qilmasligi kerak - arxitektura qoidasi), web esa o'zining
+    get_site_listings()'ini bevosita chaqiraveradi."""
+    from web.listings_data import get_site_listings
+
+    listings, _ = get_site_listings(hudud=district or "", xona=xona or "", page=1)
+    return [
+        {"manzil": l.get("manzil"), "narx": l.get("narx"), "xona": l.get("xona")}
+        for l in listings[:limit]
+    ]
+
+
 def _concierge_system_prompt() -> str:
     usd_rate = get_setting("usd_to_som_rate", "12700")
     return (

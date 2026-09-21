@@ -158,6 +158,10 @@ def init_schema() -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS district_price_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT, district TEXT NOT NULL, avg_price_som INTEGER NOT NULL,
         listing_count INTEGER NOT NULL, recorded_at TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS valuation_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_key TEXT NOT NULL, platform TEXT NOT NULL,
+        district TEXT, xona TEXT, condition_text TEXT, price_low TEXT, price_high TEXT,
+        reasoning TEXT, confidence TEXT, created_at TEXT)""")
     conn.commit()
     conn.close()
 
@@ -275,6 +279,31 @@ def log_ai_chat_message(user_key: str, platform: str) -> None:
     conn.execute(
         "INSERT INTO ai_chat_messages (user_key, platform, created_at) VALUES (?, ?, ?)",
         (str(user_key), platform, now_str()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def count_today_valuations(user_key: str, platform: str) -> int:
+    """AI uy baholash - kunlik xarajatni nazorat qilish uchun."""
+    since = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = db()
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM valuation_requests WHERE user_key = ? AND platform = ? AND created_at >= ?",
+        (str(user_key), platform, since),
+    ).fetchone()["c"]
+    conn.close()
+    return n
+
+
+def save_valuation_request(user_key: str, platform: str, district: str, xona: str, condition_text: str, result: dict) -> None:
+    conn = db()
+    conn.execute(
+        """INSERT INTO valuation_requests
+           (user_key, platform, district, xona, condition_text, price_low, price_high, reasoning, confidence, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (str(user_key), platform, district, xona, condition_text,
+         result.get("price_low"), result.get("price_high"), result.get("reasoning"), result.get("confidence"), now_str()),
     )
     conn.commit()
     conn.close()

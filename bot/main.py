@@ -60,6 +60,7 @@ from bot.flow_edit import *  # noqa: F401,F403
 from bot.flow_viewing import *  # noqa: F401,F403
 from bot.jobs import *  # noqa: F401,F403
 from bot.ai_concierge import *  # noqa: F401,F403
+from bot.flow_valuation import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
 
@@ -217,6 +218,25 @@ def main():
         persistent=False,
     )
 
+    valuation_conv = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex(f"^{re.escape(BTN_VALUATION)}$"), valuation_entry)],
+        states={
+            VALUATION_DISTRICT_WAIT: [CallbackQueryHandler(valuation_district_router, pattern=r"^valdist_\d+$")],
+            VALUATION_XONA: [MessageHandler(filters.TEXT & ~filters.COMMAND, valuation_xona_received)],
+            VALUATION_CONDITION: [MessageHandler(filters.TEXT & ~filters.COMMAND, valuation_condition_received)],
+            VALUATION_PHOTOS: [
+                MessageHandler(filters.PHOTO, valuation_photo_received),
+                MessageHandler(
+                    filters.Regex(f"^{re.escape(BTN_VALUATION_DONE_PHOTOS)}$|^{re.escape(BTN_VALUATION_SKIP_PHOTOS)}$"),
+                    valuation_photos_finish_router,
+                ),
+            ],
+        },
+        fallbacks=[CommandHandler("bekor", valuation_cancel)],
+        name="valuation_conv",
+        persistent=False,
+    )
+
     mod_add_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(mod_add_entry, pattern="^mod_add$")],
         states={MOD_ADD_WAIT: [MessageHandler(filters.ALL & ~filters.COMMAND, mod_add_received)]},
@@ -294,6 +314,7 @@ def main():
     app.add_handler(admin_block_conv)
     app.add_handler(quick_conv)
     app.add_handler(ai_concierge_conv)
+    app.add_handler(valuation_conv)
     app.add_handler(mod_add_conv)
     app.add_handler(admin_add_conv)
     app.add_handler(distalias_add_conv)

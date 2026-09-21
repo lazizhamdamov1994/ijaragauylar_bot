@@ -394,6 +394,76 @@ def ai_analyze_market_trends(history_text: str) -> str:
         return None
 
 
+# ============================= 7: UY BAHOLASH (FOYDALANUVCHILAR UCHUN) =============================
+
+_VALUATION_SYSTEM = (
+    "Siz \"Ijaraga Uylar\" platformasida uy egalariga ijara narxini baholashda yordam beruvchi "
+    "yordamchisiz. Sizga uyning tumani, xonalar soni, holati/qulayliklari va (agar bo'lsa) "
+    "shu tuman/xonadagi HAQIQIY faol e'lonlar narxi (\"comps\" - solishtirish uchun) beriladi. "
+    "Ba'zida uy rasmlari ham beriladi - shunda ularni ham hisobga oling (holati, ta'miri, "
+    "jihozlanishi).\n\n"
+    "QOIDALAR:\n"
+    "- Bu SIZNING BAHOINGIZ - professional baholovchi xulosasi EMAS. Har doim shuni tan oling.\n"
+    "- FAQAT berilgan comps narxlariga asoslanib taxminiy diapazon bering - agar comps kam yoki "
+    "yo'q bo'lsa, buni ochiq ayting va kengroq (ehtiyotkor) diapazon bering.\n"
+    "- Hech qachon o'zingizdan aniq bozor ma'lumoti to'qib chiqarmang.\n"
+    "- FAQAT JSON qaytaring, boshqa matn yozmang:\n"
+    '{"price_low": "taxminiy quyi chegara (masalan \'250$\')", "price_high": "taxminiy yuqori '
+    'chegara (masalan \'320$\')", "reasoning": "2-3 gaplik qisqa asos - nima uchun shu diapazon", '
+    '"confidence": "past" yoki "o\'rta" yoki "yuqori" - comps sifati/soniga qarab}\n'
+    "Markdown ishlatmang."
+)
+
+
+def ai_valuate_property(manzil_tuman: str, xona: str, condition_text: str, comps: list, photos: list = None):
+    """Foydalanuvchining uyi uchun taxminiy ijara narxi diapazonini
+    HAQIQIY comps (shu tuman/xonadagi faol e'lonlar) asosida baholaydi -
+    hech qachon comps'siz "havodan" raqam aytmaydi. `photos` - ixtiyoriy,
+    har biri (image_bytes, media_type) juftligi, ko'pi bilan 3 ta.
+    None = AI fikr bera olmadi. dict qaytsa: {"price_low": str,
+    "price_high": str, "reasoning": str, "confidence": str}."""
+    if not ai_features_enabled() or not (manzil_tuman or "").strip():
+        return None
+    client = _get_client()
+    if not client:
+        return None
+    try:
+        comps_text = "\n".join(
+            f"- {c.get('manzil','')}: {c.get('narx','')}, {c.get('xona','')} xona" for c in (comps or [])[:10]
+        ) or "(shu tuman/xona bo'yicha faol e'lon topilmadi)"
+        details_text = (
+            f"Tuman: {manzil_tuman}\nXonalar soni: {xona}\nHolati/qulayliklari: {condition_text or '(yozilmagan)'}\n\n"
+            f"Solishtirish uchun shu tuman/xonadagi faol e'lonlar:\n{comps_text}"
+        )
+        content = [{"type": "text", "text": details_text}]
+        import base64
+        for image_bytes, media_type in (photos or [])[:3]:
+            b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
+            content.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}})
+
+        response = client.messages.create(
+            model=MARKET_ANALYSIS_MODEL, max_tokens=600,
+            output_config={"effort": "low"},
+            system=_VALUATION_SYSTEM,
+            messages=[{"role": "user", "content": content}],
+        )
+        _log_usage("valuate_property", response.usage, ok=True, model=MARKET_ANALYSIS_MODEL)
+        text = next((b.text for b in response.content if b.type == "text"), "")
+        data = _extract_json(text)
+        if not isinstance(data, dict) or "price_low" not in data:
+            return None
+        return {
+            "price_low": str(data.get("price_low") or "").strip(),
+            "price_high": str(data.get("price_high") or "").strip(),
+            "reasoning": strip_markdown(str(data.get("reasoning") or "").strip()),
+            "confidence": str(data.get("confidence") or "o'rta").strip(),
+        }
+    except Exception:
+        logger.exception("ai_valuate_property xatolik")
+        _log_usage("valuate_property", ok=False, model=MARKET_ANALYSIS_MODEL)
+        return None
+
+
 def ai_usage_summary(days: int = 30) -> dict:
     """Admin panel uchun - so'nggi N kundagi AI xarajati/chaqiruvlar soni."""
     since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
