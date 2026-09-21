@@ -506,8 +506,11 @@ ADMIN_HTML = """<!DOCTYPE html>
   </div>
 
   <div id="tab-market" class="tab-page">
-    <div class="page-head"><h1>\U0001F4C8 Bozor tahlili</h1></div>
-    <div class="panel-sub" style="margin-bottom:16px;">Har kuni avtomatik yig'iladigan dollar kursi va tuman narx dinamikasi</div>
+    <div class="page-head">
+      <h1>\U0001F4C8 Bozor tahlili</h1>
+      <button class="btn btn-secondary" onclick="marketSnapshotNow()" id="market-snapshot-btn">\U0001F504 Hoziroq suratga ol</button>
+    </div>
+    <div class="panel-sub" style="margin-bottom:16px;">Har kuni (soat 23:00) avtomatik yig'iladigan dollar kursi va tuman narx dinamikasi - grafik ma'noli ko'rinishi uchun bir necha kunlik ma'lumot kerak. Darhol bitta nuqta qo'shish uchun yuqoridagi tugmani bosing.</div>
     <div class="charts-grid">
       <div class="panel">
         <h2>\U0001F4B1 Dollar kursi (so'mda)</h2>
@@ -744,6 +747,21 @@ async function loadDistrictPriceChart(district) {
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
       scales: { y: { grid: { color: gridColor }, ticks: { color: tickColor } }, x: { grid: { display: false }, ticks: { color: tickColor, maxRotation: 0, autoSkipPadding: 12 } } } }
   }));
+}
+
+async function marketSnapshotNow() {
+  const btn = document.getElementById('market-snapshot-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Suratga olinmoqda...';
+  try {
+    await fetch('/api/admin/market-snapshot-now', { method: 'POST' });
+    window._marketLoaded = false;
+    await loadMarketTab();
+    window._marketLoaded = true;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '\U0001F504 Hoziroq suratga ol';
+  }
 }
 
 async function runMarketAnalysis() {

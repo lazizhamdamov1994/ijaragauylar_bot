@@ -51,6 +51,7 @@ from web.render import TASHKENT_DISTRICTS
 # BITTA manbadan qayta ishlatiladi (admin panel botdagi barcha imkoniyatlarni
 # veb orqali ham berishi kerak - shu jumladan kanalga post qilish).
 from bot.admin_moderation import log_channel_post
+from bot.jobs import job_market_snapshot
 from bot.constants import SETTINGS_FIELDS
 from bot.db import (
     active_subscribers_page,
@@ -918,6 +919,16 @@ def api_admin_ai_usage(user: str = Depends(check_auth)):
 @router.get("/api/admin/ai-accuracy")
 def api_admin_ai_accuracy(days: int = Query(7), user: str = Depends(check_auth)):
     return ai_accuracy_summary(days)
+
+
+@router.post("/api/admin/market-snapshot-now")
+async def api_market_snapshot_now(user: str = Depends(check_auth)):
+    """Kunlik job_market_snapshot'ni ADMIN so'rovi bo'yicha darhol ishga
+    tushiradi - odatda bu job har kuni soat 23:00'da o'zi ishlaydi, lekin
+    yangi joylashtirilgan tizimda birinchi ma'lumot nuqtasi paydo bo'lishi
+    uchun kunlarcha kutish shart emas."""
+    await job_market_snapshot(None)
+    return {"ok": True}
 
 
 @router.get("/api/admin/usd-rate-history")
