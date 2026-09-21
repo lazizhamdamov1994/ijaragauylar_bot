@@ -162,6 +162,10 @@ def init_schema() -> None:
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_key TEXT NOT NULL, platform TEXT NOT NULL,
         district TEXT, xona TEXT, condition_text TEXT, price_low TEXT, price_high TEXT,
         reasoning TEXT, confidence TEXT, created_at TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS valuation_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, platform TEXT NOT NULL,
+        district TEXT, xona TEXT, condition_text TEXT, photo_file_ids TEXT, receipt_file_id TEXT,
+        status TEXT DEFAULT 'pending', created_at TEXT)""")
     conn.commit()
     conn.close()
 
@@ -284,6 +288,19 @@ def log_ai_chat_message(user_key: str, platform: str) -> None:
     conn.close()
 
 
+def has_prior_valuation(user_key: str) -> bool:
+    """Foydalanuvchi ilgari (istalgan vaqtda, PLATFORMADAN QAT'IY NAZAR -
+    bot yoki veb, farqi yo'q) kamida bitta baholashdan foydalanganmi -
+    shu orqali "birinchi baholash BEPUL, keyingilari pullik" qoidasi
+    HAR IKKALA platformada BITTA umumiy hisobga asoslanadi (aks holda
+    foydalanuvchi botda bepul ishlatib, veb saytda yana bepul olishi
+    mumkin bo'lardi)."""
+    conn = db()
+    row = conn.execute("SELECT 1 FROM valuation_requests WHERE user_key = ? LIMIT 1", (str(user_key),)).fetchone()
+    conn.close()
+    return row is not None
+
+
 def count_today_valuations(user_key: str, platform: str) -> int:
     """AI uy baholash - kunlik xarajatni nazorat qilish uchun."""
     since = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
@@ -294,6 +311,42 @@ def count_today_valuations(user_key: str, platform: str) -> int:
     ).fetchone()["c"]
     conn.close()
     return n
+
+
+def save_valuation_payment(user_id: int, platform: str, district: str, xona: str, condition_text: str,
+                            photo_file_ids: list, receipt_file_id: str) -> int:
+    conn = db()
+    conn.execute(
+        """INSERT INTO valuation_payments
+           (user_id, platform, district, xona, condition_text, photo_file_ids, receipt_file_id, status, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
+        (user_id, platform, district, xona, condition_text, json.dumps(photo_file_ids or []), receipt_file_id, now_str()),
+    )
+    payment_id = conn.execute("SELECT last_insert_rowid() id").fetchone()["id"]
+    conn.commit()
+    conn.close()
+    return payment_id
+
+
+def get_valuation_payment(payment_id: int):
+    conn = db()
+    row = conn.execute("SELECT * FROM valuation_payments WHERE id = ?", (payment_id,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    d = dict(row)
+    try:
+        d["photo_file_ids"] = json.loads(d.get("photo_file_ids") or "[]")
+    except (TypeError, ValueError):
+        d["photo_file_ids"] = []
+    return d
+
+
+def update_valuation_payment_status(payment_id: int, status: str) -> None:
+    conn = db()
+    conn.execute("UPDATE valuation_payments SET status = ? WHERE id = ?", (status, payment_id))
+    conn.commit()
+    conn.close()
 
 
 def save_valuation_request(user_key: str, platform: str, district: str, xona: str, condition_text: str, result: dict) -> None:

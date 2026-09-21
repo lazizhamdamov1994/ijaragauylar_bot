@@ -398,19 +398,31 @@ def ai_analyze_market_trends(history_text: str) -> str:
 
 _VALUATION_SYSTEM = (
     "Siz \"Ijaraga Uylar\" platformasida uy egalariga ijara narxini baholashda yordam beruvchi "
-    "yordamchisiz. Sizga uyning tumani, xonalar soni, holati/qulayliklari va (agar bo'lsa) "
-    "shu tuman/xonadagi HAQIQIY faol e'lonlar narxi (\"comps\" - solishtirish uchun) beriladi. "
-    "Ba'zida uy rasmlari ham beriladi - shunda ularni ham hisobga oling (holati, ta'miri, "
-    "jihozlanishi).\n\n"
-    "QOIDALAR:\n"
-    "- Bu SIZNING BAHOINGIZ - professional baholovchi xulosasi EMAS. Har doim shuni tan oling.\n"
-    "- FAQAT berilgan comps narxlariga asoslanib taxminiy diapazon bering - agar comps kam yoki "
-    "yo'q bo'lsa, buni ochiq ayting va kengroq (ehtiyotkor) diapazon bering.\n"
-    "- Hech qachon o'zingizdan aniq bozor ma'lumoti to'qib chiqarmang.\n"
+    "yordamchisiz. Sizga uyning tumani, xonalar soni, holati/qulayliklari va shu tuman/xonadagi "
+    "HAQIQIY faol e'lonlar narxi (\"comps\" - solishtirish uchun, allaqachon so'mga aniq "
+    "o'tkazilgan raqamlar bilan) beriladi. Ba'zida uy rasmlari ham beriladi.\n\n"
+    "QOIDALAR (ANIQLIK UCHUN MUHIM):\n"
+    "1. NARX HISOBI: diapazoningiz ANIQ berilgan comps raqamlariga asoslanishi SHART - "
+    "reasoning'da qaysi comp(lar)ni asos qilib olganingizni raqamlari bilan aniq ayting "
+    "(masalan \"3 ta comp 280$-320$ oralig'ida, shuning uchun...\"). Comp'lar orasidagi "
+    "chetga chiqib turgan (juda arzon/juda qimmat, boshqalardan 2x farq qiladigan) qiymatlarni "
+    "asosiy diapazonni hisoblashda e'tiborsiz qoldiring, faqat izohda eslatib o'ting.\n"
+    "2. RASM TAHLILI: agar rasm berilgan bo'lsa, ANIQ nimani ko'rganingizni ayting (masalan "
+    "\"oshxonada zamonaviy mebel va rangli plitka\", \"devor bo'yog'i eskirgan\") - umumiy "
+    "\"yaxshi holat\" kabi noaniq baho bermang. Rasm xira/tushunarsiz bo'lsa yoki uy holatini "
+    "aniq baholash uchun yetarli bo'lmasa, buni OCHIQ ayting.\n"
+    "3. RASM TA'SIRI CHEKLANGAN: rasmlar narxni comps diapazonidan sezilarli darajada "
+    "(taxminan 15-20% dan ortiq) chetga chiqarishi UCHUN kuchli, aniq asos (masalan aniq "
+    "yevroremont belgilari YOKI aniq ta'mirga muhtojlik belgilari) bo'lishi kerak - engil "
+    "taassurotga asoslanib katta narx sakrashi qilmang.\n"
+    "4. Bu SIZNING BAHOINGIZ - professional baholovchi xulosasi EMAS. Har doim shuni tan oling.\n"
+    "5. Foydalanuvchiga foydali bo'lgan comps 3 tadan kam bo'lsa yoki umuman yo'q bo'lsa, "
+    "confidence'ni albatta \"past\" qiling va diapazonni kengroq bering - hech qachon "
+    "comps'siz aniq raqam \"o'ylab topmang\".\n"
     "- FAQAT JSON qaytaring, boshqa matn yozmang:\n"
     '{"price_low": "taxminiy quyi chegara (masalan \'250$\')", "price_high": "taxminiy yuqori '
-    'chegara (masalan \'320$\')", "reasoning": "2-3 gaplik qisqa asos - nima uchun shu diapazon", '
-    '"confidence": "past" yoki "o\'rta" yoki "yuqori" - comps sifati/soniga qarab}\n'
+    'chegara (masalan \'320$\')", "reasoning": "2-4 gaplik aniq asos - qaysi comp raqamlariga '
+    'tayangan va rasmda nimani ko\'rgan", "confidence": "past" yoki "o\'rta" yoki "yuqori"}\n'
     "Markdown ishlatmang."
 )
 
@@ -421,20 +433,39 @@ def ai_valuate_property(manzil_tuman: str, xona: str, condition_text: str, comps
     hech qachon comps'siz "havodan" raqam aytmaydi. `photos` - ixtiyoriy,
     har biri (image_bytes, media_type) juftligi, ko'pi bilan 3 ta.
     None = AI fikr bera olmadi. dict qaytsa: {"price_low": str,
-    "price_high": str, "reasoning": str, "confidence": str}."""
+    "price_high": str, "reasoning": str, "confidence": str}.
+
+    MUHIM (o'z-o'zini tuzatish sikli - ai_screen_for_scam bilan bir xil
+    tamoyil): admin "ai_valuation_extra_guidance" sozlamasiga real
+    foydalanuvchi fikr-mulohazasi asosidagi qo'shimcha ko'rsatma yozib
+    qo'ysa, u shu yerda tizim ko'rsatmasiga QO'SHILADI - kod
+    o'zgartirmasdan, darhol kuchga kiradi."""
     if not ai_features_enabled() or not (manzil_tuman or "").strip():
         return None
     client = _get_client()
     if not client:
         return None
     try:
-        comps_text = "\n".join(
-            f"- {c.get('manzil','')}: {c.get('narx','')}, {c.get('xona','')} xona" for c in (comps or [])[:10]
-        ) or "(shu tuman/xona bo'yicha faol e'lon topilmadi)"
+        from common.districts import current_usd_to_som_rate, parse_price_value
+
+        usd_rate = current_usd_to_som_rate()
+        usable, unusable_count = [], 0
+        for c in comps or []:
+            if parse_price_value(c.get("narx"), usd_rate) is not None:
+                usable.append(c)
+            else:
+                unusable_count += 1
+        comps_lines = [f"- {c.get('manzil','')}: {c.get('narx','')} ({c.get('xona','')} xona)" for c in usable[:10]]
+        if unusable_count:
+            comps_lines.append(f"(yana {unusable_count} ta e'lon bor, lekin narxi noaniq/\"kelishiladi\" - hisobga OLMANG)")
+        comps_text = "\n".join(comps_lines) or "(shu tuman/xona bo'yicha aniq narxli faol e'lon topilmadi)"
         details_text = (
             f"Tuman: {manzil_tuman}\nXonalar soni: {xona}\nHolati/qulayliklari: {condition_text or '(yozilmagan)'}\n\n"
-            f"Solishtirish uchun shu tuman/xonadagi faol e'lonlar:\n{comps_text}"
+            f"Solishtirish uchun shu tuman/xonadagi ANIQ narxli faol e'lonlar ({len(usable)} ta):\n{comps_text}"
         )
+        extra_guidance = (get_setting("ai_valuation_extra_guidance", "") or "").strip()
+        system = _VALUATION_SYSTEM + (f"\n\nQO'SHIMCHA KO'RSATMA (foydalanuvchi fikr-mulohazasidan): {extra_guidance}" if extra_guidance else "")
+
         content = [{"type": "text", "text": details_text}]
         import base64
         for image_bytes, media_type in (photos or [])[:3]:
@@ -442,9 +473,9 @@ def ai_valuate_property(manzil_tuman: str, xona: str, condition_text: str, comps
             content.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}})
 
         response = client.messages.create(
-            model=MARKET_ANALYSIS_MODEL, max_tokens=600,
-            output_config={"effort": "low"},
-            system=_VALUATION_SYSTEM,
+            model=MARKET_ANALYSIS_MODEL, max_tokens=700,
+            output_config={"effort": "medium" if photos else "low"},
+            system=system,
             messages=[{"role": "user", "content": content}],
         )
         _log_usage("valuate_property", response.usage, ok=True, model=MARKET_ANALYSIS_MODEL)

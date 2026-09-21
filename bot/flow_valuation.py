@@ -13,13 +13,21 @@ hech qachon "buzilib" qolmaydi.
 """
 import logging
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, ConversationHandler
 
-from common.ai import ai_features_enabled, ai_valuate_property
+from common.ai import ai_check_receipt, ai_features_enabled, ai_valuate_property
 from common.ai_agent import find_comparable_listings
-from common.db import count_today_valuations, save_valuation_request
+from common.config import ADMIN_IDS, CARD_HOLDER
+from common.db import (
+    get_setting,
+    get_valuation_payment,
+    has_prior_valuation,
+    save_valuation_payment,
+    save_valuation_request,
+    update_valuation_payment_status,
+)
 from common.districts import TASHKENT_DISTRICTS
 from common.telegram_media import download_photo_bytes
 
@@ -31,7 +39,6 @@ from bot.fraud_detection import *  # noqa: F401,F403
 logger = logging.getLogger(__name__)
 
 MAX_VALUATION_PHOTOS = 3
-DAILY_VALUATION_LIMIT = 5
 
 _PHOTO_KEYBOARD = ReplyKeyboardMarkup([[BTN_VALUATION_DONE_PHOTOS], [BTN_VALUATION_SKIP_PHOTOS]], resize_keyboard=True)
 
@@ -46,12 +53,6 @@ async def valuation_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not ai_features_enabled():
         await update.message.reply_text(
             "\U0001F916 Bu funksiya hozircha ishga tushirilmagan. Tez orada faollashadi!",
-            reply_markup=main_menu_keyboard(user.id),
-        )
-        return ConversationHandler.END
-    if count_today_valuations(user.id, "bot") >= DAILY_VALUATION_LIMIT:
-        await update.message.reply_text(
-            "⚠️ Bugungi baholash so'rovlari chegarasiga yetdingiz. Ertaga qayta urinib ko'ring.",
             reply_markup=main_menu_keyboard(user.id),
         )
         return ConversationHandler.END
@@ -135,16 +136,13 @@ async def valuation_photos_finish_router(update: Update, context: ContextTypes.D
     return await _finish_valuation(update, context)
 
 
-async def _finish_valuation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    user = update.effective_user
-    val = context.user_data.get("valuation") or {}
-    district = val.get("district", "")
-    xona = val.get("xona", "")
-    condition = val.get("condition", "")
-    photo_file_ids = val.get("photos", [])
-
-    await context.bot.send_chat_action(update.effective_chat.id, "typing")
-
+async def _generate_and_send_valuation(context: ContextTypes.DEFAULT_TYPE, user_id: int, chat_id: int,
+                                        district: str, xona: str, condition: str, photo_file_ids: list) -> bool:
+    """AI orqali baholab, natijani foydalanuvchiga yuboradi - bepul (darhol
+    ishlaydigan) va pullik-tasdiqlangan (admin/AI to'lovni tasdiqlagandan
+    keyin ishlaydigan) yo'llarning IKKALASI ham shu bitta funksiyadan
+    foydalanadi - mantiq ikki joyda takrorlanmaydi. Muvaffaqiyatli
+    bo'lsa True."""
     photos = []
     for file_id in photo_file_ids:
         raw = await download_photo_bytes(file_id)
@@ -154,35 +152,183 @@ async def _finish_valuation(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     comps = find_comparable_listings(district, xona)
     result = ai_valuate_property(district, xona, condition, comps, photos)
 
-    context.user_data.pop("valuation", None)
-
     if not result:
-        await update.message.reply_text(
-            "⚠️ Baholashda vaqtinchalik texnik nosozlik. Birozdan keyin qayta urinib ko'ring.",
-            reply_markup=main_menu_keyboard(user.id),
-        )
-        return ConversationHandler.END
+        try:
+            await context.bot.send_message(
+                chat_id, "⚠️ Baholashda vaqtinchalik texnik nosozlik. Birozdan keyin qayta urinib ko'ring.",
+                reply_markup=main_menu_keyboard(user_id),
+            )
+        except Exception:
+            logger.exception("Foydalanuvchiga xabar yuborib bo'lmadi")
+        return False
 
-    save_valuation_request(user.id, "bot", district, xona, condition, result)
+    save_valuation_request(user_id, "bot", district, xona, condition, result)
 
-    confidence_label = {"past": "past", "o'rta": "o'rta", "yuqori": "yuqori"}.get(result["confidence"], result["confidence"])
     comps_note = (
         f"\U0001F4CA Tahlil {len(comps)} ta shu tuman/xonadagi faol e'longa asoslandi."
         if comps else "⚠️ Shu tuman/xonada solishtirish uchun faol e'lon topilmadi - taxmin keng chegarada berildi."
     )
     text = (
         f"\U0001F3F7 <b>Taxminiy ijara narxi:</b> {result['price_low']} — {result['price_high']}\n"
-        f"\U0001F3AF Ishonchlilik darajasi: {confidence_label}\n\n"
+        f"\U0001F3AF Ishonchlilik darajasi: {result['confidence']}\n\n"
         f"{result['reasoning']}\n\n"
         f"{comps_note}\n\n"
         "<i>⚠️ Bu AI tomonidan berilgan taxminiy yo'l-yo'riq, professional baholash emas.</i>\n\n"
         f"Uyingizni shu narxda joylashtirmoqchimisiz? «{BTN_ELON}» tugmasini bosing!"
     )
-    await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=main_menu_keyboard(user.id))
+    try:
+        await context.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML, reply_markup=main_menu_keyboard(user_id))
+    except Exception:
+        logger.exception("Baholash natijasini yuborib bo'lmadi")
+    return True
+
+
+async def _finish_valuation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user = update.effective_user
+    val = context.user_data.get("valuation") or {}
+    district = val.get("district", "")
+    xona = val.get("xona", "")
+    condition = val.get("condition", "")
+    photo_file_ids = val.get("photos", [])
+    context.user_data.pop("valuation", None)
+
+    if not has_prior_valuation(user.id):
+        await context.bot.send_chat_action(update.effective_chat.id, "typing")
+        await _generate_and_send_valuation(context, user.id, update.effective_chat.id, district, xona, condition, photo_file_ids)
+        return ConversationHandler.END
+
+    # MUHIM: birinchi baholash HAR DOIM bepul - keyingilari pullik (admin
+    # "valuation_price" sozlamasida narxni belgilaydi). To'lov oqimi
+    # bot/flow_subscription.py bilan bir xil naqsh: karta ko'rsatiladi,
+    # chek so'raladi, AI oldindan tekshiradi, mos kelsa darhol davom
+    # etadi, mos kelmasa/AI o'chirilgan bo'lsa admin qo'lda tasdiqlaydi.
+    price = int(get_setting("valuation_price", "10000"))
+    context.user_data["valuation_pending_payment"] = {"district": district, "xona": xona, "condition": condition, "photos": photo_file_ids}
+    await update.message.reply_text(
+        "ℹ️ Birinchi baholashingiz allaqachon bepul ishlatilgan - keyingi baholashlar pullik.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    await update.message.reply_text(
+        card_html(price, "Uy baholash"), parse_mode=ParseMode.HTML, reply_markup=card_payment_keyboard("nav_cancel"),
+    )
+    return VALUATION_RECEIPT_WAIT
+
+
+async def valuation_receipt_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not update.message.photo:
+        await update.message.reply_text("⚠️ Iltimos, to'lov chekining skrinshotini RASM sifatida yuboring.")
+        return VALUATION_RECEIPT_WAIT
+
+    user = update.effective_user
+    pending = context.user_data.get("valuation_pending_payment")
+    if not pending:
+        context.user_data.pop("valuation_pending_payment", None)
+        return ConversationHandler.END
+
+    receipt_file_id = update.message.photo[-1].file_id
+    price = int(get_setting("valuation_price", "10000"))
+
+    await context.bot.send_chat_action(update.effective_chat.id, "typing")
+    receipt_check = None
+    try:
+        receipt_bytes = await download_photo_bytes(receipt_file_id)
+        if receipt_bytes:
+            receipt_check = ai_check_receipt(receipt_bytes, "image/jpeg", price, CARD_HOLDER)
+    except Exception:
+        logger.exception("AI uy baholash chekini tekshirishda xatolik")
+
+    if receipt_check and receipt_check.get("matches"):
+        await update.message.reply_text("✅ To'lov tasdiqlandi! Baholanmoqda...", reply_markup=main_menu_keyboard(user.id))
+        await _generate_and_send_valuation(
+            context, user.id, update.effective_chat.id, pending["district"], pending["xona"], pending["condition"], pending["photos"],
+        )
+        context.user_data.pop("valuation_pending_payment", None)
+        return ConversationHandler.END
+
+    payment_id = save_valuation_payment(
+        user.id, "bot", pending["district"], pending["xona"], pending["condition"], pending["photos"], receipt_file_id,
+    )
+    context.user_data.pop("valuation_pending_payment", None)
+    await update.message.reply_text(
+        "\U0001F4E8 Chekingiz adminga tekshirish uchun yuborildi. Tasdiqlangach, baholash natijasi shu yerga keladi.",
+        reply_markup=main_menu_keyboard(user.id),
+    )
+    ai_note = f"\n\n\U0001F916⚠️ AI: {esc(receipt_check.get('note') or '')}" if receipt_check else ""
+    admin_keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Tasdiqlash", callback_data=f"valpay_approve_{payment_id}"),
+        InlineKeyboardButton("❌ Rad etish", callback_data=f"valpay_reject_{payment_id}"),
+    ]])
+    caption = (
+        f"\U0001F3F7 <b>Yangi pullik uy baholash so'rovi</b> #{payment_id}\n\n"
+        f"\U0001F464 {esc(user.full_name)} (@{esc(user.username) or 'yo`q'})\n"
+        f"\U0001F194 user_id: {user.id}\n"
+        f"\U0001F3D8 Tuman: {esc(pending['district'])} · {esc(pending['xona'])} xona\n"
+        f"\U0001F4B0 Summasi: {price:,} so'm"
+        f"{ai_note}"
+    )
+    for admin_id in ADMIN_IDS:
+        try:
+            await context.bot.send_photo(admin_id, receipt_file_id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=admin_keyboard)
+        except Exception:
+            logger.exception("Adminga (%s) to'lov so'rovini yuborib bo'lmadi", admin_id)
     return ConversationHandler.END
+
+
+async def valuation_receipt_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    context.user_data.pop("valuation_pending_payment", None)
+    await query.edit_message_text("❌ Bekor qilindi.")
+    return ConversationHandler.END
+
+
+async def valpay_approve_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if not is_super_moderator(query.from_user.id):
+        await query.answer("Sizda ruxsat yo'q — to'lovlarni faqat admin yoki super moderator tasdiqlay oladi.", show_alert=True)
+        return
+    payment_id = int(query.data.rsplit("_", 1)[1])
+    payment = get_valuation_payment(payment_id)
+    if not payment or payment["status"] != "pending":
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text("⚠️ Bu so'rov allaqachon ko'rib chiqilgan.")
+        return
+    update_valuation_payment_status(payment_id, "approved")
+    await query.edit_message_reply_markup(reply_markup=None)
+    await query.message.reply_text(f"✅ To'lov #{payment_id} tasdiqlandi, baholash yuborilmoqda...")
+    await _generate_and_send_valuation(
+        context, payment["user_id"], payment["user_id"],
+        payment["district"], payment["xona"], payment["condition_text"], payment["photo_file_ids"],
+    )
+
+
+async def valpay_reject_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if not is_super_moderator(query.from_user.id):
+        await query.answer("Sizda ruxsat yo'q — to'lovlarni faqat admin yoki super moderator rad eta oladi.", show_alert=True)
+        return
+    payment_id = int(query.data.rsplit("_", 1)[1])
+    payment = get_valuation_payment(payment_id)
+    if not payment or payment["status"] != "pending":
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text("⚠️ Bu so'rov allaqachon ko'rib chiqilgan.")
+        return
+    update_valuation_payment_status(payment_id, "rejected")
+    await query.edit_message_reply_markup(reply_markup=None)
+    await query.message.reply_text(f"❌ To'lov #{payment_id} rad etildi.")
+    try:
+        await context.bot.send_message(
+            payment["user_id"],
+            "❌ Uy baholash uchun to'lovingiz tasdiqlanmadi. Chekni tekshirib qaytadan urinib ko'ring yoki qo'llab-quvvatlash bilan bog'laning.",
+        )
+    except Exception:
+        logger.exception("Foydalanuvchiga rad etish xabarini yuborib bo'lmadi")
 
 
 async def valuation_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.pop("valuation", None)
+    context.user_data.pop("valuation_pending_payment", None)
     await update.message.reply_text("Bekor qilindi.", reply_markup=main_menu_keyboard(update.effective_user.id))
     return ConversationHandler.END

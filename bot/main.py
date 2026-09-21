@@ -231,6 +231,10 @@ def main():
                     valuation_photos_finish_router,
                 ),
             ],
+            VALUATION_RECEIPT_WAIT: [
+                CallbackQueryHandler(valuation_receipt_cancel, pattern="^nav_cancel$"),
+                MessageHandler(~filters.COMMAND, valuation_receipt_received),
+            ],
         },
         fallbacks=[CommandHandler("bekor", valuation_cancel)],
         name="valuation_conv",
@@ -327,6 +331,8 @@ def main():
         text_menu_router,
     ))
     app.add_handler(CallbackQueryHandler(admin_approve, pattern=r"^admin_approve_(listing|sub)_\d+$"))
+    app.add_handler(CallbackQueryHandler(valpay_approve_router, pattern=r"^valpay_approve_\d+$"))
+    app.add_handler(CallbackQueryHandler(valpay_reject_router, pattern=r"^valpay_reject_\d+$"))
     app.add_handler(CallbackQueryHandler(subpage_router, pattern=r"^subpage_\d+$"))
     app.add_handler(CallbackQueryHandler(usercard_router, pattern=r"^usercard_\d+$"))
     app.add_handler(CallbackQueryHandler(cardcancel_router, pattern=r"^cardcancel_\d+$"))

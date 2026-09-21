@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 import httpx
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from common.config import (
     ADMIN_IDS,
@@ -24,12 +24,25 @@ from common.config import (
     SITE_NAME,
     SITE_URL,
 )
-from common.db import db, get_favorite_listing_ids, get_price_history, get_setting, has_prior_rejected_listing, is_phone_blocked, now_str
+from common.db import (
+    db,
+    get_favorite_listing_ids,
+    get_price_history,
+    get_setting,
+    has_prior_rejected_listing,
+    has_prior_valuation,
+    is_phone_blocked,
+    now_str,
+    save_valuation_payment,
+    save_valuation_request,
+)
 from common.telegram_media import watermark_photo_bytes_list
-from common.ai import ai_features_enabled, ai_screen_for_scam
+from common.ai import ai_check_receipt, ai_features_enabled, ai_screen_for_scam, ai_valuate_property
+from common.ai_agent import find_comparable_listings
 
 from bot.db import get_listing, set_listing_scam_warning, update_listing_status
 from bot.admin_moderation import log_channel_post
+from bot.flow_valuation import MAX_VALUATION_PHOTOS
 
 from web.auth import _client_ip, get_current_tg_user, is_web_subscribed
 from web.listings_data import (
@@ -1540,6 +1553,359 @@ async def submit_web_listing(
         logger.exception("Web e'lon uchun adminlarga umumiy xabar yuborishda xatolik")
 
     return {"ok": True, "listing_id": listing_id}
+
+
+# ============================= AI UY BAHOLASH (veb) =============================
+#
+# Bot'dagi (bot/flow_valuation.py) BILAN BIR XIL qoida: har bir odamning
+# BIRINCHI baholashi bepul (platformadan qat'iy nazar - has_prior_valuation
+# umumiy hisoblaydi), keyingi baholashlar pullik. Pullik yo'lda chek AI
+# tomonidan oldindan tekshiriladi - mos kelsa darhol natija, mos kelmasa
+# admin qo'lda tasdiqlaydi (bot bilan bir xil valpay_approve_/valpay_reject_
+# tugmalari - allaqachon bot/main.py'da ro'yxatdan o'tgan, shuning uchun
+# veb-saytdan kelgan to'lov so'rovi ham xuddi bot'dan kelganidek ishlaydi).
+
+@router.get("/baholash", response_class=HTMLResponse)
+def baholash_page(request: Request):
+    lang = get_lang(request)
+    tg_user = get_current_tg_user(request)
+    if not tg_user:
+        return RedirectResponse("/login?next=/baholash", status_code=302)
+
+    price = int(get_setting("valuation_price", "10000"))
+    card = current_card_number()
+    card_grouped = " ".join(re.sub(r"\D", "", card)[i:i + 4] for i in range(0, len(re.sub(r"\D", "", card)), 4)) if card else ""
+    district_options = "".join(f'<option value="{esc_html(d)}">{esc_html(d)}</option>' for d in TASHKENT_DISTRICTS)
+
+    html = f"""<!DOCTYPE html>
+<html lang="{lang}">
+<head>
+{render_head("AI uy baholash - Ijaraga Uylar", "AI yordamida uyingiz uchun taxminiy ijara narxini bilib oling - shu tumandagi haqiqiy e'lonlarga asoslangan.", "/baholash", lang=lang)}
+</head>
+<body>
+{render_header(lang, "/baholash")}
+
+<section class="form-page-hero">
+  <div class="wrap">
+    <h1>{icon('sparkle', 26)} AI uy baholash</h1>
+    <p>Bir necha savolga javob bering - AI shu tuman/xonadagi HAQIQIY faol e'lonlarga asoslanib, taxminiy ijara narxini aytadi.</p>
+  </div>
+</section>
+
+<main class="wrap">
+  <div class="form-shell">
+    <div class="form-card">
+      <div id="formStep">
+        <div class="fstep-badge">{icon('shield', 13)} Birinchi baholash BEPUL</div>
+        <div id="formError" class="form-error-box"></div>
+
+        <form id="valuationForm">
+          <div class="form-section-title">{icon('home', 17)} Uyingiz haqida</div>
+          <div class="form-group">
+            <label>Tuman <span class="req">*</span></label>
+            <select class="form-input form-select" name="district" id="districtSelect" required>
+              <option value="">— Tumanni tanlang —</option>
+              {district_options}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Nechta xonali? <span class="req">*</span></label>
+            <input class="form-input" name="xona" maxlength="60" required placeholder="Masalan: 2 xona, studio">
+          </div>
+          <div class="form-group">
+            <label>Holati/qulayliklari</label>
+            <textarea class="form-textarea" name="condition" maxlength="900" placeholder="Masalan: yevroremont, mebel bor, yangi uy"></textarea>
+          </div>
+
+          <div class="form-section-title">{icon('camera_off', 17)} Rasmlar (ixtiyoriy, {MAX_VALUATION_PHOTOS} tagacha)</div>
+          <div class="photo-drop" id="photoDrop">
+            <div class="ico" style="width:30px;height:30px;margin:0 auto;color:var(--muted);">{ICONS['camera_off']}</div>
+            <div class="pd-title">Uyingiz rasmlarini yuklang</div>
+            <div class="pd-sub">AI rasmlarni ham tahlil qilib, bahoga qo'shadi</div>
+          </div>
+          <input type="file" id="photoInput" accept="image/*" multiple hidden>
+          <div class="photo-preview" id="photoPreview"></div>
+
+          <button type="submit" class="form-submit-btn" id="submitBtn">{icon('send', 16)} Baholashni boshlash</button>
+          <div class="form-hint" style="text-align:center;margin-top:10px;">⚠️ Bu AI tomonidan berilgan taxminiy yo'l-yo'riq, professional baholash emas.</div>
+        </form>
+
+        <div id="payStep" style="display:none;">
+          <div class="form-section-title">{icon('coin', 17)} To'lov</div>
+          <p class="form-hint">ℹ️ Birinchi baholashingiz allaqachon bepul ishlatilgan - keyingi baholashlar pullik.</p>
+          <div class="pay-panel show">
+            <div class="card-box">
+              <div><div style="font-size:11px;color:var(--muted);font-weight:700;margin-bottom:3px;">To'lov uchun karta</div><div class="cb-num" id="cardNumText">{card_grouped or "—"}</div></div>
+              <button type="button" onclick="copyCard()">{icon('copy', 12)} Nusxa olish</button>
+            </div>
+            <div class="form-hint" style="margin-bottom:10px;">Yuqoridagi kartaga <b>{price:,}</b> so'm o'tkazib, chekning skrinshotini yuklang.</div>
+            <div class="photo-drop" id="receiptDrop" style="padding:16px;">
+              <div class="pd-title" id="receiptLabel">To'lov chekini yuklang</div>
+              <div class="pd-sub">Skrinshot yoki rasm</div>
+            </div>
+            <input type="file" id="receiptInput" accept="image/*" hidden>
+          </div>
+          <button type="button" class="form-submit-btn" id="paySubmitBtn">{icon('send', 16)} Chekni yuborish</button>
+        </div>
+      </div>
+
+      <div id="formSuccess" class="form-success-screen" style="display:none;">
+        <div class="fs-icon">{icon('check_circle', 34)}</div>
+        <h2 id="successTitle">Natija tayyor!</h2>
+        <div id="successText" style="text-align:left;"></div>
+        <a href="/elon-joylash" class="btn-cta" style="display:inline-flex;margin-top:20px;">{icon('sparkle', 16)} E'lon berish</a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div style="height:60px;"></div>
+{render_footer(lang)}
+
+<script>
+let selectedPhotos = [];
+const photoInput = document.getElementById('photoInput');
+const photoDrop = document.getElementById('photoDrop');
+const photoPreview = document.getElementById('photoPreview');
+photoDrop.addEventListener('click', () => photoInput.click());
+photoInput.addEventListener('change', () => addPhotos(photoInput.files));
+function addPhotos(fileList) {{
+  for (const f of fileList) {{
+    if (!f.type.startsWith('image/')) continue;
+    if (selectedPhotos.length >= {MAX_VALUATION_PHOTOS}) break;
+    selectedPhotos.push(f);
+  }}
+  renderPhotoPreview();
+}}
+function removePhoto(idx) {{ selectedPhotos.splice(idx, 1); renderPhotoPreview(); }}
+function renderPhotoPreview() {{
+  photoPreview.innerHTML = selectedPhotos.map((f, i) => {{
+    const url = URL.createObjectURL(f);
+    return `<div class="photo-thumb"><img src="${{url}}"><button type="button" class="pt-remove" onclick="removePhoto(${{i}})">✕</button></div>`;
+  }}).join('');
+}}
+
+let receiptFile = null;
+const receiptInput = document.getElementById('receiptInput');
+document.getElementById('receiptDrop').addEventListener('click', () => receiptInput.click());
+receiptInput.addEventListener('change', () => {{
+  if (receiptInput.files[0]) {{
+    receiptFile = receiptInput.files[0];
+    document.getElementById('receiptLabel').textContent = '✅ ' + receiptFile.name;
+  }}
+}});
+function copyCard() {{ navigator.clipboard.writeText("{re.sub(r'[^0-9]', '', card)}"); }}
+
+function showResult(result, comps_count) {{
+  document.getElementById('formStep').style.display = 'none';
+  document.getElementById('formSuccess').style.display = 'block';
+  const compsNote = comps_count > 0
+    ? `\U0001F4CA Tahlil ${{comps_count}} ta shu tuman/xonadagi faol e'longa asoslandi.`
+    : "⚠️ Shu tuman/xonada solishtirish uchun faol e'lon topilmadi - taxmin keng chegarada berildi.";
+  document.getElementById('successText').innerHTML =
+    `<p><b>\U0001F3F7 Taxminiy ijara narxi:</b> ${{result.price_low}} — ${{result.price_high}}</p>` +
+    `<p><b>\U0001F3AF Ishonchlilik darajasi:</b> ${{result.confidence}}</p>` +
+    `<p>${{result.reasoning}}</p>` +
+    `<p style="color:var(--muted);font-size:13px;">${{compsNote}}</p>`;
+  window.scrollTo({{ top: 0, behavior: 'smooth' }});
+}}
+
+const form = document.getElementById('valuationForm');
+const errorBox = document.getElementById('formError');
+let lastFormValues = null;
+
+form.addEventListener('submit', async function(e) {{
+  e.preventDefault();
+  errorBox.classList.remove('show');
+  const submitBtn = document.getElementById('submitBtn');
+  submitBtn.disabled = true;
+
+  const fd = new FormData(form);
+  selectedPhotos.forEach(f => fd.append('photos', f));
+  lastFormValues = {{ district: form.district.value, xona: form.xona.value, condition: form.condition.value }};
+
+  try {{
+    const res = await fetch('/api/baholash', {{ method: 'POST', body: fd }});
+    const data = await res.json().catch(() => ({{}}));
+    if (res.ok && data.ok && data.result) {{
+      showResult(data.result, data.comps_count || 0);
+    }} else if (res.ok && data.ok && data.needs_payment) {{
+      document.getElementById('formStep').querySelector('form').style.display = 'none';
+      document.getElementById('payStep').style.display = 'block';
+      window.scrollTo({{ top: 0, behavior: 'smooth' }});
+    }} else {{
+      errorBox.textContent = data.detail || "Xatolik yuz berdi. Qaytadan urinib ko'ring.";
+      errorBox.classList.add('show');
+    }}
+  }} catch (err) {{
+    errorBox.textContent = "Tarmoq xatoligi. Internetni tekshirib, qaytadan urinib ko'ring.";
+    errorBox.classList.add('show');
+  }}
+  submitBtn.disabled = false;
+}});
+
+document.getElementById('paySubmitBtn').addEventListener('click', async function() {{
+  errorBox.classList.remove('show');
+  if (!receiptFile) {{
+    errorBox.textContent = "Iltimos, to'lov chekining skrinshotini yuklang.";
+    errorBox.classList.add('show');
+    return;
+  }}
+  const btn = this;
+  btn.disabled = true;
+
+  const fd = new FormData();
+  fd.append('district', lastFormValues.district);
+  fd.append('xona', lastFormValues.xona);
+  fd.append('condition', lastFormValues.condition);
+  selectedPhotos.forEach(f => fd.append('photos', f));
+  fd.append('receipt', receiptFile);
+
+  try {{
+    const res = await fetch('/api/baholash', {{ method: 'POST', body: fd }});
+    const data = await res.json().catch(() => ({{}}));
+    if (res.ok && data.ok && data.result) {{
+      showResult(data.result, data.comps_count || 0);
+    }} else if (res.ok && data.ok && data.pending_admin_review) {{
+      document.getElementById('formStep').style.display = 'none';
+      document.getElementById('formSuccess').style.display = 'block';
+      document.getElementById('successTitle').textContent = "Chekingiz tekshirilmoqda";
+      document.getElementById('successText').innerHTML = '<p>\U0001F4E8 Chekingiz adminga tekshirish uchun yuborildi. Tasdiqlangach, baholash natijasi Telegram botga yuboriladi.</p>';
+    }} else {{
+      errorBox.textContent = data.detail || "Xatolik yuz berdi. Qaytadan urinib ko'ring.";
+      errorBox.classList.add('show');
+    }}
+  }} catch (err) {{
+    errorBox.textContent = "Tarmoq xatoligi. Internetni tekshirib, qaytadan urinib ko'ring.";
+    errorBox.classList.add('show');
+  }}
+  btn.disabled = false;
+}});
+</script>
+</body>
+</html>"""
+    return HTMLResponse(html)
+
+
+async def _notify_admins_valuation_payment(payment_id: int, uid: int, district: str, xona: str, price: int, receipt_file_id: str, ai_note: str) -> None:
+    if not ADMIN_IDS or not BOT_TOKEN:
+        return
+    caption = (
+        f"\U0001F3F7 <b>Yangi pullik uy baholash so'rovi</b> #{payment_id}\n\n"
+        f"\U0001F310 Manba: veb-sayt\n"
+        f"\U0001F194 user_id: {uid}\n"
+        f"\U0001F3D8 Tuman: {esc_html(district)} · {esc_html(xona)} xona\n"
+        f"\U0001F4B0 Summasi: {price:,} so'm"
+        f"{ai_note}"
+    )
+    keyboard = {"inline_keyboard": [[
+        {"text": "✅ Tasdiqlash", "callback_data": f"valpay_approve_{payment_id}"},
+        {"text": "❌ Rad etish", "callback_data": f"valpay_reject_{payment_id}"},
+    ]]}
+    async with httpx.AsyncClient(timeout=20) as client:
+        for admin_id in ADMIN_IDS:
+            try:
+                await client.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
+                    json={"chat_id": admin_id, "photo": receipt_file_id, "caption": caption,
+                          "parse_mode": "HTML", "reply_markup": keyboard},
+                )
+            except Exception:
+                logger.exception("Web uy baholash to'lovi haqida adminga (%s) xabar yuborib bo'lmadi", admin_id)
+
+
+@router.post("/api/baholash")
+async def submit_valuation(
+    request: Request,
+    district: str = Form(...),
+    xona: str = Form(...),
+    condition: str = Form(""),
+    photos: list[UploadFile] = File([]),
+    receipt: UploadFile = File(None),
+):
+    tg_user = get_current_tg_user(request)
+    if not tg_user:
+        raise HTTPException(status_code=401, detail="Iltimos, Telegram orqali tizimga kiring.")
+    uid = tg_user["uid"]
+
+    district = (district or "").strip()
+    xona = (xona or "").strip()[:60]
+    condition = (condition or "").strip()[:900]
+    if district not in TASHKENT_DISTRICTS:
+        raise HTTPException(status_code=400, detail="Iltimos, ro'yxatdan tumanni tanlang.")
+    if not xona:
+        raise HTTPException(status_code=400, detail="Xonalar sonini kiriting.")
+
+    valid_photos = [p for p in (photos or []) if p and p.filename][:MAX_VALUATION_PHOTOS]
+    photo_bytes = []
+    for p in valid_photos:
+        content = await p.read()
+        if len(content) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Har bir rasm 10MB dan oshmasligi kerak.")
+        photo_bytes.append(content)
+    ai_photos = [(b, "image/jpeg") for b in photo_bytes]
+
+    if not ai_features_enabled():
+        raise HTTPException(status_code=503, detail="Bu funksiya hozircha ishga tushirilmagan. Tez orada faollashadi!")
+
+    if not has_prior_valuation(uid):
+        comps = find_comparable_listings(district, xona)
+        result = ai_valuate_property(district, xona, condition, comps, ai_photos)
+        if not result:
+            raise HTTPException(status_code=503, detail="Baholashda vaqtinchalik texnik nosozlik. Birozdan keyin qayta urinib ko'ring.")
+        save_valuation_request(uid, "web", district, xona, condition, result)
+        return {"ok": True, "free": True, "result": result, "comps_count": len(comps)}
+
+    price = int(get_setting("valuation_price", "10000"))
+    has_receipt = receipt is not None and receipt.filename
+    if not has_receipt:
+        return {"ok": True, "needs_payment": True, "price": price}
+
+    receipt_bytes = await receipt.read()
+    if len(receipt_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Chek rasmi 10MB dan oshmasligi kerak.")
+
+    receipt_check = None
+    try:
+        receipt_check = ai_check_receipt(receipt_bytes, "image/jpeg", price, CARD_HOLDER)
+    except Exception:
+        logger.exception("AI uy baholash chekini tekshirishda xatolik (veb)")
+
+    if receipt_check and receipt_check.get("matches"):
+        comps = find_comparable_listings(district, xona)
+        result = ai_valuate_property(district, xona, condition, comps, ai_photos)
+        if not result:
+            raise HTTPException(status_code=503, detail="Baholashda vaqtinchalik texnik nosozlik. Birozdan keyin qayta urinib ko'ring.")
+        save_valuation_request(uid, "web", district, xona, condition, result)
+        return {"ok": True, "free": False, "auto_approved": True, "result": result, "comps_count": len(comps)}
+
+    if not ADMIN_IDS or not BOT_TOKEN:
+        raise HTTPException(status_code=503, detail="Tizim vaqtincha sozlanmoqda. Iltimos, birozdan so'ng qaytadan urinib ko'ring.")
+
+    upload_chat_id = ADMIN_IDS[0]
+    photo_file_ids = []
+    try:
+        if photo_bytes:
+            photo_file_ids = await telegram_upload_photos(upload_chat_id, photo_bytes, [f"uy{i}.jpg" for i in range(len(photo_bytes))])
+    except Exception:
+        logger.exception("Web uy baholash rasmlarini yuklashda xatolik")
+    try:
+        r_ids = await telegram_upload_photos(upload_chat_id, [receipt_bytes], ["chek.jpg"])
+        receipt_file_id = r_ids[0] if r_ids else None
+    except Exception:
+        logger.exception("Web uy baholash chekini yuklashda xatolik")
+        receipt_file_id = None
+    if not receipt_file_id:
+        raise HTTPException(status_code=502, detail="Chekni yuklab bo'lmadi. Qaytadan urinib ko'ring.")
+
+    payment_id = save_valuation_payment(uid, "web", district, xona, condition, photo_file_ids, receipt_file_id)
+    ai_note = f"\n\n\U0001F916⚠️ AI: {esc_html(receipt_check.get('note') or '')}" if receipt_check else ""
+    try:
+        await _notify_admins_valuation_payment(payment_id, uid, district, xona, price, receipt_file_id, ai_note)
+    except Exception:
+        logger.exception("Web uy baholash to'lovi uchun adminlarga umumiy xabar yuborishda xatolik")
+
+    return {"ok": True, "pending_admin_review": True}
 
 
 @router.post("/api/listing-inquiry")

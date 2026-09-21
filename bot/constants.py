@@ -70,7 +70,8 @@ logger = logging.getLogger(__name__)
     VALUATION_XONA,
     VALUATION_CONDITION,
     VALUATION_PHOTOS,
-) = range(43)
+    VALUATION_RECEIPT_WAIT,
+) = range(44)
 
 BTN_ELON = "\U0001F4DD E'lon berish"
 BTN_LISTINGS = "\U0001F4CB Mening e'lonlarim"
@@ -168,6 +169,16 @@ SETTINGS_FIELDS = {
         "label": "\U0001F9E0 AI firibgarlik skriningiga qo'shimcha ko'rsatma",
         "hint": "Haftalik \"AI aniqlik tahlili\" xabarida AI o'zi tavsiya bergan qo'shimcha ko'rsatmani shu yerga ko'chiring - darhol kuchga kiradi. Bo'sh qoldirish mumkin.",
         "kind": "text_long",
+    },
+    "ai_valuation_extra_guidance": {
+        "label": "\U0001F9E0 AI uy baholashga qo'shimcha ko'rsatma",
+        "hint": "AI narxni noto'g'ri baholayotganini payqasangiz, shu yerga tuzatuvchi ko'rsatma yozing (masalan \"eski uylarga rasm asosida narxni oshirmang\") - darhol kuchga kiradi.",
+        "kind": "text_long",
+    },
+    "valuation_price": {
+        "label": "\U0001F3F7 Pullik uy baholash narxi (so'm)",
+        "hint": "Har bir foydalanuvchining BIRINCHI baholashi doim bepul. Keyingi (2-, 3- ...) baholashlar uchun narxni shu yerda belgilang. Masalan: 10000",
+        "kind": "int",
     },
 }
 

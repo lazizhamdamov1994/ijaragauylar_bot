@@ -68,6 +68,8 @@ DEFAULT_SETTINGS = {
     "ai_concierge_daily_limit": "30",
     "ai_ops_report_enabled": "1",
     "ai_scam_extra_guidance": "",
+    "ai_valuation_extra_guidance": "",
+    "valuation_price": "10000",
 }
 
 # ---- Telegram orqali kirish (shaxsiy kabinet) ----
