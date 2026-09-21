@@ -96,6 +96,8 @@ async def approve_and_post_listing_core(context: ContextTypes.DEFAULT_TYPE, list
     update_listing_status(listing_id, "approved", channel_msg_id=channel_msg_id)
     listing["channel_msg_id"] = channel_msg_id
 
+    log_ai_feedback(listing_id, was_flagged=bool(listing.get("ai_scam_warning")), decision="approved")
+
     await notify_location_alert_matches(context, listing)
 
     try:
@@ -197,6 +199,7 @@ async def admin_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYPE
         listing = get_listing(listing_id)
         if listing and listing["status"] == "pending":
             update_listing_status(listing_id, "rejected", reason=reason)
+            log_ai_feedback(listing_id, was_flagged=bool(listing.get("ai_scam_warning")), decision="rejected")
             await update.message.reply_text(f"\u274c E'lon #{listing_id} rad etildi.", reply_markup=main_menu_keyboard(update.effective_user.id))
             try:
                 await context.bot.send_message(

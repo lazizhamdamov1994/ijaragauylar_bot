@@ -8,16 +8,23 @@ import re
 from collections import defaultdict
 from datetime import datetime, timedelta
 
+import csv
+import io
+
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import Response
 
 from common.config import ADMIN_IDS, BOT_TOKEN, BOT_USERNAME, CHANNEL_ID, CHANNEL_USERNAME
 from common.db import (
+    ai_accuracy_summary,
     broadcast_notification,
     create_support_request,
     db,
     get_blocked_phone,
+    get_district_price_history,
     get_pending_support_requests,
+    get_usd_rate_history,
     get_setting,
     is_subscribed,
     now_str,
@@ -59,6 +66,7 @@ from bot.db import (
     get_subscription,
     get_user,
     list_blocked_phones_page,
+    log_ai_feedback,
     reject_subscription,
     stats_for_period,
     unblock_phone,
@@ -605,6 +613,7 @@ async def api_admin_approve_listing(listing_id: int, user: str = Depends(check_a
         raise HTTPException(status_code=502, detail="channel_post_failed")
     update_listing_status(listing_id, "approved", channel_msg_id=message_id)
     log_channel_post(listing_id, message_id)
+    log_ai_feedback(listing_id, was_flagged=bool(listing.get("ai_scam_warning")), decision="approved")
     link = f"https://t.me/{CHANNEL_USERNAME}" if CHANNEL_USERNAME else None
     msg = "✅ Sizning e'loningiz tasdiqlandi va kanalga joylandi!"
     if link:
@@ -624,6 +633,7 @@ async def api_admin_reject_listing(listing_id: int, reason: str = Query(...), us
     if not reason:
         raise HTTPException(status_code=400, detail="empty_reason")
     update_listing_status(listing_id, "rejected", reason=reason)
+    log_ai_feedback(listing_id, was_flagged=bool(listing.get("ai_scam_warning")), decision="rejected")
     await notify_telegram(listing["user_id"], f"❌ Sizning e'loningiz (#{listing_id}) rad etildi.\n\U0001F4DD Sabab: {html.escape(reason)}")
     return {"ok": True}
 
@@ -903,6 +913,38 @@ def api_admin_set_setting(key: str = Query(...), value: str = Query(...), user: 
 @router.get("/api/admin/ai-usage")
 def api_admin_ai_usage(user: str = Depends(check_auth)):
     return ai_usage_summary(30)
+
+
+@router.get("/api/admin/ai-accuracy")
+def api_admin_ai_accuracy(days: int = Query(7), user: str = Depends(check_auth)):
+    return ai_accuracy_summary(days)
+
+
+def _csv_response(filename: str, header: list, rows: list) -> Response:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(header)
+    writer.writerows(rows)
+    return Response(
+        content=buf.getvalue(), media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/api/admin/export/usd-rate-history.csv")
+def api_export_usd_rate_history(days: int = Query(365), user: str = Depends(check_auth)):
+    rows = get_usd_rate_history(days)
+    return _csv_response("usd_rate_history.csv", ["rate_som", "recorded_at"], [[r["rate"], r["recorded_at"]] for r in rows])
+
+
+@router.get("/api/admin/export/district-price-history.csv")
+def api_export_district_price_history(days: int = Query(365), user: str = Depends(check_auth)):
+    rows = get_district_price_history(days=days)
+    return _csv_response(
+        "district_price_history.csv",
+        ["district", "avg_price_som", "listing_count", "recorded_at"],
+        [[r["district"], r["avg_price_som"], r["listing_count"], r["recorded_at"]] for r in rows],
+    )
 
 
 @router.post("/api/admin/broadcast")

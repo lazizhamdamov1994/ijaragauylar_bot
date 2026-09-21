@@ -29,7 +29,8 @@ from telegram.constants import ParseMode
 from telegram.error import BadRequest, NetworkError, TimedOut
 from telegram.ext import ContextTypes, ConversationHandler, filters
 
-from common.ai import ai_features_enabled, ai_generate_ops_report, ai_usage_summary
+from common.ai import ai_features_enabled, ai_generate_ops_report, ai_review_own_accuracy, ai_usage_summary
+from common.db import ai_accuracy_summary
 from common.config import ADMIN_IDS, ADMIN_USERNAME, BOT_TOKEN as TOKEN, CARD_HOLDER, CHANNEL_ID, CHANNEL_USERNAME, DASHBOARD_URL, DB_PATH, DEFAULT_SETTINGS as INITIAL_SETTINGS, MAX_DAILY_LISTINGS, MOD_DAILY_LISTINGS, STALE_CHECK_DAYS
 
 from bot.constants import *  # noqa: F401,F403
@@ -158,6 +159,97 @@ async def job_ai_daily_report(context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(admin_id, text)
         except Exception:
             logger.exception("Kunlik hisobotni yuborib bo'lmadi: admin_id=%s", admin_id)
+
+
+def _format_accuracy_text(a: dict) -> str:
+    return (
+        f"So'nggi hafta:\n"
+        f"AI shubhali deb belgilagan e'lonlar: {a['flagged_total']}\n"
+        f"Shulardan moderator baribir tasdiqlagani: {a['flagged_but_approved']}\n"
+        f"AI belgilamagan-u, keyin foydalanuvchilar shikoyat qilgan e'lonlar: {a['reported_after_unflagged']}"
+    )
+
+
+async def job_ai_accuracy_review(context: ContextTypes.DEFAULT_TYPE):
+    """Har hafta (yakshanba) AI'ning o'z ishini - REAL moderator qarorlari
+    va foydalanuvchi shikoyatlari asosida - tahlil qiladi va kerak bo'lsa
+    qo'shimcha ko'rsatma taklif qiladi. Bu tavsiya HECH QACHON avtomatik
+    qo'llanmaydi - admin xohlasa, `ai_scam_extra_guidance` sozlamasiga
+    o'zi ko'chirib qo'yadi (shundan keyin ai_screen_for_scam() uni darhol
+    o'qiy boshlaydi, qayta deploy shart emas)."""
+    if not ai_features_enabled():
+        return
+    accuracy = ai_accuracy_summary(7)
+    if accuracy["flagged_total"] == 0 and accuracy["reported_after_unflagged"] == 0:
+        return
+    accuracy_text = _format_accuracy_text(accuracy)
+    suggestion = None
+    try:
+        loop = asyncio.get_event_loop()
+        suggestion = await loop.run_in_executor(None, ai_review_own_accuracy, accuracy_text)
+    except Exception:
+        logger.exception("AI aniqlik tahlilida xatolik")
+    if not suggestion:
+        return
+    text = f"\U0001F9E0 Haftalik AI aniqlik tahlili\n\n{accuracy_text}\n\nAI tavsiyasi:\n{suggestion}"
+    for admin_id in ADMIN_IDS:
+        try:
+            await context.bot.send_message(admin_id, text)
+        except Exception:
+            logger.exception("Aniqlik tahlilini yuborib bo'lmadi: admin_id=%s", admin_id)
+
+
+def _district_avg_price(district: str, usd_rate: int) -> tuple:
+    """Bitta tuman uchun faol e'lonlar bo'yicha o'rtacha narx (so'mda) va
+    e'lonlar sonini hisoblaydi - web/listings_data.py'dagi get_site_listings
+    bilan BIR XIL alias-ga bog'liq qidiruv mantig'idan foydalanadi (masalan
+    "Darxon" -> Sergeli), shuning uchun natija saytdagi filtr bilan mos keladi."""
+    from common.districts import TASHKENT_DISTRICTS, get_aliases_for_district, parse_price_value
+
+    keywords = get_aliases_for_district(district) if district in TASHKENT_DISTRICTS else [district]
+    or_clauses, params = [], []
+    for kw in keywords:
+        or_clauses.append("manzil LIKE ?")
+        params.append(f"%{kw}%")
+        or_clauses.append("moljal LIKE ?")
+        params.append(f"%{kw}%")
+    conn = db()
+    rows = conn.execute(
+        "SELECT narx FROM listings WHERE status='approved' AND COALESCE(expired,0)=0 AND (" + " OR ".join(or_clauses) + ")",
+        params,
+    ).fetchall()
+    conn.close()
+    values = [v for v in (parse_price_value(r["narx"], usd_rate) for r in rows) if v]
+    if not values:
+        return 0, 0
+    return sum(values) // len(values), len(values)
+
+
+async def job_market_snapshot(context: ContextTypes.DEFAULT_TYPE):
+    """Har kuni: joriy dollar kursi va har bir tuman uchun o'rtacha narxni
+    "suratga oladi" (usd_rate_history/district_price_history) - vaqt
+    o'tishi bilan bozor tendensiyasini grafik/AI tahlil qilish uchun
+    ma'lumot to'planib boradi."""
+    from common.districts import TASHKENT_DISTRICTS, current_usd_to_som_rate
+
+    usd_rate = current_usd_to_som_rate()
+    recorded_at = now_str()
+    conn = db()
+    conn.execute("INSERT INTO usd_rate_history (rate, recorded_at) VALUES (?, ?)", (usd_rate, recorded_at))
+    conn.commit()
+    conn.close()
+
+    for district in TASHKENT_DISTRICTS:
+        avg_price, count = _district_avg_price(district, usd_rate)
+        if count == 0:
+            continue
+        conn = db()
+        conn.execute(
+            "INSERT INTO district_price_history (district, avg_price_som, listing_count, recorded_at) VALUES (?, ?, ?, ?)",
+            (district, avg_price, count, recorded_at),
+        )
+        conn.commit()
+        conn.close()
 
 
 async def job_daily_backup(context: ContextTypes.DEFAULT_TYPE):

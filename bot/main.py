@@ -367,6 +367,8 @@ def main():
         app.job_queue.run_daily(job_weekly_top_location, time=dtime(hour=9, minute=0, tzinfo=TASHKENT_TZ), days=(0,))
         app.job_queue.run_daily(job_empty_region_alert, time=dtime(hour=11, minute=0, tzinfo=TASHKENT_TZ))
         app.job_queue.run_daily(job_ai_daily_report, time=dtime(hour=21, minute=0, tzinfo=TASHKENT_TZ))
+        app.job_queue.run_daily(job_ai_accuracy_review, time=dtime(hour=10, minute=30, tzinfo=TASHKENT_TZ), days=(0,))
+        app.job_queue.run_daily(job_market_snapshot, time=dtime(hour=23, minute=0, tzinfo=TASHKENT_TZ))
     else:
         logger.warning("JobQueue mavjud emas \u2014 eslatma va oylik hisobot ishlamaydi. O'rnating: pip install \"python-telegram-bot[job-queue]\"")
 

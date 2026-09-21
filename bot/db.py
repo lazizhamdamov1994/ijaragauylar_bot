@@ -34,6 +34,7 @@ from common.db import (  # noqa: E402
     get_viewing_request,
     update_viewing_request_status,
     count_viewing_requests_today,
+    log_ai_feedback,
 )
 
 
@@ -252,8 +253,15 @@ def save_report(listing_id: int, user_id: int, reason: str) -> None:
         "INSERT INTO listing_reports (listing_id, user_id, reason, created_at) VALUES (?, ?, ?, ?)",
         (listing_id, user_id, reason, now_str()),
     )
+    row = conn.execute("SELECT ai_scam_warning FROM listings WHERE id = ?", (listing_id,)).fetchone()
     conn.commit()
     conn.close()
+    # AI TAHLIL UCHUN: agar AI bu e'lonni joylashda shubhali deb
+    # belgilamagan bo'lsa-yu, keyin foydalanuvchilar shikoyat qilsa - bu
+    # AI'ning haqiqiy "o'tkazib yuborgan" holati bo'lishi mumkin (real
+    # aniqlik o'lchovi uchun, common/ai.py'dagi ai_accuracy_summary).
+    if row and not row["ai_scam_warning"]:
+        log_ai_feedback(listing_id, was_flagged=False, decision="reported_after_unflagged")
 
 
 def get_user_listings(user_id: int, limit: int = 10):

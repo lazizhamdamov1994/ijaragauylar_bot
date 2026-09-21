@@ -34,8 +34,12 @@ AI_MODEL = "claude-haiku-4-5"
 # chaqiriladigan funksiyalar (masalan kunlik AI hisobot) kuchliroq
 # Opus 5'dan foydalanadi.
 OPS_REPORT_MODEL = "claude-opus-5"
+# O'rtacha hajmdagi, sifat muhim bo'lgan funksiyalar (bozor tahlili,
+# uy baholash) uchun - Opus'dan arzonroq, Haiku'dan ancha kuchliroq.
+MARKET_ANALYSIS_MODEL = "claude-sonnet-5"
 _MODEL_PRICING = {
     "claude-haiku-4-5": (1.00, 5.00),
+    "claude-sonnet-5": (2.00, 10.00),
     "claude-opus-5": (5.00, 25.00),
 }
 _DEFAULT_PRICING = _MODEL_PRICING[AI_MODEL]
@@ -171,16 +175,24 @@ def ai_screen_for_scam(raw_text: str):
     """E'lon matnida firibgarlik belgilarini tekshiradi. None = AI fikr
     bera olmadi (o'chirilgan/xatolik) - bu holatda listing ODATDAGIDEK
     davom etadi, hech kim bloklanmaydi. dict qaytsa: {"suspicious": bool,
-    "reason": str}."""
+    "reason": str}.
+
+    MUHIM (o'z-o'zini tuzatish sikli): admin "ai_scam_extra_guidance"
+    sozlamasiga real xato tahlili asosidagi qo'shimcha ko'rsatma yozib
+    qo'ysa (masalan haftalik ai_review_own_accuracy() tavsiyasidan
+    ko'chirib), u shu yerda tizim ko'rsatmasiga QO'SHILADI - kod
+    o'zgartirmasdan, qayta deploy qilmasdan, darhol kuchga kiradi."""
     if not ai_features_enabled() or not (raw_text or "").strip():
         return None
     client = _get_client()
     if not client:
         return None
     try:
+        extra_guidance = (get_setting("ai_scam_extra_guidance", "") or "").strip()
+        system = _SCAM_SYSTEM + (f"\n\nQO'SHIMCHA KO'RSATMA (moderatorlar tajribasidan): {extra_guidance}" if extra_guidance else "")
         response = client.messages.create(
             model=AI_MODEL, max_tokens=200,
-            system=_SCAM_SYSTEM,
+            system=system,
             messages=[{"role": "user", "content": raw_text[:4000]}],
         )
         _log_usage("screen_for_scam", response.usage, ok=True)
@@ -288,6 +300,55 @@ def ai_generate_ops_report(stats_text: str) -> str:
     except Exception:
         logger.exception("ai_generate_ops_report xatolik")
         _log_usage("ops_report", ok=False, model=OPS_REPORT_MODEL)
+        return None
+
+
+# ============================= 5: AI O'Z ANIQLIGINI TAHLIL QILISHI =============================
+
+_ACCURACY_REVIEW_SYSTEM = (
+    "Siz \"Ijaraga Uylar\" platformasidagi firibgarlik-skrining AI'sining ISHINI tahlil qiluvchi "
+    "yordamchisiz. Sizga so'nggi hafta davomida: necha marta shubhali deb belgilaganingiz, "
+    "shulardan nechtasini moderator baribir tasdiqlagani (ehtimol yolg'on signal berdingiz) va "
+    "necha marta belgilamagan e'longa keyin foydalanuvchilar shikoyat qilgani (ehtimol "
+    "o'tkazib yubordingiz) beriladi.\n\n"
+    "QOIDALAR:\n"
+    "- FAQAT berilgan raqamlar asosida yozing - aniq naqsh yoki misol ko'rsatilmagan bo'lsa, "
+    "hech qanday aniq \"nima sababdan xato bo'lgani\"ni o'ylab topmang.\n"
+    "- Agar raqamlar juda kichik bo'lsa (masalan 0-1 ta holat) - xulosa chiqarish uchun hali "
+    "yetarli ma'lumot yo'qligini ayting, o'ylab tavsiya bermang.\n"
+    "- Agar real muammo ko'rinsa (masalan yolg'on signal ko'p) - kelajakda skrining "
+    "ko'rsatmasiga QO'SHIB YOZISH mumkin bo'lgan, 1-2 gaplik, ANIQ va AMALIY qo'shimcha "
+    "ko'rsatma taklif qiling (masalan \"past narx yolg'iz o'zi shubhali belgi bo'lmasin\").\n"
+    "- Qisqa yozing (3-4 gap), Markdown ishlatmang."
+)
+
+
+def ai_review_own_accuracy(accuracy_text: str) -> str:
+    """AI'ning o'zi - haftalik aniqlik raqamlariga qarab - o'z skrining
+    ko'rsatmasiga qo'shimcha taklif beradi. Bu ADMIN'GA yuboriladigan
+    TAVSIYA, hech qachon avtomatik qo'llanmaydi - admin xohlasa,
+    tavsiyani "ai_scam_extra_guidance" sozlamasiga o'zi ko'chirib
+    qo'yadi (shundan keyin ai_screen_for_scam() uni darhol o'qiy
+    boshlaydi). None = AI fikr bera olmadi."""
+    if not ai_features_enabled() or not (accuracy_text or "").strip():
+        return None
+    client = _get_client()
+    if not client:
+        return None
+    try:
+        response = client.messages.create(
+            model=MARKET_ANALYSIS_MODEL, max_tokens=800,
+            output_config={"effort": "low"},
+            system=_ACCURACY_REVIEW_SYSTEM,
+            messages=[{"role": "user", "content": accuracy_text}],
+        )
+        _log_usage("accuracy_review", response.usage, ok=True, model=MARKET_ANALYSIS_MODEL)
+        text = next((b.text for b in response.content if b.type == "text"), "")
+        text = strip_markdown(text).strip()
+        return text or None
+    except Exception:
+        logger.exception("ai_review_own_accuracy xatolik")
+        _log_usage("accuracy_review", ok=False, model=MARKET_ANALYSIS_MODEL)
         return None
 
 

@@ -150,6 +150,14 @@ def init_schema() -> None:
         output_tokens INTEGER DEFAULT 0, cost_usd REAL DEFAULT 0, ok INTEGER DEFAULT 1, created_at TEXT)""")
     conn.execute("""CREATE TABLE IF NOT EXISTS ai_chat_messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_key TEXT NOT NULL, platform TEXT NOT NULL, created_at TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS ai_feedback_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, was_flagged INTEGER DEFAULT 0,
+        moderator_decision TEXT NOT NULL, created_at TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS usd_rate_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, rate INTEGER NOT NULL, recorded_at TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS district_price_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, district TEXT NOT NULL, avg_price_som INTEGER NOT NULL,
+        listing_count INTEGER NOT NULL, recorded_at TEXT)""")
     conn.commit()
     conn.close()
 
@@ -270,6 +278,78 @@ def log_ai_chat_message(user_key: str, platform: str) -> None:
     )
     conn.commit()
     conn.close()
+
+
+def log_ai_feedback(listing_id: int, was_flagged: bool, decision: str) -> None:
+    """AI'ning firibgarlik/chek belgisi bilan moderator/haqiqiy hodisaning
+    (tasdiqlash/rad etish/keyinchalik shikoyat) rozi/norozi bo'lishini
+    yozib boradi - shu orqali AI qanchalik ANIQ ishlayotgani vaqt o'tishi
+    bilan HAQIQIY raqamlarga asoslanib o'lchanadi (taxmin emas)."""
+    conn = db()
+    conn.execute(
+        "INSERT INTO ai_feedback_log (listing_id, was_flagged, moderator_decision, created_at) VALUES (?, ?, ?, ?)",
+        (listing_id, 1 if was_flagged else 0, decision, now_str()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def ai_accuracy_summary(days: int = 7) -> dict:
+    """So'nggi N kunda AI qanchalik aniq ishlaganini o'lchaydi:
+    - flagged_total: AI shubhali/nomuvofiq deb belgilagan holatlar soni
+    - flagged_but_approved: AI belgilagan-u, baribir moderator tasdiqlagan
+      (AI noto'g'ri signal bergan bo'lishi mumkin - "yolg'on signal")
+    - reported_after_unflagged: AI shubha bildirmagan, lekin keyinchalik
+      foydalanuvchilar shikoyat qilgan (AI o'tkazib yuborgan bo'lishi
+      mumkin - "o'tkazib yuborilgan holat")."""
+    since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = db()
+    flagged_total = conn.execute(
+        "SELECT COUNT(*) c FROM ai_feedback_log WHERE was_flagged=1 AND created_at >= ?", (since,)
+    ).fetchone()["c"]
+    flagged_but_approved = conn.execute(
+        "SELECT COUNT(*) c FROM ai_feedback_log WHERE was_flagged=1 AND moderator_decision='approved' AND created_at >= ?",
+        (since,),
+    ).fetchone()["c"]
+    reported_after_unflagged = conn.execute(
+        "SELECT COUNT(*) c FROM ai_feedback_log WHERE moderator_decision='reported_after_unflagged' AND created_at >= ?",
+        (since,),
+    ).fetchone()["c"]
+    conn.close()
+    return {
+        "flagged_total": flagged_total,
+        "flagged_but_approved": flagged_but_approved,
+        "reported_after_unflagged": reported_after_unflagged,
+    }
+
+
+def get_usd_rate_history(days: int = 90) -> list:
+    since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = db()
+    rows = conn.execute(
+        "SELECT rate, recorded_at FROM usd_rate_history WHERE recorded_at >= ? ORDER BY recorded_at ASC", (since,)
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_district_price_history(district: str = None, days: int = 90) -> list:
+    since = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = db()
+    if district:
+        rows = conn.execute(
+            """SELECT district, avg_price_som, listing_count, recorded_at FROM district_price_history
+               WHERE district = ? AND recorded_at >= ? ORDER BY recorded_at ASC""",
+            (district, since),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT district, avg_price_som, listing_count, recorded_at FROM district_price_history
+               WHERE recorded_at >= ? ORDER BY recorded_at ASC""",
+            (since,),
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def has_prior_rejected_listing(user_id: int = None, phone: str = None) -> bool:

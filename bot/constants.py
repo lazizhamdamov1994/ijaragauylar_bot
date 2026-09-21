@@ -157,6 +157,11 @@ SETTINGS_FIELDS = {
         "hint": "Yoqilsa, har kuni kechqurun AI tahlili + tavsiyalar bilan qisqa hisobot adminlarga yuboriladi.",
         "kind": "bool",
     },
+    "ai_scam_extra_guidance": {
+        "label": "\U0001F9E0 AI firibgarlik skriningiga qo'shimcha ko'rsatma",
+        "hint": "Haftalik \"AI aniqlik tahlili\" xabarida AI o'zi tavsiya bergan qo'shimcha ko'rsatmani shu yerga ko'chiring - darhol kuchga kiradi. Bo'sh qoldirish mumkin.",
+        "kind": "text_long",
+    },
 }
 
 
