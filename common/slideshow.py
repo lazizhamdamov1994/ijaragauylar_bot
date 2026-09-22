@@ -48,7 +48,17 @@ PRESCALE = 1.5  # zoompan silliq ishlashi uchun manba kadrni oldindan kattalasht
 
 BRAND_ACCENT = (255, 59, 92)  # sayt bilan bir xil #FF3B5C
 
+# MUHIM (dizayn sifati): avval generik tizim shrifti (DejaVu Sans Bold)
+# ishlatilardi - bu "qo'pol/havaskor" ko'rinishning asosiy sabablaridan
+# biri edi (real reklama shablonlarida har doim aniq, ta'sirchan display
+# shrift ishlatiladi). Endi repo bilan birga keladigan "Big Shoulders
+# Bold" (Google Fonts, SIL Open Font License - fonts/BigShoulders-OFL.txt)
+# BIRINCHI ustuvorlikda - torroq, qalin, "stiker sarlavha"ga mos display
+# shrift, o'zbekcha ʻ/ʼ belgilarini ham to'liq qo'llab-quvvatlaydi. Tizim
+# shriftlari FAQAT shu fayl serverda topilmasa ishlatiladigan zaxira.
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _FONT_CANDIDATES = (
+    os.path.join(_BASE_DIR, "fonts", "BigShoulders-Bold.ttf"),
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
 )
@@ -146,7 +156,7 @@ STICKER_MARGIN_X = 64
 STICKER_X0, STICKER_X1 = STICKER_MARGIN_X, CANVAS_W - STICKER_MARGIN_X
 STICKER_RADIUS = 30
 
-TITLE_BOX_TOP = 250
+TITLE_BOX_TOP = 380
 TITLE_BOX_H = 132
 TITLE_BOX_BOTTOM = TITLE_BOX_TOP + TITLE_BOX_H
 
@@ -165,32 +175,55 @@ CTA_LINE2 = "TELEGRAM KANALIMIZDA"
 
 def _draw_sticker_box(overlay: Image.Image, x0: int, y0: int, x1: int, y1: int, fill: tuple, radius: int = STICKER_RADIUS) -> None:
     """Qattiq rangli, yumaloq burchakli "stiker" karta - ortida yumshoq
-    soya bilan (rasm ustida suzayotgandek, professional chuqurlik hissi
-    beradi)."""
-    draw = ImageDraw.Draw(overlay)
+    soya (rasm ustida suzayotgandek chuqurlik hissi) VA yuqori qismida
+    yupqa yorqinroq "sheen" chizig'i bilan - bu tekis rangni yengil
+    yaltiroq/dizayn qilingan sirt ko'rinishiga keltiradi (reklama
+    shablonlarida keng qo'llaniladigan, arzon-lekin-samarali usul)."""
+    draw = ImageDraw.Draw(overlay, "RGBA")
     draw.rounded_rectangle([x0 - 4, y0 + 8, x1 + 4, y1 + 14], radius=radius + 4, fill=(0, 0, 0, 70))
     draw.rounded_rectangle([x0, y0, x1, y1], radius=radius, fill=(*fill, 255))
 
+    # MUHIM: sheen'ni TO'G'RIDAN-TO'G'RI shu overlay'ga (ImageDraw "RGBA"
+    # rejimida ham) chizish - haqiqiy renderda tekshirilganda - kutilganidek
+    # pushti/ko'k rang ustiga emas, TAGIDAGI FOTOSURATGA aralashib, kulrang/
+    # loyqa chiqishi aniqlandi. Shuning uchun sheen ALOHIDA, o'zining sof
+    # shaffof qatlamida chizilib, keyin Image.alpha_composite() orqali
+    # ANIQ shu bosqichda (box tagida emas, ENDI opaque box ustida) qo'shiladi
+    # - shu yo'l bilan yorqinroq rang HAQIQATAN HAM box rangi ustiga
+    # aralashadi, fon rasmiga emas.
+    sheen_color = tuple(min(255, c + 45) for c in fill)
+    sheen_bottom = y0 + max(int((y1 - y0) * 0.24), radius)
+    sheen_layer = Image.new("RGBA", overlay.size, (0, 0, 0, 0))
+    ImageDraw.Draw(sheen_layer).rounded_rectangle(
+        [x0 + 3, y0 + 3, x1 - 3, sheen_bottom], radius=max(radius - 3, 1), fill=(*sheen_color, 60),
+    )
+    overlay.alpha_composite(sheen_layer)
+
 
 def _draw_phone_icon(overlay: Image.Image, cx: int, cy: int, badge_r: int, icon_color: tuple) -> None:
-    """Telefon ikonkasini shrift/emoji'ga BUTUNLAY bog'liq bo'lmagan holda,
-    sof PIL geometriyasi orqali chizadi (manzil qatoridagi rangli nuqta
-    bilan bir xil sabab - ba'zi serverlarda emoji "quti" bo'lib chiqishi
-    mumkin, bu esa HAR DOIM, har qanday serverda bir xil chiqadi)."""
-    draw = ImageDraw.Draw(overlay)
+    """Telefon (smartfon) ikonkasini shrift/emoji'ga BUTUNLAY bog'liq
+    bo'lmagan holda, sof PIL geometriyasi orqali chizadi (manzil
+    qatoridagi rangli nuqta bilan bir xil sabab - ba'zi serverlarda emoji
+    "quti" bo'lib chiqishi mumkin, bu esa HAR DOIM bir xil chiqadi).
+    Klassik telefon dastasi shaklini geometrik primitivlardan yasashga
+    urinish (chiziq+doiralar) amalda tanib bo'lmaydigan "suyak" shaklga
+    aylanib qoldi (haqiqiy render orqali topilgan xato) - shuning uchun
+    ANIQ, darhol tanib olinadigan shakl ishlatiladi: yumaloq burchakli
+    "korpus" + ichida oq "ekran" to'rtburchagi - zamonaviy smartfon
+    siluetiga o'xshaydi, kichik o'lchamda ham aniq o'qiladi."""
+    draw = ImageDraw.Draw(overlay, "RGBA")
     draw.ellipse([cx - badge_r, cy - badge_r, cx + badge_r, cy + badge_r], fill=(255, 255, 255, 255))
-    s = int(badge_r * 1.7)
-    tmp = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    td = ImageDraw.Draw(tmp)
-    bar_w = s * 0.22
-    bx0, bx1 = s * 0.5 - bar_w / 2, s * 0.5 + bar_w / 2
-    by0, by1 = s * 0.2, s * 0.8
-    td.rounded_rectangle([bx0, by0, bx1, by1], radius=bar_w / 2, fill=icon_color)
-    end_r = bar_w * 0.68
-    td.ellipse([s * 0.5 - end_r, by0 - end_r * 0.4, s * 0.5 + end_r, by0 + end_r * 1.2], fill=icon_color)
-    td.ellipse([s * 0.5 - end_r, by1 - end_r * 1.2, s * 0.5 + end_r, by1 + end_r * 0.4], fill=icon_color)
-    tmp = tmp.rotate(-45, resample=Image.BICUBIC, expand=True)
-    overlay.alpha_composite(tmp, (int(cx - tmp.width / 2), int(cy - tmp.height / 2)))
+
+    w, h = badge_r * 1.05, badge_r * 1.85
+    x0, y0 = cx - w / 2, cy - h / 2 + badge_r * 0.06
+    x1, y1 = x0 + w, y0 + h
+    draw.rounded_rectangle([x0, y0, x1, y1], radius=w * 0.24, fill=icon_color)
+    pad_x, pad_top, pad_bot = w * 0.11, h * 0.13, h * 0.15
+    draw.rounded_rectangle(
+        [x0 + pad_x, y0 + pad_top, x1 - pad_x, y1 - pad_bot], radius=w * 0.10, fill=(255, 255, 255, 255),
+    )
+    cam_r = w * 0.06
+    draw.ellipse([cx - cam_r, y0 + h * 0.06, cx + cam_r, y0 + h * 0.06 + cam_r * 2], fill=(255, 255, 255, 255))
 
 
 def _draw_cta_banner(canvas: Image.Image) -> Image.Image:
@@ -207,7 +240,7 @@ def _draw_cta_banner(canvas: Image.Image) -> Image.Image:
     icon_cy = (CTA_BANNER_TOP + CTA_BANNER_BOTTOM) // 2
     _draw_phone_icon(overlay, STICKER_X0 + 76, icon_cy, badge_r=34, icon_color=(*STICKER_GREEN, 255))
 
-    draw = ImageDraw.Draw(overlay)
+    draw = ImageDraw.Draw(overlay, "RGBA")
     line1_font = _load_font(48)
     line2_font = _load_font(40)
     _centered_text(draw, CTA_BANNER_TOP + 30, CTA_LINE1, line1_font, fill=(255, 255, 255, 255))
@@ -225,7 +258,7 @@ def _draw_intro_frame(canvas: Image.Image, manzil: str, narx: str, xona: str = "
     ichida)."""
     canvas = canvas.convert("RGBA")
     overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(overlay)
+    draw = ImageDraw.Draw(overlay, "RGBA")
 
     # ---- Pushti sarlavha stikeri ----
     _draw_sticker_box(overlay, STICKER_X0, TITLE_BOX_TOP, STICKER_X1, TITLE_BOX_BOTTOM, STICKER_PINK)
