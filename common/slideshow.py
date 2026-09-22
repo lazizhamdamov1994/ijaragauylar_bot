@@ -48,17 +48,22 @@ PRESCALE = 1.5  # zoompan silliq ishlashi uchun manba kadrni oldindan kattalasht
 
 BRAND_ACCENT = (255, 59, 92)  # sayt bilan bir xil #FF3B5C
 
-# MUHIM (dizayn sifati): avval generik tizim shrifti (DejaVu Sans Bold)
-# ishlatilardi - bu "qo'pol/havaskor" ko'rinishning asosiy sabablaridan
-# biri edi (real reklama shablonlarida har doim aniq, ta'sirchan display
-# shrift ishlatiladi). Endi repo bilan birga keladigan "Big Shoulders
-# Bold" (Google Fonts, SIL Open Font License - fonts/BigShoulders-OFL.txt)
-# BIRINCHI ustuvorlikda - torroq, qalin, "stiker sarlavha"ga mos display
-# shrift, o'zbekcha ʻ/ʼ belgilarini ham to'liq qo'llab-quvvatlaydi. Tizim
-# shriftlari FAQAT shu fayl serverda topilmasa ishlatiladigan zaxira.
+# MUHIM (dizayn sifati + REAL XATO TUZATILDI): avval generik tizim shrifti
+# (DejaVu Sans Bold) ishlatilardi - "qo'pol/havaskor" ko'rinishning asosiy
+# sabablaridan biri edi. Birinchi tuzatishda "Big Shoulders Bold" (faqat
+# lotin harflarini qo'llaydigan Google Font) qo'yilgan edi - lekin bu
+# HAQIQIY ishlab chiqarishda sinovdan o'tkazilganda, o'zbek foydalanuvchilar
+# manzil/matnni KIRILL alifbosida yozganda, kirill harflari umuman
+# ko'rsatilmasligi (bo'sh to'rtburchaklar) aniqlandi - shrift kirillni
+# qo'llab-quvvatlamasa. Shuning uchun "Montserrat ExtraBold" (Google Fonts,
+# SIL Open Font License - fonts/Montserrat-OFL.txt, wght=800 statik
+# nusxasi) ga almashtirildi - lotin (o'zbekcha ʻ/ʼ belgilari bilan) VA
+# kirill alifbosini IKKALASINI HAM to'liq qo'llaydi, TEKSHIRILGAN (fontTools
+# cmap tahlili orqali). Tizim shriftlari FAQAT shu fayl serverda
+# topilmasa ishlatiladigan zaxira (ular ham kirillni qo'llab-quvvatlaydi).
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _FONT_CANDIDATES = (
-    os.path.join(_BASE_DIR, "fonts", "BigShoulders-Bold.ttf"),
+    os.path.join(_BASE_DIR, "fonts", "Montserrat-ExtraBold.ttf"),
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
 )
