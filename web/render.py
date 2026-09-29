@@ -597,7 +597,8 @@ def render_head(title: str, description: str, canonical_path: str, og_image: str
         verification_tags += f'<meta name="google-site-verification" content="{GOOGLE_SITE_VERIFICATION}">'
     if YANDEX_VERIFICATION:
         verification_tags += f'<meta name="yandex-verification" content="{YANDEX_VERIFICATION}">'
-    return f"""<meta charset="UTF-8">
+    return f"""<script>document.documentElement.classList.add('js');</script>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{title}</title>
 <meta name="description" content="{description}">
@@ -717,6 +718,29 @@ def render_footer(lang: str = DEFAULT_LANG) -> str:
     <div class="footer-bottom">&copy; {year} {SITE_NAME}. {t(lang,'footer_rights')}</div>
   </div>
 </footer>
+<script>
+// Skrolda paydo bo'lish (progressiv yaxshilanish - static/site.css'dagi
+// "html.js ..." qoidasiga qarang): biror narsa xato bersa yoki brauzer
+// IntersectionObserver'ni qo'llab-quvvatlamasa - hamma narsa DARHOL
+// ko'rinadi, hech qachon "yashiringan" holda qolmaydi.
+(function() {{
+  var els = document.querySelectorAll('.listing-card, .why-item, .district-chip, .fact-box');
+  try {{
+    if (!('IntersectionObserver' in window)) {{
+      els.forEach(function(el) {{ el.classList.add('is-visible'); }});
+      return;
+    }}
+    var io = new IntersectionObserver(function(entries) {{
+      entries.forEach(function(entry) {{
+        if (entry.isIntersecting) {{ entry.target.classList.add('is-visible'); io.unobserve(entry.target); }}
+      }});
+    }}, {{ threshold: 0.1, rootMargin: '0px 0px -30px 0px' }});
+    els.forEach(function(el) {{ io.observe(el); }});
+  }} catch (err) {{
+    els.forEach(function(el) {{ el.classList.add('is-visible'); }});
+  }}
+}})();
+</script>
 {render_ai_chat_widget(lang)}"""
 
 
