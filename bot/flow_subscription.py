@@ -121,6 +121,36 @@ async def sub_cancel_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+async def _auto_approve_subscription(context: ContextTypes.DEFAULT_TYPE, sub_id: int, user, receipt: str, price: int) -> None:
+    """AI chekni ishonchli deb topganda - adminni kutmasdan darhol faollashtirish."""
+    sub = get_subscription(sub_id)
+    user_id, expire = approve_subscription(sub_id)
+
+    text = (
+        f"\u2705 Chekingiz AI tomonidan avtomatik tasdiqlandi! Limitingiz faollashtirildi.\nMuddati: <b>{expire[:10]}</b> gacha.\n\n"
+        "Endi kanaldagi istalgan e'londa \u00abUy egasi raqami\u00bb tugmasini bosib, raqamni ko'rishingiz mumkin."
+    )
+    target_listing_id = sub.get("target_listing_id") if sub else None
+    if target_listing_id:
+        listing = get_listing(target_listing_id)
+        if listing and listing["status"] == "approved":
+            text += "\n\n" + phone_reveal_text(listing)
+    await context.bot.send_message(user_id, text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+    fyi_caption = (
+        f"\U0001F916\u2705 <b>AI avtomatik tasdiqladi</b> \u2014 Obuna #{sub_id}\n\n"
+        f"\U0001F464 {esc(user.full_name)} (@{esc(user.username) or 'yo`q'})\n"
+        f"\U0001F194 user_id: {user.id}\n"
+        f"\U0001F4B0 Summasi: {price:,} so'm\n\n"
+        "AI chek va summani mos deb topdi, shuning uchun admin tasdiqlashini kutmay darhol faollashtirildi."
+    )
+    for admin_id in ADMIN_IDS:
+        try:
+            await context.bot.send_photo(admin_id, receipt, caption=fyi_caption, parse_mode=ParseMode.HTML)
+        except Exception:
+            logger.exception("Adminga (%s) AI avtomatik tasdiqlash FYI xabarini yuborishda xatolik", admin_id)
+
+
 async def subscription_receipt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.photo:
         if await try_escape_to_menu(update, context):
@@ -150,6 +180,7 @@ async def subscription_receipt(update: Update, context: ContextTypes.DEFAULT_TYP
           InlineKeyboardButton("\u274c Rad etish", callback_data=f"admin_reject_sub_{sub_id}")]]
     )
     ai_note = ""
+    receipt_check = None
     if ai_features_enabled():
         try:
             receipt_bytes = await download_photo_bytes(receipt)
@@ -161,6 +192,11 @@ async def subscription_receipt(update: Update, context: ContextTypes.DEFAULT_TYP
                     set_subscription_receipt_warning(sub_id, receipt_check.get("note") or "")
         except Exception:
             logger.exception("AI obuna chekini tekshirishda xatolik")
+
+    if receipt_check and receipt_check.get("matches"):
+        await _auto_approve_subscription(context, sub_id, user, receipt, price)
+        context.user_data.pop("target_listing_id", None)
+        return ConversationHandler.END
 
     caption = (
         f"\U0001F4B3 <b>Yangi obuna so'rovi</b> #{sub_id}\n\n"

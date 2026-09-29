@@ -71,6 +71,7 @@ DEFAULT_SETTINGS = {
     "ai_valuation_extra_guidance": "",
     "valuation_price": "10000",
     "ai_market_digest_enabled": "1",
+    "listing_boost_offer_enabled": "1",
 }
 
 # ---- Telegram orqali kirish (shaxsiy kabinet) ----

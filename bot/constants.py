@@ -71,7 +71,8 @@ logger = logging.getLogger(__name__)
     VALUATION_CONDITION,
     VALUATION_PHOTOS,
     VALUATION_RECEIPT_WAIT,
-) = range(44)
+    BOOST_RECEIPT_WAIT,
+) = range(45)
 
 BTN_ELON = "\U0001F4DD E'lon berish"
 BTN_LISTINGS = "\U0001F4CB Mening e'lonlarim"
@@ -183,6 +184,11 @@ SETTINGS_FIELDS = {
     "ai_market_digest_enabled": {
         "label": "\U0001F4F0 Kunlik AI bozor tahlili posti",
         "hint": "Yoqilsa, har kuni kechqurun AI bozor tahlili loyihasini tayyorlab, tasdiqlash uchun adminlarga yuboradi (avtomatik e'lon qilinmaydi).",
+        "kind": "bool",
+    },
+    "listing_boost_offer_enabled": {
+        "label": "\U0001F680 «TOP'ga ko'tarish» taklifi",
+        "hint": "Yoqilsa, bepul joylangan har bir e'lon egasiga kanalga joylangandan keyin uni pullik TOP aylanishiga ko'tarish taklifi yuboriladi (narxi «E'lon narxi» sozlamasi bilan bir xil).",
         "kind": "bool",
     },
 }

@@ -40,8 +40,9 @@ from web.render import DEFAULT_LANG, esc_html, get_lang, icon, render_credit_car
 # MUHIM: bot/'dan import (web/api.py'dagi bilan bir xil, izohi o'sha yerda) -
 # kanal postini yangilash/o'chirish uchun bot bilan AYNAN bir xil sof
 # (import vaqtida yon ta'sirsiz) funksiyalar qayta ishlatiladi.
-from bot.db import get_listing
-from bot.helpers import build_caption, channel_keyboard
+from bot.db import approve_subscription, get_listing, get_subscription, set_subscription_receipt_warning
+from bot.helpers import build_caption, channel_keyboard, phone_reveal_text
+from common.ai import ai_check_receipt, ai_features_enabled
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -619,11 +620,60 @@ async def buy_limit(request: Request, receipt: UploadFile = File(...), listing_i
 
     fn = esc_html(tg_user.get("fn") or "")
     un = f" (@{esc_html(tg_user['un'])})" if tg_user.get("un") else ""
+
+    ai_note = ""
+    receipt_check = None
+    if ai_features_enabled():
+        try:
+            receipt_check = ai_check_receipt(receipt_bytes, "image/jpeg", price, CARD_HOLDER)
+            if receipt_check and not receipt_check.get("matches"):
+                ai_note = f"\n\n\U0001F916⚠️ <b>AI: chekda nomuvofiqlik</b> — {esc_html(receipt_check.get('note') or '')}"
+                set_subscription_receipt_warning(sub_id, receipt_check.get("note") or "")
+        except Exception:
+            logger.exception("AI obuna chekini tekshirishda xatolik (veb)")
+
+    if receipt_check and receipt_check.get("matches"):
+        sub = get_subscription(sub_id)
+        _, expire = approve_subscription(sub_id)
+        text = (
+            f"✅ Chekingiz AI tomonidan avtomatik tasdiqlandi! Limitingiz faollashtirildi.\nMuddati: <b>{expire[:10]}</b> gacha.\n\n"
+            "Endi kanaldagi istalgan e'londa «Uy egasi raqami» tugmasini bosib, raqamni ko'rishingiz mumkin."
+        )
+        if target_listing_id:
+            listing = get_listing(target_listing_id)
+            if listing and listing["status"] == "approved":
+                text += "\n\n" + phone_reveal_text(listing)
+        async with httpx.AsyncClient(timeout=20) as client:
+            try:
+                await client.post(
+                    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                    json={"chat_id": uid, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True},
+                )
+            except Exception:
+                logger.exception("Foydalanuvchiga (%s) AI avtomatik tasdiqlash xabarini yuborib bo'lmadi", uid)
+            fyi_caption = (
+                f"\U0001F916✅ <b>AI avtomatik tasdiqladi</b> — Obuna #{sub_id} (veb-saytdan)\n\n"
+                f"\U0001F464 {fn}{un}\n"
+                f"\U0001F194 user_id: {uid}\n"
+                f"\U0001F4B0 Summasi: {price:,} so'm\n\n"
+                "AI chek va summani mos deb topdi, shuning uchun admin tasdiqlashini kutmay darhol faollashtirildi."
+            )
+            for admin_id in ADMIN_IDS:
+                try:
+                    await client.post(
+                        f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
+                        json={"chat_id": admin_id, "photo": receipt_file_id, "caption": fyi_caption, "parse_mode": "HTML"},
+                    )
+                except Exception:
+                    logger.exception("Adminga (%s) AI avtomatik tasdiqlash FYI xabarini yuborishda xatolik", admin_id)
+        return {"ok": True, "auto_approved": True}
+
     caption = (
         f"\U0001F4B3 <b>Yangi obuna so'rovi (veb-saytdan)</b> #{sub_id}\n\n"
         f"\U0001F464 {fn}{un}\n"
         f"\U0001F194 user_id: {uid}\n"
         f"\U0001F4B0 Summasi: {price:,} so'm"
+        f"{ai_note}"
     )
     keyboard = {"inline_keyboard": [
         [

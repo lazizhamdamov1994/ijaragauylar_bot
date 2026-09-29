@@ -169,6 +169,9 @@ def init_schema() -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS market_digests (
         id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, status TEXT DEFAULT 'draft',
         created_at TEXT, posted_at TEXT)""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS boost_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+        price INTEGER NOT NULL, receipt_file_id TEXT, status TEXT DEFAULT 'pending', created_at TEXT)""")
     conn.commit()
     conn.close()
 
@@ -348,6 +351,43 @@ def get_valuation_payment(payment_id: int):
 def update_valuation_payment_status(payment_id: int, status: str) -> None:
     conn = db()
     conn.execute("UPDATE valuation_payments SET status = ? WHERE id = ?", (status, payment_id))
+    conn.commit()
+    conn.close()
+
+
+def save_boost_payment(listing_id: int, user_id: int, price: int, receipt_file_id: str) -> int:
+    conn = db()
+    cur = conn.execute(
+        "INSERT INTO boost_payments (listing_id, user_id, price, receipt_file_id, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)",
+        (listing_id, user_id, price, receipt_file_id, now_str()),
+    )
+    conn.commit()
+    payment_id = cur.lastrowid
+    conn.close()
+    return payment_id
+
+
+def get_boost_payment(payment_id: int):
+    conn = db()
+    row = conn.execute("SELECT * FROM boost_payments WHERE id = ?", (payment_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_boost_payment_status(payment_id: int, status: str) -> None:
+    conn = db()
+    conn.execute("UPDATE boost_payments SET status = ? WHERE id = ?", (status, payment_id))
+    conn.commit()
+    conn.close()
+
+
+def boost_listing_to_top(listing_id: int, price: int) -> None:
+    """Mavjud (allaqachon joylangan) bepul e'lonni TOP aylanishiga
+    qo'shadi - yangi e'lon yaratmaydi, faqat `price_charged`ni
+    yangilaydi (bu maydon `job_repost_paid_listings`ning yagona
+    mezoni)."""
+    conn = db()
+    conn.execute("UPDATE listings SET price_charged = ? WHERE id = ?", (price, listing_id))
     conn.commit()
     conn.close()
 

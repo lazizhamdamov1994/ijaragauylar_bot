@@ -62,6 +62,7 @@ from bot.jobs import *  # noqa: F401,F403
 from bot.ai_concierge import *  # noqa: F401,F403
 from bot.flow_valuation import *  # noqa: F401,F403
 from bot.flow_digest import *  # noqa: F401,F403
+from bot.flow_boost import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
 
@@ -298,6 +299,19 @@ def main():
         persistent=False,
     )
 
+    boost_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(boost_offer_entry, pattern=r"^boost_offer_\d+$")],
+        states={
+            BOOST_RECEIPT_WAIT: [
+                CallbackQueryHandler(boost_cancel_cb, pattern="^boost_cancel$"),
+                MessageHandler(~filters.COMMAND, boost_receipt_received),
+            ],
+        },
+        fallbacks=[CallbackQueryHandler(boost_cancel_cb, pattern="^boost_cancel$")],
+        name="boost_conv",
+        persistent=False,
+    )
+
     app.add_handler(elon_conv)
     register_conv("elon_conv", elon_conv)  # force_reset_conversation funksiyasi buni topa olishi uchun
     app.add_handler(sub_conv)
@@ -327,6 +341,7 @@ def main():
     app.add_handler(addloc_conv)
     app.add_handler(edit_field_conv)
     register_conv("edit_field_conv", edit_field_conv)
+    app.add_handler(boost_conv)
     app.add_handler(MessageHandler(
         filters.Regex(f"^({re.escape(BTN_LISTINGS)}|{re.escape(BTN_HELP)}|{re.escape(BTN_LOCATION_ALERT)}|{re.escape(BTN_MY_LOCATIONS)}|{re.escape(BTN_CHANNEL)}|{re.escape(BTN_STATS)}|{re.escape(BTN_SUBSCRIBERS)}|{re.escape(BTN_SETTINGS)}|{re.escape(BTN_PENDING)}|{re.escape(BTN_BLOCKED)}|{re.escape(BTN_MODERATORS)}|{re.escape(BTN_FLAGGED)}|{re.escape(BTN_LISTINGS_MAP)}|{re.escape(BTN_ADMIN_PANEL)}|{re.escape(BTN_SUBARENDA)}|{re.escape(BTN_DISTRICT_ALIASES)})$"),
         text_menu_router,
@@ -334,6 +349,8 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_approve, pattern=r"^admin_approve_(listing|sub)_\d+$"))
     app.add_handler(CallbackQueryHandler(valpay_approve_router, pattern=r"^valpay_approve_\d+$"))
     app.add_handler(CallbackQueryHandler(valpay_reject_router, pattern=r"^valpay_reject_\d+$"))
+    app.add_handler(CallbackQueryHandler(boostpay_approve_router, pattern=r"^boostpay_approve_\d+$"))
+    app.add_handler(CallbackQueryHandler(boostpay_reject_router, pattern=r"^boostpay_reject_\d+$"))
     app.add_handler(CallbackQueryHandler(digest_approve_router, pattern=r"^digest_approve_\d+$"))
     app.add_handler(CallbackQueryHandler(digest_reject_router, pattern=r"^digest_reject_\d+$"))
     app.add_handler(CallbackQueryHandler(subpage_router, pattern=r"^subpage_\d+$"))

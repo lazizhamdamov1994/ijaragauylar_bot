@@ -35,6 +35,7 @@ from bot.db import *  # noqa: F401,F403
 from bot.helpers import *  # noqa: F401,F403
 from bot.fraud_detection import *  # noqa: F401,F403
 from bot.location_alerts import *  # noqa: F401,F403
+from bot.flow_boost import boost_offer_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,22 @@ async def approve_and_post_listing_core(context: ContextTypes.DEFAULT_TYPE, list
         await context.bot.send_message(listing["user_id"], msg)
     except Exception:
         logger.exception("Foydalanuvchiga xabar yuborib bo'lmadi")
+
+    # E'lon BEPUL joylangan bo'lsa (price_charged=0) - egasiga "TOP'ga
+    # ko'tarish" taklifini yuborish (daromadni oshirish maqsadida; admin
+    # `listing_boost_offer_enabled` sozlamasi orqali o'chirib qo'yishi mumkin).
+    if not (listing.get("price_charged") or 0) and get_setting("listing_boost_offer_enabled", "1") == "1":
+        try:
+            price = listing_price()
+            boost_text = (
+                "\U0001F680 Ko'proq odam ko'rishi va tezroq ijaraga/sotuvga chiqishi uchun "
+                "e'loningizni TOP'ga ko'tarishingiz mumkin \u2014 TOP'dagi e'lonlar navbat bilan "
+                "qayta-qayta yuqoriga chiqarib turiladi.\n\n"
+                f"Narxi: {price:,} so'm"
+            )
+            await context.bot.send_message(listing["user_id"], boost_text, reply_markup=boost_offer_keyboard(listing_id))
+        except Exception:
+            logger.exception("Foydalanuvchiga TOP'ga ko'tarish taklifini yuborib bo'lmadi")
 
     return True
 
