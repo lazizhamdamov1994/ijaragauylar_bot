@@ -347,6 +347,40 @@ def _build_video_filter_complex(frame_paths: list[tuple[str, float]]) -> tuple[s
     return ";".join(filters), prev_label
 
 
+def _prepare_frames(photos: list[bytes], manzil: str, narx: str, xona: str, tmpdir: str) -> list[tuple[str, float]]:
+    """Barcha kadrlarni (PIL bilan - JPEG dekodlash, Gaussian blur, shrift
+    render qilish) tayyorlaydi. MUHIM (haqiqiy ishlab chiqarishda topilgan
+    xato): bu ATAYIN alohida, ODDIY (sync) funksiya - chunki bir nechta
+    (10 tagacha) rasm uchun bu ishlarning HAMMASINI asosiy asinxron
+    tsikl (event loop) ICHIDA to'g'ridan-to'g'ri bajarish butun botni
+    (va shu bilan bir CPU'ni bo'lishadigan boshqa xizmatlarni ham) bir
+    necha soniyaga "muzlatib" qo'yardi - bot HECH KIMGA javob bermay
+    qolgandek ko'rinardi. build_slideshow_video endi buni
+    loop.run_in_executor() orqali ALOHIDA oqimda (thread) chaqiradi."""
+    frame_paths: list[tuple[str, float]] = []
+
+    try:
+        first = _fit_frame(photos[0])
+        frame = _draw_cta_banner(_draw_intro_frame(first, manzil, narx, xona))
+        path = os.path.join(tmpdir, "frame_intro.jpg")
+        frame.save(path, format="JPEG", quality=92)
+        frame_paths.append((path, INTRO_SECONDS))
+    except Exception:
+        logger.exception("Slaydshov sarlavha kadrini tayyorlashda xatolik")
+
+    for i, raw in enumerate(photos[1:], start=1):
+        try:
+            frame = _draw_cta_banner(_fit_frame(raw))
+        except Exception:
+            logger.exception("Slaydshov kadrini tayyorlashda xatolik (%s-rasm)", i)
+            continue
+        path = os.path.join(tmpdir, f"frame_{i:02d}.jpg")
+        frame.save(path, format="JPEG", quality=92)
+        frame_paths.append((path, OTHER_FRAME_SECONDS))
+
+    return frame_paths
+
+
 async def build_slideshow_video(photos: list[bytes], manzil: str, narx: str, xona: str = "") -> bytes | None:
     """1-rasm ustida sarlavha+manzil+xona+narx BIRDANIGA (video boshidanoq)
     ko'rinadigan "stiker" kartalar, qolgan rasmlar - har biri sekin
@@ -360,26 +394,8 @@ async def build_slideshow_video(photos: list[bytes], manzil: str, narx: str, xon
     async with _GEN_SEMAPHORE:
         try:
             with tempfile.TemporaryDirectory(prefix="slideshow_") as tmpdir:
-                frame_paths: list[tuple[str, float]] = []
-
-                try:
-                    first = _fit_frame(photos[0])
-                    frame = _draw_cta_banner(_draw_intro_frame(first, manzil, narx, xona))
-                    path = os.path.join(tmpdir, "frame_intro.jpg")
-                    frame.save(path, format="JPEG", quality=92)
-                    frame_paths.append((path, INTRO_SECONDS))
-                except Exception:
-                    logger.exception("Slaydshov sarlavha kadrini tayyorlashda xatolik")
-
-                for i, raw in enumerate(photos[1:], start=1):
-                    try:
-                        frame = _draw_cta_banner(_fit_frame(raw))
-                    except Exception:
-                        logger.exception("Slaydshov kadrini tayyorlashda xatolik (%s-rasm)", i)
-                        continue
-                    path = os.path.join(tmpdir, f"frame_{i:02d}.jpg")
-                    frame.save(path, format="JPEG", quality=92)
-                    frame_paths.append((path, OTHER_FRAME_SECONDS))
+                loop = asyncio.get_event_loop()
+                frame_paths = await loop.run_in_executor(None, _prepare_frames, photos, manzil, narx, xona, tmpdir)
 
                 if not frame_paths:
                     return None
