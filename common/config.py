@@ -45,6 +45,14 @@ STALE_CHECK_DAYS = int(os.getenv("STALE_CHECK_DAYS", "7"))
 # sinmaydi.
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
+# ---- Instagram (Meta Graph API) - tasdiqlangan e'lonlarni avtomatik Reels
+# sifatida joylash uchun, ixtiyoriy. Bo'sh bo'lsa common/instagram.py jim
+# ravishda hech narsa qilmaydi - BOT_TOKEN/ANTHROPIC_API_KEY bilan bir xil
+# konventsiya: maskalash mexanizmi yo'qligi uchun DB-saqlanadigan
+# sozlamalarga EMAS, faqat .env orqali kiritiladi.
+INSTAGRAM_ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN", "")
+INSTAGRAM_BUSINESS_ACCOUNT_ID = os.getenv("INSTAGRAM_BUSINESS_ACCOUNT_ID", "")
+
 # ---- To'lov ----
 CARD_HOLDER = os.getenv("CARD_HOLDER", "")
 CARD_NUMBER = os.getenv("CARD_NUMBER", "5614681434261669")
@@ -75,6 +83,8 @@ DEFAULT_SETTINGS = {
     "ai_market_digest_enabled": "1",
     "listing_boost_offer_enabled": "1",
     "fraud_auto_throttle_daily_reveals": "20",
+    "instagram_auto_post_enabled": "0",
+    "instagram_daily_post_limit": "25",
 }
 
 # ---- Telegram orqali kirish (shaxsiy kabinet) ----

@@ -207,6 +207,16 @@ SETTINGS_FIELDS = {
         "hint": "Bitta foydalanuvchi bir kunda shuncha martadan ko'p «Uy egasi raqami» ko'rsa - u kunning qolgan qismida vaqtincha to'xtatiladi (ertasi kuni o'zi tiklanadi) va admin darhol xabar oladi. Ommaviy raqam yig'ish (masalan boshqa kanalga tarqatish uchun)ni real vaqtda to'xtatish uchun. 0 = o'chirish.",
         "kind": "int",
     },
+    "instagram_auto_post_enabled": {
+        "label": "\U0001F4F8 Instagram'ga avtomatik post",
+        "hint": "Yoqilsa, kanalga joylangan har bir e'lon rasmlaridan avtomatik Reels video yasalib, Instagram'ga ham joylanadi (.env faylida INSTAGRAM_ACCESS_TOKEN va INSTAGRAM_BUSINESS_ACCOUNT_ID sozlangan bo'lishi shart - bo'lmasa bu yoqilgan bo'lsa ham hech narsa qilinmaydi).",
+        "kind": "bool",
+    },
+    "instagram_daily_post_limit": {
+        "label": "\U0001F4F8 Instagram - kunlik post chegarasi",
+        "hint": "Instagram API cheklovidan (taxminan 25 post/kun) o'tib ketmaslik uchun. Chegaraga yetilsa, qolgan e'lonlar Instagram'ga joylanmaydi (faqat kanalga joylanadi), ertasi kuni avtomatik tiklanadi.",
+        "kind": "int",
+    },
 }
 
 

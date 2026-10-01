@@ -10,10 +10,11 @@ import os
 
 import httpx
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from PIL import Image, ImageOps
 
 from common.config import BOT_TOKEN, PHOTO_CACHE_MAX_MB
+from common.instagram import IG_VIDEO_CACHE_DIR
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -150,6 +151,20 @@ async def get_photo(file_id: str):
         raise HTTPException(status_code=404)
 
 
+@router.get("/ig-video/{token}.mp4")
+async def get_instagram_video(token: str):
+    """Instagram'ga avtomatik joylash uchun vaqtincha yasalgan Reels
+    videosini xizmat qiladi (common/instagram.py yozadi, Instagram'ning
+    o'zi shu URL'dan tortib oladi - to'g'ridan-to'g'ri fayl yuklash
+    qo'llab-quvvatlanmaydi). Post muvaffaqiyatli/muvaffaqiyatsiz bo'lgach
+    common/instagram.py faylni o'zi darhol o'chiradi - bu route faqat shu
+    qisqa oraliqda ishlaydi."""
+    if not token.replace("-", "").replace("_", "").isalnum():
+        raise HTTPException(status_code=404)
+    path = os.path.join(IG_VIDEO_CACHE_DIR, f"{token}.mp4")
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404)
+    return FileResponse(path, media_type="video/mp4")
 
 
 # ============================= OMMAVIY SAYT - DIZAYN YORDAMCHILARI =============================

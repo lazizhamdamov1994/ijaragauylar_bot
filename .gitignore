@@ -13,6 +13,9 @@ bot_persistence.pkl
 # Rasm keshi
 photo_cache/
 
+# Instagram'ga joylash uchun vaqtinchalik video fayllar
+ig_video_cache/
+
 # Python
 __pycache__/
 *.pyc

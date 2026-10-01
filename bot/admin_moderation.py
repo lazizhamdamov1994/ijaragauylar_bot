@@ -36,6 +36,7 @@ from bot.helpers import *  # noqa: F401,F403
 from bot.fraud_detection import *  # noqa: F401,F403
 from bot.location_alerts import *  # noqa: F401,F403
 from bot.flow_boost import boost_offer_keyboard
+from common.instagram import maybe_post_listing_to_instagram
 from common.receipt_security import log_receipt_feedback, note_admin_overrode_ai_mismatch, record_approved_receipt
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,12 @@ async def approve_and_post_listing_core(context: ContextTypes.DEFAULT_TYPE, list
 
     update_listing_status(listing_id, "approved", channel_msg_id=channel_msg_id)
     listing["channel_msg_id"] = channel_msg_id
+
+    # Fire-and-forget: Instagram'ga joylash sekin (video yasash + Meta API
+    # kutish, bir necha daqiqagacha) - kanalga joylash javobini HECH QACHON
+    # kechiktirmasligi uchun natijani kutmasdan fon vazifasi sifatida ishga
+    # tushiriladi (xatolik bo'lsa modul ichida yutib yuboriladi).
+    asyncio.create_task(maybe_post_listing_to_instagram(listing))
 
     log_ai_feedback(listing_id, was_flagged=bool(listing.get("ai_scam_warning")), decision="approved")
     if (listing.get("price_charged") or 0) > 0 and listing.get("receipt_phash"):

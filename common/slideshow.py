@@ -2,11 +2,16 @@
 E'lon rasmlaridan Instagram uchun qisqa (ovozsiz) slaydshov video yasash +
 shu e'lon uchun tayyor Instagram post matnini (hashtaglar bilan) yozish.
 ==========================================================================
-MUHIM: bu modul Instagram'ga HECH NARSANI o'zi avtomatik joylamaydi - u
-faqat videoni yasab, botga (bot/flow_listing.py orqali) adminga yuboradi.
-Instagram'ga joylashtirish - adminning o'zi qo'lda bajaradigan YAGONA ishi
-(Instagram Graph API uchun Facebook Business sozlash talab qilinmasligi
-uchun ataylab shunday soddalashtirilgan).
+Bu modul o'zi Instagram'ga HECH NARSA joylamaydi - faqat videoni yasaydi.
+Ikki xil ishlatilish yo'li bor:
+  - Tezkor/to'liq e'lon oqimida (bot/flow_quick.py, bot/flow_listing.py) -
+    video botga adminga yuboriladi, Instagram'ga joylashtirish adminning
+    o'zi qo'lda bajaradigan ishi.
+  - Tasdiqlangan e'lon kanalga joylanganda (common/instagram.py orqali,
+    "instagram_auto_post_enabled" sozlamasi yoqilgan va Meta Graph API
+    sozlamalari (.env: INSTAGRAM_ACCESS_TOKEN/INSTAGRAM_BUSINESS_ACCOUNT_ID)
+    kiritilgan bo'lsa) - video AVTOMATIK Instagram'ga Reels sifatida ham
+    joylanadi.
 
 Video xatosiz yasalmasa (ffmpeg topilmadi, rasm buzuq va h.k.) - funksiya
 None qaytaradi, bu e'lon joylashni HECH QACHON to'xtatmaydi (chaqiruvchi

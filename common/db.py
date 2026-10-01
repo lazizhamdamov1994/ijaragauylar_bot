@@ -187,6 +187,11 @@ def init_schema() -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS desktop_tokens (
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, token TEXT NOT NULL UNIQUE,
         created_at TEXT, last_used_at TEXT)""")
+    # Instagram'ga avtomatik joylangan postlar jurnali - kunlik chegarani
+    # hisoblash (common/instagram.py: is_instagram_posting_throttled) uchun.
+    conn.execute("""CREATE TABLE IF NOT EXISTS instagram_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, media_id TEXT,
+        posted_at TEXT)""")
     conn.commit()
     conn.close()
 
@@ -299,6 +304,28 @@ def count_today_ai_chat_messages(user_key: str, platform: str) -> int:
     ).fetchone()["c"]
     conn.close()
     return n
+
+
+def count_today_instagram_posts() -> int:
+    """Instagram API'ning taxminiy kunlik post chegarasidan (~25/kun)
+    o'tib ketmaslik uchun - common/instagram.py: is_instagram_posting_throttled."""
+    since = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = db()
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM instagram_posts WHERE posted_at >= ?", (since,)
+    ).fetchone()["c"]
+    conn.close()
+    return n
+
+
+def log_instagram_post(listing_id: int, media_id: str | None) -> None:
+    conn = db()
+    conn.execute(
+        "INSERT INTO instagram_posts (listing_id, media_id, posted_at) VALUES (?, ?, ?)",
+        (listing_id, media_id, now_str()),
+    )
+    conn.commit()
+    conn.close()
 
 
 def log_ai_chat_message(user_key: str, platform: str) -> None:

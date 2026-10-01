@@ -2,6 +2,7 @@
 E'lonlarni bazadan o'qish va narx/karta sozlamalari - saytning barcha
 sahifalari shu yerdagi funksiyalardan foydalanadi.
 """
+import asyncio
 import json as _json
 import logging
 import os
@@ -20,6 +21,7 @@ from common.districts import (
     get_aliases_for_district,
     parse_price_value,
 )
+from common.instagram import maybe_post_listing_to_instagram
 from web.render import RENTAL_TYPE_LABELS, photo_url
 from bot.helpers import build_caption, channel_keyboard
 
@@ -266,6 +268,12 @@ async def post_listing_to_channel(listing: dict):
             if not data.get("ok"):
                 logger.error("Kanalga matn yuborishda xatolik: %s", data)
                 return None
+            # Fire-and-forget: ushbu bitta funksiya web/api.py (qo'lda
+            # tasdiqlash), web/pages.py (AI avtomatik tasdiqlash) va
+            # web/api_desktop.py (desktop admin dasturi) uchun ham yagona
+            # kanalga-joylash nuqtasi - shuning uchun Instagram ulash ham
+            # shu YERDA, bitta joyda kifoya.
+            asyncio.create_task(maybe_post_listing_to_instagram(listing))
             return data["result"]["message_id"]
         except Exception:
             logger.exception("Kanalga matn yuborishda xatolik (listing_id=%s)", listing.get("id"))
