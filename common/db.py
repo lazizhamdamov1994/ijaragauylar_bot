@@ -181,6 +181,12 @@ def init_schema() -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS receipt_feedback_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT, payment_type TEXT NOT NULL, payment_ref_id INTEGER NOT NULL,
         ai_matched INTEGER, ai_note TEXT, admin_decision TEXT NOT NULL, created_at TEXT)""")
+    # Windows desktop admin dasturi uchun token-asosli autentifikatsiya -
+    # brauzer cookie-sessiyasi yo'q, shuning uchun admin botdan /desktop_token
+    # buyrug'i bilan bitta marta token olib, dasturga kiritadi.
+    conn.execute("""CREATE TABLE IF NOT EXISTS desktop_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, token TEXT NOT NULL UNIQUE,
+        created_at TEXT, last_used_at TEXT)""")
     conn.commit()
     conn.close()
 

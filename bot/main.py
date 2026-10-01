@@ -329,6 +329,8 @@ def main():
     app.add_handler(CommandHandler("fixbuttons", fixbuttons_command))
     app.add_handler(CommandHandler("setcategory", setcategory_command))
     app.add_handler(CommandHandler("postmap", postmap_command))
+    app.add_handler(CommandHandler("desktop_token", desktop_token_command))
+    app.add_handler(CommandHandler("desktop_token_revoke", desktop_token_revoke_command))
     app.add_handler(admin_reject_conv)
     app.add_handler(admin_settings_conv)
     app.add_handler(admin_block_conv)

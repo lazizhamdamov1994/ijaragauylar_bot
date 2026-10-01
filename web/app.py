@@ -13,7 +13,7 @@ from common.config import SITE_NAME
 from common.db import init_and_migrate
 from common.districts import seed_district_aliases
 
-from web import account, admin_page, api, map_page, pages, render, seo
+from web import account, admin_page, api, api_desktop, map_page, pages, render, seo
 from web.middleware import SecurityHeadersMiddleware, VisitTrackingMiddleware
 from web.photos import router as photos_router, start_photo_cache_cleanup
 
@@ -34,6 +34,7 @@ app.include_router(render.router)
 app.include_router(pages.router)
 app.include_router(account.router)
 app.include_router(api.router)
+app.include_router(api_desktop.router)
 app.include_router(seo.router)
 app.include_router(admin_page.router)
 app.include_router(map_page.router)

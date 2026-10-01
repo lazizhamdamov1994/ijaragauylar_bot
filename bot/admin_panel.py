@@ -36,8 +36,44 @@ from bot.db import *  # noqa: F401,F403
 from bot.helpers import *  # noqa: F401,F403
 from bot.fraud_detection import *  # noqa: F401,F403
 from bot.flow_complaint import *  # noqa: F401,F403
+from common.desktop_auth import create_desktop_token, revoke_desktop_tokens
 
 logger = logging.getLogger(__name__)
+
+# ============================= WINDOWS DESKTOP ADMIN DASTURI =============================
+
+
+async def desktop_token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin buyrug'i (/desktop_token) - Windows desktop admin dasturiga
+    kiritish uchun token yaratib, shaxsiy xabarda yuboradi. Token hech
+    qachon guruh/kanalda ishlatilmasligi kerak - boshqa odam ko'rsa,
+    u ham admin huquqlari bilan kira oladi."""
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        return
+    token = create_desktop_token(user_id)
+    await update.message.reply_text(
+        "\U0001F5A5 <b>Windows desktop dastur uchun token:</b>\n\n"
+        f"<code>{token}</code>\n\n"
+        "Bu tokenni dasturga (Sozlamalar → Token) kiriting. "
+        "⚠️ Hech kimga ko'rsatmang - u orqali admin huquqlari bilan kirish mumkin.\n\n"
+        "Agar token \"o'g'irlangan\" deb o'ylasangiz - /desktop_token_revoke buyrug'i bilan "
+        "BARCHA eski tokenlarni bekor qilib, shu yerda yangisini oling.",
+        parse_mode=ParseMode.HTML,
+    )
+
+
+async def desktop_token_revoke_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin buyrug'i (/desktop_token_revoke) - shu adminning BARCHA eski
+    desktop tokenlarini bekor qiladi (masalan, kompyuter yo'qolgan/
+    o'g'irlangan bo'lsa)."""
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        return
+    n = revoke_desktop_tokens(user_id)
+    await update.message.reply_text(
+        f"✅ {n} ta eski token bekor qilindi. Yangi token uchun /desktop_token buyrug'ini yuboring."
+    )
 
 # ============================= MODERATOR SHAXSIY STATISTIKASI =============================
 # MUHIM: count_listings_stats_by_user / TRUSTED_MIN_LISTINGS / is_trusted_poster
