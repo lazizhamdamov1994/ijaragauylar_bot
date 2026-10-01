@@ -479,7 +479,7 @@ class NewListingPage(ctk.CTkFrame):
                 self.olx_status.set("Rasm topilmadi - rasmlarni qo'lda yuklang.", "warning")
                 return
             self.olx_status.set(f"{len(photo_urls)} ta rasm topildi, yuklab olinmoqda...", "neutral")
-            run_in_background(lambda: self._download_olx_photos(photo_urls), self._olx_download_done, self._olx_error)
+            run_in_background(lambda: self._download_olx_photos(photo_urls, url), self._olx_download_done, self._olx_error)
 
         def error(e):
             self.olx_status.set(
@@ -488,26 +488,47 @@ class NewListingPage(ctk.CTkFrame):
             )
         run_in_background(lambda: self.app.client.olx_photos(url), done, error)
 
-    def _download_olx_photos(self, photo_urls: list) -> list:
+    def _download_olx_photos(self, photo_urls: list, page_url: str) -> dict:
+        # MUHIM: OLX kabi saytlarning rasm CDN'lari ko'pincha "hotlink
+        # himoyasi" qo'llaydi - ya'ni so'rovda Referer sarlavhasi o'z
+        # domenidan (olx.uz) kelmasa, rasmni rad etadi (403). Shuning
+        # uchun Referer'ni aynan e'lon sahifasiga o'rnatamiz - oddiy
+        # User-Agent yetarli bo'lmasligi mumkin edi.
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+            "Referer": page_url,
+            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        }
         tmpdir = tempfile.mkdtemp(prefix="olx_photos_")
         saved = []
+        errors = []
         for i, url in enumerate(photo_urls):
             try:
-                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                req = urllib.request.Request(url, headers=headers)
                 with urllib.request.urlopen(req, timeout=15) as resp:
                     data = resp.read()
+                if len(data) < 500:  # haqiqiy rasm bo'lishi uchun juda kichik - ehtimol xato sahifa/placeholder
+                    errors.append(f"{url}: juda kichik javob ({len(data)} bayt)")
+                    continue
                 path = os.path.join(tmpdir, f"olx_{i}.jpg")
                 with open(path, "wb") as f:
                     f.write(data)
                 saved.append(path)
-            except Exception:
-                continue
-        return saved
+            except Exception as e:
+                errors.append(f"{url}: {e}")
+        return {"saved": saved, "errors": errors}
 
-    def _olx_download_done(self, paths: list):
+    def _olx_download_done(self, result: dict):
+        paths = result["saved"]
+        errors = result["errors"]
         self.app.photo_paths.extend(paths)
         self._render_photo_list()
-        self.olx_status.set(f"✓ {len(paths)} ta rasm qo'shildi. Tekshirib, keraksizlarini olib tashlang.", "success")
+        if paths and not errors:
+            self.olx_status.set(f"✓ {len(paths)} ta rasm qo'shildi. Tekshirib, keraksizlarini olib tashlang.", "success")
+        elif paths and errors:
+            self.olx_status.set(f"⚠ {len(paths)} ta rasm qo'shildi, {len(errors)} tasi yuklanmadi: {errors[0]}", "warning")
+        else:
+            self.olx_status.set(f"✕ Hech qaysi rasm yuklanmadi. Sabab: {errors[0] if errors else 'nomaʼlum'}. Rasmlarni qo'lda yuklang.", "error")
 
     def _olx_error(self, e):
         self.olx_status.set(f"⚠ Rasmlarni yuklab olishda xatolik: {e}", "warning")
