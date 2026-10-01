@@ -1521,16 +1521,16 @@ async def notify_admins_new_web_listing(listing_id: int, d: dict, file_ids: list
             try:
                 if len(file_ids) == 1:
                     await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
-                                       json={"chat_id": admin_id, "photo": file_ids[0]})
+                                       json={"chat_id": admin_id, "photo": file_ids[0], "protect_content": True})
                 elif file_ids:
                     await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMediaGroup",
-                                       json={"chat_id": admin_id, "media": [{"type": "photo", "media": fid} for fid in file_ids]})
+                                       json={"chat_id": admin_id, "media": [{"type": "photo", "media": fid} for fid in file_ids], "protect_content": True})
                 await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
                                    json={"chat_id": admin_id, "text": caption, "parse_mode": "HTML"})
                 if receipt_file_id:
                     await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto",
                                        json={"chat_id": admin_id, "photo": receipt_file_id, "caption": sender_line,
-                                             "parse_mode": "HTML", "reply_markup": keyboard})
+                                             "parse_mode": "HTML", "reply_markup": keyboard, "protect_content": True})
                 else:
                     await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
                                        json={"chat_id": admin_id, "text": sender_line, "parse_mode": "HTML", "reply_markup": keyboard})

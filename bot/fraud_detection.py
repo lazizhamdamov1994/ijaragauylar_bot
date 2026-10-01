@@ -220,6 +220,38 @@ def compute_risk_score(user_id: int) -> dict:
     return {"score": score, "reasons": reasons, "daily": daily, "weekly": weekly, "lifetime": lifetime, "subs_count": subs_count}
 
 
+def is_auto_throttled(user_id: int) -> bool:
+    """O'ta ko'p (bir kunda) raqam ko'rgan foydalanuvchini VAQTINCHA
+    to'xtatadi - admin ban qilmaguncha emas, shunchaki shu kuni yangi
+    raqam ko'rishni to'xtatadi (24 soatdan keyin o'zi tiklanadi). Maqsad -
+    ommaviy "scraping" (masalan, raqamlarni yig'ib boshqa kanalga
+    tarqatish uchun) xatti-harakatini real vaqtda to'xtatish, admin
+    "Xavfli foydalanuvchilar" bo'limini qo'lda tekshirib ulgurmasa ham.
+    `fraud_auto_throttle_daily_reveals` sozlamasi orqali o'chirish (0)
+    yoki chegarani o'zgartirish mumkin."""
+    limit = int(get_setting("fraud_auto_throttle_daily_reveals", "20"))
+    if limit <= 0:
+        return False
+    return count_reveals_since(user_id, datetime.now() - timedelta(days=1)) >= limit
+
+
+def reveal_abuse_alert_reason(user_id: int):
+    """Foydalanuvchi SHU ZAHOTI (ushbu ko'rish bilan) kunlik yoki portlash
+    (burst) chegarasini BIRINCHI MARTA kesib o'tgan bo'lsa - qisqa sabab
+    matnini qaytaradi (adminga darhol xabar yuborish uchun, "Xavfli
+    foydalanuvchilar" bo'limini qo'lda tekshirishni kutib o'tirmasdan).
+    Oldin xabar berilgan bo'lsa yoki chegaradan uzoq bo'lsa - None."""
+    daily = count_reveals_since(user_id, datetime.now() - timedelta(days=1))
+    if daily == DAILY_REVEAL_ALERT + 1:
+        return f"kunlik {daily} ta raqam ko'rish chegarasidan oshdi"
+    throttle_limit = int(get_setting("fraud_auto_throttle_daily_reveals", "20"))
+    if throttle_limit > 0 and daily == throttle_limit:
+        return f"avtomatik to'xtatish chegarasiga yetdi ({daily} ta/kun) - vaqtincha cheklandi"
+    if daily == BURST_COUNT and has_burst_activity(user_id):
+        return f"{BURST_COUNT} ta raqamni {BURST_MINUTES} daqiqada ko'rdi"
+    return None
+
+
 def get_flagged_users(min_score: int = RISK_THRESHOLD, limit: int = 200) -> list:
     """Faol (yaqinda ko'rish qilgan) foydalanuvchilar orasidan xavf balli
     yuqori bo'lganlarni topadi. Katta bazalarda samaradorlik uchun so'nggi
@@ -324,13 +356,19 @@ async def send_with_privacy_fallback(func, *args, full_markup: InlineKeyboardMar
         raise
 
 
-async def send_photos(context: ContextTypes.DEFAULT_TYPE, chat_id: int, photos: list) -> bool:
+async def send_photos(context: ContextTypes.DEFAULT_TYPE, chat_id: int, photos: list, protect: bool = False) -> bool:
+    """`protect=True` - Telegram'ning o'z "forward/saqlash taqiqlangan"
+    (protect_content) rejimini yoqadi. FAQAT moderatsiya uchun adminga
+    yuborilgan rasmlarda ishlatiladi (bitta Limit-egasi yoki moderator
+    e'lon rasmlarini boshqa kanalga osongina qayta yubormasligi uchun) -
+    HECH QACHON ommaviy kanal postida yoki foydalanuvchining o'z
+    rasmlarini ko'rsatishda (ularni cheklashning hojati yo'q)."""
     try:
         if len(photos) == 1:
-            await send_with_retry(context.bot.send_photo, chat_id, photos[0])
+            await send_with_retry(context.bot.send_photo, chat_id, photos[0], protect_content=protect)
         else:
             media = [InputMediaPhoto(r) for r in photos]
-            await send_with_retry(context.bot.send_media_group, chat_id, media)
+            await send_with_retry(context.bot.send_media_group, chat_id, media, protect_content=protect)
         return True
     except Exception:
         logger.exception("Rasmlarni yuborishda xatolik (chat_id=%s)", chat_id)

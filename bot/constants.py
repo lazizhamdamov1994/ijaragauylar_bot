@@ -201,6 +201,11 @@ SETTINGS_FIELDS = {
         "hint": "Yoqilsa, bepul joylangan har bir e'lon egasiga kanalga joylangandan keyin uni pullik TOP aylanishiga ko'tarish taklifi yuboriladi (narxi «E'lon narxi» sozlamasi bilan bir xil).",
         "kind": "bool",
     },
+    "fraud_auto_throttle_daily_reveals": {
+        "label": "\U0001F6A8 Kunlik raqam ko'rish - avtomatik to'xtatish chegarasi",
+        "hint": "Bitta foydalanuvchi bir kunda shuncha martadan ko'p «Uy egasi raqami» ko'rsa - u kunning qolgan qismida vaqtincha to'xtatiladi (ertasi kuni o'zi tiklanadi) va admin darhol xabar oladi. Ommaviy raqam yig'ish (masalan boshqa kanalga tarqatish uchun)ni real vaqtda to'xtatish uchun. 0 = o'chirish.",
+        "kind": "int",
+    },
 }
 
 

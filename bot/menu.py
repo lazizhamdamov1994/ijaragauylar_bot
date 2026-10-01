@@ -141,6 +141,17 @@ async def reveal_phone_core(context: ContextTypes.DEFAULT_TYPE, user_id: int, li
         await context.bot.send_message(user_id, "\u26a0\ufe0f Sizga botdan foydalanish cheklangan. Savollar bo'lsa, adminga murojaat qiling.")
         return
 
+    # Ommaviy raqam yig'ishni (masalan, boshqa kanalga tarqatish uchun) real
+    # vaqtda to'xtatish - admin/moderator bundan mustasno (ular ishi uchun
+    # ko'p raqam ko'rishi kerak bo'lishi mumkin).
+    if not admin and not is_staff(user_id) and is_auto_throttled(user_id):
+        await context.bot.send_message(
+            user_id,
+            "\u26a0\ufe0f Bugun juda ko'p raqam ko'rdingiz - xavfsizlik maqsadida vaqtincha to'xtatildi. "
+            "Ertaga davom etishingiz mumkin. Savol bo'lsa, adminga murojaat qiling.",
+        )
+        return
+
     listing = get_listing(listing_id) if listing_id else None
     if not listing or listing["status"] != "approved":
         await context.bot.send_message(user_id, "\u26a0\ufe0f Kechirasiz, bu e'lon topilmadi yoki hali tasdiqlanmagan.", reply_markup=main_menu_keyboard(user_id))
@@ -200,6 +211,19 @@ async def reveal_phone_core(context: ContextTypes.DEFAULT_TYPE, user_id: int, li
         free_note = f"\n\n<i>\U0001F381 Bu \u2014 sizning bepul ko'rishingiz. Yana {max(left,0)} ta bepul ko'rishingiz qoldi.</i>"
 
     log_phone_reveal(user_id, listing_id)
+    if not admin and not is_staff(user_id):
+        abuse_reason = reveal_abuse_alert_reason(user_id)
+        if abuse_reason:
+            for admin_id in ADMIN_IDS:
+                try:
+                    await context.bot.send_message(
+                        admin_id,
+                        f"\U0001F6A8 <b>Shubhali faollik</b>: user_id {user_id} — {esc(abuse_reason)}.\n"
+                        "\U0001F4CA Batafsil: admin panel → «Xavfli foydalanuvchilar».",
+                        parse_mode=ParseMode.HTML,
+                    )
+                except Exception:
+                    logger.exception("Adminga (%s) shubhali faollik xabarini yuborib bo'lmadi", admin_id)
 
     # "Ko'rish vaqtini band qilish" tugmasi ENDI kanal postida emas, balki
     # aynan shu yerda - raqamni ko'rgan (haqiqatan qiziqqan) foydalanuvchiga

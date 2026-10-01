@@ -74,6 +74,7 @@ DEFAULT_SETTINGS = {
     "valuation_price": "10000",
     "ai_market_digest_enabled": "1",
     "listing_boost_offer_enabled": "1",
+    "fraud_auto_throttle_daily_reveals": "20",
 }
 
 # ---- Telegram orqali kirish (shaxsiy kabinet) ----

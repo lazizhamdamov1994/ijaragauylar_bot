@@ -70,7 +70,7 @@ async def notify_admin_of_moderator_listing(context: ContextTypes.DEFAULT_TYPE, 
     for admin_id in ADMIN_IDS:
         try:
             if rasmlar:
-                await send_photos(context, admin_id, rasmlar)
+                await send_photos(context, admin_id, rasmlar, protect=True)
             await send_with_retry(context.bot.send_message, admin_id, caption, parse_mode=ParseMode.HTML)
         except Exception:
             logger.exception("Moderator e'loni haqida adminga (%s) FYI xabar yuborib bo'lmadi", admin_id)

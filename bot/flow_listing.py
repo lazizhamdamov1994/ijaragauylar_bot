@@ -785,7 +785,7 @@ async def submit_listing_to_admin(context: ContextTypes.DEFAULT_TYPE, listing_id
     any_success = False
     for admin_id in ADMIN_IDS:
         try:
-            await send_photos(context, admin_id, rasmlar)
+            await send_photos(context, admin_id, rasmlar, protect=True)
             await send_with_retry(context.bot.send_message, admin_id, caption, parse_mode=ParseMode.HTML)
             if data.get("payment_receipt"):
                 await send_with_retry(
@@ -829,7 +829,7 @@ async def show_pending(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def resend_listing_for_review(context: ContextTypes.DEFAULT_TYPE, admin_chat_id: int, listing: dict) -> None:
     caption = build_caption(listing, context.bot.username) + f"\n\n\U0001F194 E'lon raqami: #{listing['id']}"
-    await send_photos(context, admin_chat_id, listing["photos"])
+    await send_photos(context, admin_chat_id, listing["photos"], protect=True)
     try:
         await send_with_retry(context.bot.send_message, admin_chat_id, caption, parse_mode=ParseMode.HTML)
     except Exception:
