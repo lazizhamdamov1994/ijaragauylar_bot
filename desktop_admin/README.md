@@ -51,9 +51,20 @@ ulanishi yo'q edi. Agar ishlamasa yoki noto'g'ri ishlasa:
   mumkin - bu har doim ishlaydi.
 - Menga aniq qaysi OLX havolasida ishlamaganini ayting - men xatoni tuzataman.
 
+## Nusxa ko'chirish/joylashtirish (Ctrl+V) ishlamasa
+
+Agar kompyuteringizda rus/o'zbek kirill klaviatura tartibi o'rnatilgan bo'lsa,
+dastur ichida Ctrl+V/Ctrl+C ishlamasligi mumkin edi - bu Windows'dagi
+Tkinter'ning mashhur muammosi (standart bog'lanish harfning o'ziga, klaviatura
+tartibiga esa bog'liq). Bu versiyada klaviatura tartibidan mustaqil ishlaydigan
+maxsus tuzatish qo'shilgan - Ctrl+V/C/X endi qaysi til tartibida bo'lishidan
+qat'iy nazar ishlaydi.
+
 ## Fayllar
 
-- `app.py` - asosiy dastur (Tkinter GUI)
+- `app.py` - asosiy dastur (CustomTkinter GUI, saytdagi korall brend
+  palitrasiga mos zamonaviy dizayn)
 - `api_client.py` - serverga ulanish mantiqi (GUI'dan mustaqil)
+- `app_icon.ico` - dastur ikonkasi (.exe fayl va oyna uchun)
 - `requirements.txt` - kerakli Python kutubxonalari
 - `build_exe.bat` - `.exe` yasash skripti

@@ -13,7 +13,7 @@ if errorlevel 1 (
 
 echo.
 echo 2-qadam: .exe fayl yasalmoqda (bir necha daqiqa davom etishi mumkin)...
-pyinstaller --onefile --windowed --name "IjaragaUylarAdmin" app.py
+pyinstaller --onefile --windowed --name "IjaragaUylarAdmin" --icon "app_icon.ico" --collect-data customtkinter --add-data "app_icon.ico;." app.py
 if errorlevel 1 (
     echo XATOLIK: .exe yasashda muammo yuz berdi.
     pause
