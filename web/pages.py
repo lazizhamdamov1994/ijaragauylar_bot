@@ -36,10 +36,13 @@ from common.db import (
     now_str,
     save_valuation_payment,
     save_valuation_request,
+    set_valuation_payment_receipt_warning,
+    update_valuation_payment_status,
 )
 from common.telegram_media import watermark_photo_bytes_list
 from common.ai import ai_check_receipt, ai_features_enabled, ai_screen_for_scam, ai_valuate_property
 from common.ai_agent import find_comparable_listings
+from common.receipt_security import find_cross_user_receipt_reuse, receipt_phash, record_approved_receipt, store_receipt_phash
 
 from bot.db import get_listing, set_listing_scam_warning, update_listing_status
 from bot.admin_moderation import log_channel_post
@@ -1408,7 +1411,7 @@ def _web_listing_caption(d: dict) -> str:
     )
 
 
-async def notify_admins_new_web_listing(listing_id: int, d: dict, file_ids: list, receipt_file_id, price_charged: int) -> None:
+async def notify_admins_new_web_listing(listing_id: int, d: dict, file_ids: list, receipt_file_id, price_charged: int, receipt_bytes: bytes = None) -> None:
     if not ADMIN_IDS or not BOT_TOKEN:
         return
     caption = _web_listing_caption(d) + f"\n\n\U0001F194 E'lon raqami: #{listing_id}\n\U0001F310 Manba: <b>veb-sayt</b> orqali yuborilgan"
@@ -1424,34 +1427,75 @@ async def notify_admins_new_web_listing(listing_id: int, d: dict, file_ids: list
     except Exception:
         logger.exception("AI firibgarlik skriningida xatolik (veb e'lon)")
 
+    # To'lov cheki (agar pullik e'lon bo'lsa) - bot/flow_listing.py'dagi
+    # bilan BIR XIL: barmoq izi (boshqa foydalanuvchida ishlatilganmi) +
+    # AI mos kelish tekshiruvi. Ikkalasi ham AVVAL ishlaydi, chunki
+    # auto-tasdiqlash qarori shularga bog'liq.
+    receipt_check = None
+    dup = None
+    phash = None
+    if receipt_bytes:
+        phash = receipt_phash(receipt_bytes)
+        if phash:
+            store_receipt_phash("listings", listing_id, phash)
+            dup = find_cross_user_receipt_reuse(phash, 0)
+        if ai_features_enabled():
+            try:
+                receipt_check = await loop.run_in_executor(None, ai_check_receipt, receipt_bytes, "image/jpeg", price_charged, CARD_HOLDER)
+                if receipt_check and not receipt_check.get("matches"):
+                    ai_warning += f"\U0001F916⚠️ <b>AI: chekda nomuvofiqlik</b> — {esc_html(receipt_check.get('note') or '')}\n\n"
+                    set_listing_receipt_warning(listing_id, receipt_check.get("note") or "")
+            except Exception:
+                logger.exception("AI to'lov cheki tekshiruvida xatolik (veb e'lon)")
+        if dup:
+            ai_warning += (
+                f"\U0001F6A8 <b>OGOHLANTIRISH: bu chek rasmi BOSHQA foydalanuvchida (user_id: {dup['user_id']}) "
+                f"allaqachon tasdiqlangan to'lov uchun ishlatilgan</b> ({dup['payment_type']} #{dup['payment_ref_id']})! "
+                "Diqqat bilan tekshiring.\n\n"
+            )
+
     # AI avtomatik tasdiqlash - bot/flow_listing.py'dagi bilan bir xil
-    # shart: faqat bepul e'lon + admin alohida yoqqan bo'lsa + AI shubha
-    # topmasa + telefon bloklanmagan + foydalanuvchining oldin rad
-    # etilgan e'loni bo'lmasa. Aks holda odatdagidek admin navbatiga tushadi.
+    # shart: BEPUL e'lon uchun "ai_auto_approve_free_listings", PULLIK
+    # e'lon uchun alohida "ai_auto_approve_paid_listings" (chek mos kelgan
+    # VA boshqa foydalanuvchida ishlatilmagan bo'lsa). Aks holda odatdagidek
+    # admin navbatiga tushadi.
+    auto_approve_trusted = False
     if price_charged == 0 and ai_features_enabled() and get_setting("ai_auto_approve_free_listings", "0") == "1":
-        listing_row = get_listing(listing_id)
-        trusted = (
-            listing_row is not None
-            and scam is not None and not scam.get("suspicious")
+        auto_approve_trusted = (
+            scam is not None and not scam.get("suspicious")
             and not is_phone_blocked(d["telefon"])
             and not has_prior_rejected_listing(phone=d["telefon"])
         )
-        if trusted:
+    elif price_charged > 0 and ai_features_enabled() and get_setting("ai_auto_approve_paid_listings", "0") == "1":
+        auto_approve_trusted = (
+            receipt_check is not None and receipt_check.get("matches")
+            and not dup
+            and (scam is None or not scam.get("suspicious"))
+            and not is_phone_blocked(d["telefon"])
+            and not has_prior_rejected_listing(phone=d["telefon"])
+        )
+
+    if auto_approve_trusted:
+        listing_row = get_listing(listing_id)
+        if listing_row is not None:
             message_id = await post_listing_to_channel(listing_row)
             if message_id is not None:
                 update_listing_status(listing_id, "approved", channel_msg_id=message_id)
                 log_channel_post(listing_id, message_id)
+                if phash and price_charged > 0:
+                    record_approved_receipt(phash, "listing", listing_id, 0)
                 link = f"https://t.me/{CHANNEL_USERNAME}" if CHANNEL_USERNAME else None
                 msg = "✅ Sizning e'loningiz tasdiqlandi va kanalga joylandi!"
                 if link:
                     msg += f"\n{link}"
                 await notify_telegram(listing_row["user_id"], msg)
+                reason = "bepul, xavf belgisi topilmadi" if price_charged == 0 else "pullik, chek mos keldi"
                 for admin_id in ADMIN_IDS:
                     try:
                         async with httpx.AsyncClient(timeout=10) as client:
                             await client.post(
                                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                                json={"chat_id": admin_id, "text": f"\U0001F916 AI avtomatik tasdiqladi (veb, bepul, xavf belgisi topilmadi): E'lon #{listing_id} kanalga joylandi."},
+                                json={"chat_id": admin_id, "text": f"\U0001F916 AI avtomatik tasdiqladi (veb, {reason}): E'lon #{listing_id} kanalga joylandi."},
                             )
                     except Exception:
                         logger.exception("Adminga (%s) AI avto-tasdiq xabarini yuborib bo'lmadi (veb)", admin_id)
@@ -1606,7 +1650,7 @@ async def submit_web_listing(
     d = {"manzil": manzil, "moljal": moljal, "kimlarga": kimlarga, "xona": xona,
          "qulaylik": qulaylik, "narx": narx, "full_name": full_name, "telefon": phone, "rental_type": rental_type}
     try:
-        await notify_admins_new_web_listing(listing_id, d, file_ids, receipt_file_id, price_charged)
+        await notify_admins_new_web_listing(listing_id, d, file_ids, receipt_file_id, price_charged, receipt_bytes)
     except Exception:
         logger.exception("Web e'lon uchun adminlarga umumiy xabar yuborishda xatolik")
 
@@ -1923,20 +1967,6 @@ async def submit_valuation(
     if len(receipt_bytes) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Chek rasmi 10MB dan oshmasligi kerak.")
 
-    receipt_check = None
-    try:
-        receipt_check = ai_check_receipt(receipt_bytes, "image/jpeg", price, CARD_HOLDER)
-    except Exception:
-        logger.exception("AI uy baholash chekini tekshirishda xatolik (veb)")
-
-    if receipt_check and receipt_check.get("matches"):
-        comps = find_comparable_listings(district, xona)
-        result = ai_valuate_property(district, xona, condition, comps, ai_photos)
-        if not result:
-            raise HTTPException(status_code=503, detail="Baholashda vaqtinchalik texnik nosozlik. Birozdan keyin qayta urinib ko'ring.")
-        save_valuation_request(uid, "web", district, xona, condition, result)
-        return {"ok": True, "free": False, "auto_approved": True, "result": result, "comps_count": len(comps)}
-
     if not ADMIN_IDS or not BOT_TOKEN:
         raise HTTPException(status_code=503, detail="Tizim vaqtincha sozlanmoqda. Iltimos, birozdan so'ng qaytadan urinib ko'ring.")
 
@@ -1957,7 +1987,40 @@ async def submit_valuation(
         raise HTTPException(status_code=502, detail="Chekni yuklab bo'lmadi. Qaytadan urinib ko'ring.")
 
     payment_id = save_valuation_payment(uid, "web", district, xona, condition, photo_file_ids, receipt_file_id)
-    ai_note = f"\n\n\U0001F916⚠️ AI: {esc_html(receipt_check.get('note') or '')}" if receipt_check else ""
+
+    phash = receipt_phash(receipt_bytes)
+    dup = None
+    if phash:
+        store_receipt_phash("valuation_payments", payment_id, phash)
+        dup = find_cross_user_receipt_reuse(phash, uid)
+
+    receipt_check = None
+    try:
+        receipt_check = ai_check_receipt(receipt_bytes, "image/jpeg", price, CARD_HOLDER)
+    except Exception:
+        logger.exception("AI uy baholash chekini tekshirishda xatolik (veb)")
+
+    dup_warning = ""
+    if dup:
+        dup_warning = (
+            f"\n\n\U0001F6A8 <b>OGOHLANTIRISH: bu chek rasmi BOSHQA foydalanuvchida (user_id: {dup['user_id']}) "
+            f"allaqachon tasdiqlangan to'lov uchun ishlatilgan</b> ({dup['payment_type']} #{dup['payment_ref_id']})!"
+        )
+
+    if receipt_check and receipt_check.get("matches") and not dup:
+        comps = find_comparable_listings(district, xona)
+        result = ai_valuate_property(district, xona, condition, comps, ai_photos)
+        if not result:
+            raise HTTPException(status_code=503, detail="Baholashda vaqtinchalik texnik nosozlik. Birozdan keyin qayta urinib ko'ring.")
+        save_valuation_request(uid, "web", district, xona, condition, result)
+        update_valuation_payment_status(payment_id, "approved")
+        if phash:
+            record_approved_receipt(phash, "valuation", payment_id, uid)
+        return {"ok": True, "free": False, "auto_approved": True, "result": result, "comps_count": len(comps)}
+
+    ai_note = (f"\n\n\U0001F916⚠️ AI: {esc_html(receipt_check.get('note') or '')}" if receipt_check else "") + dup_warning
+    if receipt_check and not receipt_check.get("matches"):
+        set_valuation_payment_receipt_warning(payment_id, receipt_check.get("note") or "")
     try:
         await _notify_admins_valuation_payment(payment_id, uid, district, xona, price, receipt_file_id, ai_note)
     except Exception:

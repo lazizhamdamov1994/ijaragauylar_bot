@@ -113,6 +113,7 @@ def init_schema() -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT, phash TEXT, user_id INTEGER, context_label TEXT,
             ref_id INTEGER, created_at TEXT)"""
     )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_receipt_hashes_phash ON receipt_hashes(phash)")
     # ---- Faqat sayt (dashboard) ishlatadigan kuzatuv jadvallari ----
     conn.execute("""CREATE TABLE IF NOT EXISTS map_views (id INTEGER PRIMARY KEY AUTOINCREMENT, viewed_at TEXT)""")
     conn.execute("""CREATE TABLE IF NOT EXISTS map_clicks (id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, clicked_at TEXT)""")
@@ -172,6 +173,14 @@ def init_schema() -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS boost_payments (
         id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
         price INTEGER NOT NULL, receipt_file_id TEXT, status TEXT DEFAULT 'pending', created_at TEXT)""")
+    # AI chekni shubhali deb belgilagan, lekin admin baribir haqiqiy deb
+    # tasdiqlagan holatlar - shu orqali AI turli bank/ilova formatlaridagi
+    # cheklarni "o'rganib boradi" (common/receipt_security.py'dagi
+    # append_receipt_guidance() orqali ai_receipt_extra_guidance sozlamasiga
+    # avtomatik qo'shiladi).
+    conn.execute("""CREATE TABLE IF NOT EXISTS receipt_feedback_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, payment_type TEXT NOT NULL, payment_ref_id INTEGER NOT NULL,
+        ai_matched INTEGER, ai_note TEXT, admin_decision TEXT NOT NULL, created_at TEXT)""")
     conn.commit()
     conn.close()
 
@@ -186,12 +195,14 @@ def migrate_schema() -> None:
             "sender_phone": "TEXT", "payment_receipt": "TEXT", "price_charged": "INTEGER",
             "is_quick": "INTEGER DEFAULT 0", "raw_text": "TEXT", "last_confirmed_at": "TEXT",
             "expired": "INTEGER DEFAULT 0", "stale_reports": "INTEGER DEFAULT 0", "receipt_warning": "TEXT",
-            "ai_scam_warning": "TEXT",
+            "ai_scam_warning": "TEXT", "receipt_phash": "TEXT",
             "buttons_fixed": "INTEGER DEFAULT 0", "latitude": "REAL", "longitude": "REAL",
             "category": "TEXT DEFAULT 'egadan'", "rental_type": "TEXT DEFAULT 'uzoq_muddat'",
             "source": "TEXT DEFAULT 'bot'",
         }),
-        ("subscriptions", {"months": "INTEGER DEFAULT 1", "price_charged": "INTEGER", "target_listing_id": "INTEGER", "receipt_warning": "TEXT"}),
+        ("subscriptions", {"months": "INTEGER DEFAULT 1", "price_charged": "INTEGER", "target_listing_id": "INTEGER", "receipt_warning": "TEXT", "receipt_phash": "TEXT"}),
+        ("valuation_payments", {"receipt_warning": "TEXT", "receipt_phash": "TEXT"}),
+        ("boost_payments", {"receipt_warning": "TEXT", "receipt_phash": "TEXT"}),
         ("users", {"free_views_used": "INTEGER DEFAULT 0", "bonus_views": "INTEGER DEFAULT 0", "referred_by": "INTEGER", "referral_bonus_given": "INTEGER DEFAULT 0"}),
         ("listing_inquiries", {"sender_user_id": "INTEGER"}),
         ("moderators", {"is_super": "INTEGER DEFAULT 0"}),
@@ -351,6 +362,20 @@ def get_valuation_payment(payment_id: int):
 def update_valuation_payment_status(payment_id: int, status: str) -> None:
     conn = db()
     conn.execute("UPDATE valuation_payments SET status = ? WHERE id = ?", (status, payment_id))
+    conn.commit()
+    conn.close()
+
+
+def set_valuation_payment_receipt_warning(payment_id: int, warning: str) -> None:
+    conn = db()
+    conn.execute("UPDATE valuation_payments SET receipt_warning = ? WHERE id = ?", (warning, payment_id))
+    conn.commit()
+    conn.close()
+
+
+def set_boost_payment_receipt_warning(payment_id: int, warning: str) -> None:
+    conn = db()
+    conn.execute("UPDATE boost_payments SET receipt_warning = ? WHERE id = ?", (warning, payment_id))
     conn.commit()
     conn.close()
 

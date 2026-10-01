@@ -36,6 +36,7 @@ from bot.helpers import *  # noqa: F401,F403
 from bot.fraud_detection import *  # noqa: F401,F403
 from bot.location_alerts import *  # noqa: F401,F403
 from bot.flow_boost import boost_offer_keyboard
+from common.receipt_security import log_receipt_feedback, note_admin_overrode_ai_mismatch, record_approved_receipt
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,8 @@ async def approve_and_post_listing_core(context: ContextTypes.DEFAULT_TYPE, list
     listing["channel_msg_id"] = channel_msg_id
 
     log_ai_feedback(listing_id, was_flagged=bool(listing.get("ai_scam_warning")), decision="approved")
+    if (listing.get("price_charged") or 0) > 0 and listing.get("receipt_phash"):
+        record_approved_receipt(listing["receipt_phash"], "listing", listing_id, listing["user_id"])
 
     await notify_location_alert_matches(context, listing)
 
@@ -166,6 +169,10 @@ async def approve_listing(update: Update, context: ContextTypes.DEFAULT_TYPE, li
         await query.message.reply_text(f"Bu e'lon allaqachon ko'rib chiqilgan (holat: {listing['status']}).")
         return
 
+    if listing.get("receipt_warning"):
+        note_admin_overrode_ai_mismatch(listing["receipt_warning"])
+        log_receipt_feedback("listing", listing_id, False, listing["receipt_warning"], "approved")
+
     ok = await approve_and_post_listing_core(context, listing)
     if not ok:
         await query.message.reply_text("\u26a0\ufe0f Kanalga joylashda xatolik yuz berdi (tarmoq muammosi). Hech narsa joylanmadi \u2014 \u00abTasdiqlash\u00bb tugmasini qaytadan bosing.")
@@ -186,6 +193,11 @@ async def approve_sub(update: Update, context: ContextTypes.DEFAULT_TYPE, sub_id
         return
 
     user_id, expire = approve_subscription(sub_id)
+    if sub.get("receipt_phash"):
+        record_approved_receipt(sub["receipt_phash"], "subscription", sub_id, user_id)
+    if sub.get("receipt_warning"):
+        note_admin_overrode_ai_mismatch(sub["receipt_warning"])
+        log_receipt_feedback("subscription", sub_id, False, sub["receipt_warning"], "approved")
     await query.edit_message_reply_markup(reply_markup=None)
     await query.message.reply_text(f"\u2705 Obuna #{sub_id} tasdiqlandi ({expire[:10]} gacha).")
 
@@ -244,6 +256,8 @@ async def admin_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYPE
         if listing and listing["status"] == "pending":
             update_listing_status(listing_id, "rejected", reason=reason)
             log_ai_feedback(listing_id, was_flagged=bool(listing.get("ai_scam_warning")), decision="rejected")
+            if listing.get("receipt_warning"):
+                log_receipt_feedback("listing", listing_id, False, listing["receipt_warning"], "rejected")
             await update.message.reply_text(f"\u274c E'lon #{listing_id} rad etildi.", reply_markup=main_menu_keyboard(update.effective_user.id))
             try:
                 await context.bot.send_message(
@@ -277,6 +291,8 @@ async def admin_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYPE
         sub = get_subscription(sub_id)
         if sub and sub["status"] == "pending":
             reject_subscription(sub_id, reason)
+            if sub.get("receipt_warning"):
+                log_receipt_feedback("subscription", sub_id, False, sub["receipt_warning"], "rejected")
             await update.message.reply_text(f"\u274c Obuna so'rovi #{sub_id} rad etildi.", reply_markup=main_menu_keyboard(update.effective_user.id))
             try:
                 await context.bot.send_message(

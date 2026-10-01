@@ -43,6 +43,7 @@ from web.render import DEFAULT_LANG, esc_html, get_lang, icon, render_credit_car
 from bot.db import approve_subscription, get_listing, get_subscription, set_subscription_receipt_warning
 from bot.helpers import build_caption, channel_keyboard, phone_reveal_text
 from common.ai import ai_check_receipt, ai_features_enabled
+from common.receipt_security import find_cross_user_receipt_reuse, receipt_phash, record_approved_receipt, store_receipt_phash
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -623,18 +624,31 @@ async def buy_limit(request: Request, receipt: UploadFile = File(...), listing_i
 
     ai_note = ""
     receipt_check = None
+    dup = None
+    phash = receipt_phash(content)
+    if phash:
+        store_receipt_phash("subscriptions", sub_id, phash)
+        dup = find_cross_user_receipt_reuse(phash, uid)
+    if dup:
+        ai_note += (
+            f"\n\n\U0001F6A8 <b>OGOHLANTIRISH: bu chek rasmi BOSHQA foydalanuvchida (user_id: {dup['user_id']}) "
+            f"allaqachon tasdiqlangan to'lov uchun ishlatilgan</b> ({dup['payment_type']} #{dup['payment_ref_id']})! "
+            "Diqqat bilan tekshiring - bitta chek bir necha kishiga Limit bermasligi kerak."
+        )
     if ai_features_enabled():
         try:
-            receipt_check = ai_check_receipt(receipt_bytes, "image/jpeg", price, CARD_HOLDER)
+            receipt_check = ai_check_receipt(content, "image/jpeg", price, CARD_HOLDER)
             if receipt_check and not receipt_check.get("matches"):
-                ai_note = f"\n\n\U0001F916⚠️ <b>AI: chekda nomuvofiqlik</b> — {esc_html(receipt_check.get('note') or '')}"
+                ai_note = f"\n\n\U0001F916⚠️ <b>AI: chekda nomuvofiqlik</b> — {esc_html(receipt_check.get('note') or '')}" + ai_note
                 set_subscription_receipt_warning(sub_id, receipt_check.get("note") or "")
         except Exception:
             logger.exception("AI obuna chekini tekshirishda xatolik (veb)")
 
-    if receipt_check and receipt_check.get("matches"):
+    if receipt_check and receipt_check.get("matches") and not dup:
         sub = get_subscription(sub_id)
         _, expire = approve_subscription(sub_id)
+        if phash:
+            record_approved_receipt(phash, "subscription", sub_id, uid)
         text = (
             f"✅ Chekingiz AI tomonidan avtomatik tasdiqlandi! Limitingiz faollashtirildi.\nMuddati: <b>{expire[:10]}</b> gacha.\n\n"
             "Endi kanaldagi istalgan e'londa «Uy egasi raqami» tugmasini bosib, raqamni ko'rishingiz mumkin."

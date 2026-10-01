@@ -17,7 +17,8 @@ from telegram.ext import ContextTypes, ConversationHandler
 
 from common.ai import ai_check_receipt, ai_features_enabled
 from common.config import ADMIN_IDS, CARD_HOLDER
-from common.db import boost_listing_to_top, get_boost_payment, get_setting, save_boost_payment, update_boost_payment_status
+from common.db import boost_listing_to_top, get_boost_payment, get_setting, save_boost_payment, set_boost_payment_receipt_warning, update_boost_payment_status
+from common.receipt_security import find_cross_user_receipt_reuse, log_receipt_feedback, note_admin_overrode_ai_mismatch, receipt_phash, record_approved_receipt, store_receipt_phash
 from common.telegram_media import download_photo_bytes
 
 from bot.constants import *  # noqa: F401,F403
@@ -83,21 +84,36 @@ async def boost_receipt_received(update: Update, context: ContextTypes.DEFAULT_T
     receipt_file_id = update.message.photo[-1].file_id
     price = listing_price()
 
+    payment_id = save_boost_payment(listing_id, user.id, price, receipt_file_id)
+    context.user_data.pop("boost_pending_listing_id", None)
+
     await context.bot.send_chat_action(update.effective_chat.id, "typing")
     receipt_check = None
+    dup = None
+    phash = None
     try:
         receipt_bytes = await download_photo_bytes(receipt_file_id)
         if receipt_bytes:
+            phash = receipt_phash(receipt_bytes)
+            if phash:
+                store_receipt_phash("boost_payments", payment_id, phash)
+                dup = find_cross_user_receipt_reuse(phash, user.id)
             receipt_check = ai_check_receipt(receipt_bytes, "image/jpeg", price, CARD_HOLDER)
     except Exception:
         logger.exception("AI topga ko'tarish chekini tekshirishda xatolik")
 
-    payment_id = save_boost_payment(listing_id, user.id, price, receipt_file_id)
-    context.user_data.pop("boost_pending_listing_id", None)
+    dup_warning = ""
+    if dup:
+        dup_warning = (
+            f"\n\n\U0001F6A8 <b>OGOHLANTIRISH: bu chek rasmi BOSHQA foydalanuvchida (user_id: {dup['user_id']}) "
+            f"allaqachon tasdiqlangan to'lov uchun ishlatilgan</b> ({dup['payment_type']} #{dup['payment_ref_id']})!"
+        )
 
-    if receipt_check and receipt_check.get("matches"):
+    if receipt_check and receipt_check.get("matches") and not dup:
         update_boost_payment_status(payment_id, "approved")
         boost_listing_to_top(listing_id, price)
+        if phash:
+            record_approved_receipt(phash, "boost", payment_id, user.id)
         await update.message.reply_text(
             "✅ To'lov tasdiqlandi! E'loningiz endi TOP aylanishida - navbat bilan qayta-qayta yuqoriga chiqarib turiladi.",
             reply_markup=main_menu_keyboard(user.id),
@@ -121,7 +137,9 @@ async def boost_receipt_received(update: Update, context: ContextTypes.DEFAULT_T
         "\U0001F4E8 Chekingiz adminga tekshirish uchun yuborildi. Tasdiqlangach, e'loningiz TOP'ga chiqadi.",
         reply_markup=main_menu_keyboard(user.id),
     )
-    ai_note = f"\n\n\U0001F916⚠️ AI: {esc(receipt_check.get('note') or '')}" if receipt_check else ""
+    ai_note = (f"\n\n\U0001F916⚠️ AI: {esc(receipt_check.get('note') or '')}" if receipt_check else "") + dup_warning
+    if receipt_check and not receipt_check.get("matches"):
+        set_boost_payment_receipt_warning(payment_id, receipt_check.get("note") or "")
     admin_keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton("✅ Tasdiqlash", callback_data=f"boostpay_approve_{payment_id}"),
         InlineKeyboardButton("❌ Rad etish", callback_data=f"boostpay_reject_{payment_id}"),
@@ -156,6 +174,11 @@ async def boostpay_approve_router(update: Update, context: ContextTypes.DEFAULT_
         return
     update_boost_payment_status(payment_id, "approved")
     boost_listing_to_top(payment["listing_id"], payment["price"])
+    if payment.get("receipt_phash"):
+        record_approved_receipt(payment["receipt_phash"], "boost", payment_id, payment["user_id"])
+    if payment.get("receipt_warning"):
+        note_admin_overrode_ai_mismatch(payment["receipt_warning"])
+        log_receipt_feedback("boost", payment_id, False, payment["receipt_warning"], "approved")
     await query.edit_message_reply_markup(reply_markup=None)
     await query.message.reply_text(f"✅ TOP to'lovi #{payment_id} tasdiqlandi.")
     try:
@@ -180,6 +203,8 @@ async def boostpay_reject_router(update: Update, context: ContextTypes.DEFAULT_T
         await query.message.reply_text("⚠️ Bu so'rov allaqachon ko'rib chiqilgan.")
         return
     update_boost_payment_status(payment_id, "rejected")
+    if payment.get("receipt_warning"):
+        log_receipt_feedback("boost", payment_id, False, payment["receipt_warning"], "rejected")
     await query.edit_message_reply_markup(reply_markup=None)
     await query.message.reply_text(f"❌ TOP to'lovi #{payment_id} rad etildi.")
     try:

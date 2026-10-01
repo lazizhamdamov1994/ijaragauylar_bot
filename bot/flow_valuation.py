@@ -26,9 +26,11 @@ from common.db import (
     has_prior_valuation,
     save_valuation_payment,
     save_valuation_request,
+    set_valuation_payment_receipt_warning,
     update_valuation_payment_status,
 )
 from common.districts import TASHKENT_DISTRICTS
+from common.receipt_security import find_cross_user_receipt_reuse, log_receipt_feedback, note_admin_overrode_ai_mismatch, receipt_phash, record_approved_receipt, store_receipt_phash
 from common.telegram_media import download_photo_bytes
 
 from bot.constants import *  # noqa: F401,F403
@@ -226,16 +228,36 @@ async def valuation_receipt_received(update: Update, context: ContextTypes.DEFAU
     receipt_file_id = update.message.photo[-1].file_id
     price = int(get_setting("valuation_price", "10000"))
 
+    payment_id = save_valuation_payment(
+        user.id, "bot", pending["district"], pending["xona"], pending["condition"], pending["photos"], receipt_file_id,
+    )
+
     await context.bot.send_chat_action(update.effective_chat.id, "typing")
     receipt_check = None
+    dup = None
+    phash = None
     try:
         receipt_bytes = await download_photo_bytes(receipt_file_id)
         if receipt_bytes:
+            phash = receipt_phash(receipt_bytes)
+            if phash:
+                store_receipt_phash("valuation_payments", payment_id, phash)
+                dup = find_cross_user_receipt_reuse(phash, user.id)
             receipt_check = ai_check_receipt(receipt_bytes, "image/jpeg", price, CARD_HOLDER)
     except Exception:
         logger.exception("AI uy baholash chekini tekshirishda xatolik")
 
-    if receipt_check and receipt_check.get("matches"):
+    dup_warning = ""
+    if dup:
+        dup_warning = (
+            f"\n\n\U0001F6A8 <b>OGOHLANTIRISH: bu chek rasmi BOSHQA foydalanuvchida (user_id: {dup['user_id']}) "
+            f"allaqachon tasdiqlangan to'lov uchun ishlatilgan</b> ({dup['payment_type']} #{dup['payment_ref_id']})!"
+        )
+
+    if receipt_check and receipt_check.get("matches") and not dup:
+        update_valuation_payment_status(payment_id, "approved")
+        if phash:
+            record_approved_receipt(phash, "valuation", payment_id, user.id)
         await update.message.reply_text("✅ To'lov tasdiqlandi! Baholanmoqda...", reply_markup=main_menu_keyboard(user.id))
         await _generate_and_send_valuation(
             context, user.id, update.effective_chat.id, pending["district"], pending["xona"], pending["condition"], pending["photos"],
@@ -243,15 +265,14 @@ async def valuation_receipt_received(update: Update, context: ContextTypes.DEFAU
         context.user_data.pop("valuation_pending_payment", None)
         return ConversationHandler.END
 
-    payment_id = save_valuation_payment(
-        user.id, "bot", pending["district"], pending["xona"], pending["condition"], pending["photos"], receipt_file_id,
-    )
     context.user_data.pop("valuation_pending_payment", None)
     await update.message.reply_text(
         "\U0001F4E8 Chekingiz adminga tekshirish uchun yuborildi. Tasdiqlangach, baholash natijasi shu yerga keladi.",
         reply_markup=main_menu_keyboard(user.id),
     )
-    ai_note = f"\n\n\U0001F916⚠️ AI: {esc(receipt_check.get('note') or '')}" if receipt_check else ""
+    ai_note = (f"\n\n\U0001F916⚠️ AI: {esc(receipt_check.get('note') or '')}" if receipt_check else "") + dup_warning
+    if receipt_check and not receipt_check.get("matches"):
+        set_valuation_payment_receipt_warning(payment_id, receipt_check.get("note") or "")
     admin_keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton("✅ Tasdiqlash", callback_data=f"valpay_approve_{payment_id}"),
         InlineKeyboardButton("❌ Rad etish", callback_data=f"valpay_reject_{payment_id}"),
@@ -293,6 +314,11 @@ async def valpay_approve_router(update: Update, context: ContextTypes.DEFAULT_TY
         await query.message.reply_text("⚠️ Bu so'rov allaqachon ko'rib chiqilgan.")
         return
     update_valuation_payment_status(payment_id, "approved")
+    if payment.get("receipt_phash"):
+        record_approved_receipt(payment["receipt_phash"], "valuation", payment_id, payment["user_id"])
+    if payment.get("receipt_warning"):
+        note_admin_overrode_ai_mismatch(payment["receipt_warning"])
+        log_receipt_feedback("valuation", payment_id, False, payment["receipt_warning"], "approved")
     await query.edit_message_reply_markup(reply_markup=None)
     await query.message.reply_text(f"✅ To'lov #{payment_id} tasdiqlandi, baholash yuborilmoqda...")
     await _generate_and_send_valuation(
@@ -314,6 +340,8 @@ async def valpay_reject_router(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.message.reply_text("⚠️ Bu so'rov allaqachon ko'rib chiqilgan.")
         return
     update_valuation_payment_status(payment_id, "rejected")
+    if payment.get("receipt_warning"):
+        log_receipt_feedback("valuation", payment_id, False, payment["receipt_warning"], "rejected")
     await query.edit_message_reply_markup(reply_markup=None)
     await query.message.reply_text(f"❌ To'lov #{payment_id} rad etildi.")
     try:

@@ -210,8 +210,22 @@ def ai_screen_for_scam(raw_text: str):
 # ============================= 3: TO'LOV CHEKINI OLDINDAN TEKSHIRISH =============================
 
 _RECEIPT_SYSTEM = (
-    "Siz to'lov chekining skrinshotini tekshiruvchi yordamchisiz. Sizga kutilayotgan summa va "
-    "karta egasining ismi beriladi. Rasmdagi chek shu ma'lumotlarga mos keladimi tekshiring. "
+    "Siz O'zbekistondagi turli to'lov ilovalaridan (Click, Payme, Uzcard/Apelsin, Humo, "
+    "va turli banklarning mobil ilovalari - Kapitalbank, Ipoteka-bank, Ipak Yuli, Xalq banki, "
+    "Asaka bank va boshqalar) chiqqan to'lov cheki skrinshotlarini tekshiruvchi yordamchisiz. "
+    "HAR BIR ilova/bank chekni O'ZINING dizayni, rangi, matn joylashuvi bilan chiqaradi - "
+    "bu NORMAL holat, nazariy 'to'g'ri' format yo'q. Format notanish yoki g'alati ko'rinishi "
+    "chekni avtomatik SHUBHALI qilmaydi.\n\n"
+    "Sizga kutilayotgan summa va karta/hisob egasining ismi beriladi. FAQAT ikkita narsaga "
+    "e'tibor bering:\n"
+    "1) Rasmda ko'rsatilgan to'lov summasi kutilayotgan summaga mos keladimi (kichik "
+    "farqlar - masalan komissiya tufayli 1-2% farq - normal, muammo emas);\n"
+    "2) To'lov QABUL QILUVCHISI (karta egasi/ism) kutilgan ism bilan mos keladimi - TO'LIQ "
+    "bir xil bo'lishi SHART EMAS (masalan chekda ism qisqartirilgan, familiya bitta harfga "
+    "yashiringan, yoki faqat karta raqamining oxirgi raqamlari ko'rsatilgan bo'lishi mumkin - "
+    "bularning barchasi NORMAL, agar mantiqan mos kelsa).\n\n"
+    "To'lov holati 'muvaffaqiyatli'/'bajarildi'/'amalga oshirildi' kabi so'zlar bilan "
+    "tasdiqlangan bo'lishi kerak (muvaffaqiyatsiz/bekor qilingan to'lov emas).\n\n"
     "FAQAT JSON qaytaring, boshqa matn yozmang:\n"
     '{"matches": true yoki false, "note": "qisqa izoh (o\'zbek tilida, 1 gap) - masalan nomuvofiqlik topilsa nima"}\n'
     "Agar rasmni umuman o'qib bo'lmasa yoki chek ekanligi noaniq bo'lsa, matches=false va note'da shuni yozing."
@@ -230,10 +244,15 @@ def ai_check_receipt(image_bytes: bytes, media_type: str, expected_amount: int, 
         return None
     try:
         import base64
+        extra_guidance = (get_setting("ai_receipt_extra_guidance", "") or "").strip()
+        system = _RECEIPT_SYSTEM + (
+            f"\n\nQO'SHIMCHA KO'RSATMA (admin tomonidan avval tasdiqlangan holatlardan): {extra_guidance}"
+            if extra_guidance else ""
+        )
         b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
         response = client.messages.create(
             model=AI_MODEL, max_tokens=200,
-            system=_RECEIPT_SYSTEM,
+            system=system,
             messages=[{
                 "role": "user",
                 "content": [

@@ -37,6 +37,7 @@ from bot.fraud_detection import *  # noqa: F401,F403
 
 from common.telegram_media import download_photo_bytes
 from common.ai import ai_check_receipt, ai_features_enabled
+from common.receipt_security import find_cross_user_receipt_reuse, receipt_phash, record_approved_receipt, store_receipt_phash
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,8 @@ async def _auto_approve_subscription(context: ContextTypes.DEFAULT_TYPE, sub_id:
     """AI chekni ishonchli deb topganda - adminni kutmasdan darhol faollashtirish."""
     sub = get_subscription(sub_id)
     user_id, expire = approve_subscription(sub_id)
+    if sub and sub.get("receipt_phash"):
+        record_approved_receipt(sub["receipt_phash"], "subscription", sub_id, user_id)
 
     text = (
         f"\u2705 Chekingiz AI tomonidan avtomatik tasdiqlandi! Limitingiz faollashtirildi.\nMuddati: <b>{expire[:10]}</b> gacha.\n\n"
@@ -181,19 +184,34 @@ async def subscription_receipt(update: Update, context: ContextTypes.DEFAULT_TYP
     )
     ai_note = ""
     receipt_check = None
-    if ai_features_enabled():
-        try:
-            receipt_bytes = await download_photo_bytes(receipt)
-            if receipt_bytes:
+    dup = None
+    receipt_bytes = None
+    try:
+        receipt_bytes = await download_photo_bytes(receipt)
+    except Exception:
+        logger.exception("Obuna chekini yuklab olishda xatolik")
+    if receipt_bytes:
+        phash = receipt_phash(receipt_bytes)
+        if phash:
+            store_receipt_phash("subscriptions", sub_id, phash)
+            dup = find_cross_user_receipt_reuse(phash, user.id)
+        if dup:
+            ai_note += (
+                f"\n\n\U0001F6A8 <b>OGOHLANTIRISH: bu chek rasmi BOSHQA foydalanuvchida (user_id: {dup['user_id']}) "
+                f"allaqachon tasdiqlangan to'lov uchun ishlatilgan</b> ({dup['payment_type']} #{dup['payment_ref_id']})! "
+                "Diqqat bilan tekshiring - bitta chek bir necha kishiga Limit bermasligi kerak."
+            )
+        if ai_features_enabled():
+            try:
                 loop = asyncio.get_event_loop()
                 receipt_check = await loop.run_in_executor(None, ai_check_receipt, receipt_bytes, "image/jpeg", price, CARD_HOLDER)
                 if receipt_check and not receipt_check.get("matches"):
-                    ai_note = f"\n\n\U0001F916⚠️ <b>AI: chekda nomuvofiqlik</b> — {esc(receipt_check.get('note') or '')}"
+                    ai_note = f"\n\n\U0001F916⚠️ <b>AI: chekda nomuvofiqlik</b> — {esc(receipt_check.get('note') or '')}" + ai_note
                     set_subscription_receipt_warning(sub_id, receipt_check.get("note") or "")
-        except Exception:
-            logger.exception("AI obuna chekini tekshirishda xatolik")
+            except Exception:
+                logger.exception("AI obuna chekini tekshirishda xatolik")
 
-    if receipt_check and receipt_check.get("matches"):
+    if receipt_check and receipt_check.get("matches") and not dup:
         await _auto_approve_subscription(context, sub_id, user, receipt, price)
         context.user_data.pop("target_listing_id", None)
         return ConversationHandler.END

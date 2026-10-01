@@ -156,6 +156,11 @@ SETTINGS_FIELDS = {
         "label": "\U0001F916 Bepul e'lonlarni AI avtomatik tasdiqlasin",
         "kind": "bool",
     },
+    "ai_auto_approve_paid_listings": {
+        "label": "\U0001F916 Pullik e'lonlarni AI avtomatik tasdiqlasin (chek mos kelsa)",
+        "hint": "Yoqilsa, pullik e'lon uchun yuborilgan chek AI tomonidan summaga mos deb topilsa va boshqa foydalanuvchida ishlatilmagan bo'lsa - admin kutmasdan darhol kanalga joylanadi.",
+        "kind": "bool",
+    },
     "ai_concierge_daily_limit": {
         "label": "\U0001F4AC AI yordamchi - kunlik xabar chegarasi (bitta foydalanuvchi)",
         "hint": "Bitta foydalanuvchi/mehmon bir kunda AI yordamchiga nechta xabar yozishi mumkinligini yozing. Masalan: 30",
@@ -174,6 +179,11 @@ SETTINGS_FIELDS = {
     "ai_valuation_extra_guidance": {
         "label": "\U0001F9E0 AI uy baholashga qo'shimcha ko'rsatma",
         "hint": "AI narxni noto'g'ri baholayotganini payqasangiz, shu yerga tuzatuvchi ko'rsatma yozing (masalan \"eski uylarga rasm asosida narxni oshirmang\") - darhol kuchga kiradi.",
+        "kind": "text_long",
+    },
+    "ai_receipt_extra_guidance": {
+        "label": "\U0001F9E0 AI chek tekshiruviga qo'shimcha ko'rsatma",
+        "hint": "AI turli bank/ilova (Click, Payme, Uzcard, Humo, bank ilovalari) formatidagi cheklarni noto'g'ri \"mos emas\" deb belgilasa, shu yerga tushuntirish yozing. Admin AI shubha bildirgan chekni baribir tasdiqlasa - bu maydon AVTOMATIK ravishda to'ldiriladi (qo'lda o'chirish/tahrirlash mumkin).",
         "kind": "text_long",
     },
     "valuation_price": {
