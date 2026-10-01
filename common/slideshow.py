@@ -453,13 +453,19 @@ def build_instagram_caption(manzil: str, narx: str, xona: str = "", kimlarga: st
         details.append(f"✅ Sharoitlari: {qulaylik}")
     details_block = ("\n".join(details) + "\n\n") if details else ""
 
-    hashtags = [
-        "#ijaragauylar", "#toshkentijara", "#uyijara", "#kvartiraijara",
-        "#arendauzb", "#tashkentrentals", "#kochmasmulk", "#maklersiz",
-        "#uyarenda", "#ijarakvartira", "#toshkent", "#arenda",
-    ]
+    # MUHIM: Instagram Reels'da 10+ umumiy hashtag qalashtirish endi reach'ga
+    # yordam bermaydi (hatto spamdek ko'rinib zararli ham bo'lishi mumkin) -
+    # platforma hashtagni kuchli signal sifatida emas, kichik yordamchi
+    # mezon sifatida ko'radi. Shuning uchun FAQAT 5 tagacha, lekin har biri
+    # o'z vazifasini bajaradigan: brend (qaytib keluvchilar qidiradi) +
+    # shahar+niyat (mahalliy "explore" uchun eng kuchli signal) + mazmun
+    # turi + (bor bo'lsa) ANIQ tuman nomi (hiper-mahalliy qidiruv - aynan
+    # shu tumandan uy izlayotganlar uchun eng aniq moslik) + yana bitta
+    # keng tarqalgan tag.
+    hashtags = ["#ijaragauylar", "#toshkentijara", "#kvartiraijara", "#uyijara"]
     if loc_tag and loc_tag not in hashtags:
         hashtags.insert(2, loc_tag)
+    hashtags = hashtags[:5]
 
     return (
         f"\U0001F3E0 Ijaraga uy — {manzil}\n\n"

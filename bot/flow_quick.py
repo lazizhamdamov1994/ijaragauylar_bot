@@ -30,9 +30,10 @@ from telegram.ext import ContextTypes, ConversationHandler, filters
 
 from common.config import ADMIN_IDS, ADMIN_USERNAME, BOT_TOKEN as TOKEN, CARD_HOLDER, CHANNEL_ID, CHANNEL_USERNAME, DASHBOARD_URL, DB_PATH, DEFAULT_SETTINGS as INITIAL_SETTINGS, MAX_DAILY_LISTINGS, MOD_DAILY_LISTINGS, STALE_CHECK_DAYS
 
-from common.telegram_media import watermark_telegram_photo
+from common.telegram_media import download_photo_bytes, watermark_telegram_photo
 from common.districts import TASHKENT_DISTRICTS, detect_district, detect_phone, detect_price
 from common.ai import ai_extract_listing_fields
+from common.slideshow import build_instagram_caption, build_slideshow_video
 
 from bot.constants import *  # noqa: F401,F403
 from bot.db import *  # noqa: F401,F403
@@ -505,6 +506,33 @@ async def quick_rasm_tayyor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     await send_photos(context, chat_id, data["rasmlar"])
     await context.bot.send_message(chat_id, esc(data["quick_text"]), parse_mode=ParseMode.HTML)
+    slideshow_keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("\u2705 Ha", callback_data="quick_slideshow_yes"),
+          InlineKeyboardButton("\u274c Yo'q", callback_data="quick_slideshow_no")]]
+    )
+    await context.bot.send_message(
+        chat_id,
+        "\U0001F3AC Ushbu e'lon uchun Instagram'da joylash uchun qisqa slaydshov video ham tayyorlab beraylikmi?\n"
+        "(Video + tayyor post matni sizga alohida yuboriladi - Instagram'ga faqat o'zingiz joylaysiz.)",
+        reply_markup=slideshow_keyboard,
+    )
+    return QUICK_SLIDESHOW_CONFIRM
+
+
+async def quick_slideshow_choice_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_reply_markup(reply_markup=None)
+    context.user_data["want_slideshow"] = query.data == "quick_slideshow_yes"
+    return await _show_quick_confirm_keyboard(update, context)
+
+
+async def quick_slideshow_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    return await remind_buttons(update, context, QUICK_SLIDESHOW_CONFIRM)
+
+
+async def _show_quick_confirm_keyboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
     keyboard = InlineKeyboardMarkup(
         [[InlineKeyboardButton("\u2705 Kanalga joylash", callback_data="quick_post")],
          [InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="quick_back_tophotos"),
@@ -524,6 +552,43 @@ async def quick_back_to_photos(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def quick_confirm_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return await remind_buttons(update, context, QUICK_CONFIRM)
+
+
+async def _generate_and_send_quick_slideshow(
+    context: ContextTypes.DEFAULT_TYPE, listing_id: int, rasmlar: list, manzil: str, narx: str, xona: str,
+) -> None:
+    """bot/flow_listing.py'dagi _generate_and_send_slideshow bilan BIR XIL
+    naqsh - faqat Tezkor e'lon maydonlariga moslashtirilgan (kimlarga/
+    qulaylik alohida maydon emas, quick_text ichida erkin matn sifatida)."""
+    if not ADMIN_IDS:
+        return
+    try:
+        photo_bytes = []
+        for file_id in rasmlar[:10]:
+            raw = await download_photo_bytes(file_id)
+            if raw:
+                photo_bytes.append(raw)
+        if not photo_bytes:
+            logger.warning("Tezkor e'lon slaydshovi uchun rasm yuklab bo'lmadi (e'lon #%s)", listing_id)
+            return
+
+        video = await build_slideshow_video(photo_bytes, manzil, narx, xona)
+        if video is None:
+            logger.warning("Tezkor e'lon slaydshov videosi yasalmadi (e'lon #%s)", listing_id)
+            return
+
+        caption = build_instagram_caption(manzil, narx, xona=xona)
+        for admin_id in ADMIN_IDS:
+            try:
+                await send_with_retry(
+                    context.bot.send_video, admin_id, video,
+                    caption=f"\U0001F3AC E'lon #{listing_id} uchun Instagram slaydshov video tayyor.\nInstagram'ga shu videoni joylang \U0001F447",
+                )
+                await send_with_retry(context.bot.send_message, admin_id, caption)
+            except Exception:
+                logger.exception("Slaydshov videoni adminga (%s) yuborishda xatolik", admin_id)
+    except Exception:
+        logger.exception("Tezkor e'lon slaydshov generatsiyasida kutilmagan xatolik (e'lon #%s)", listing_id)
 
 
 async def quick_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -553,6 +618,11 @@ async def quick_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await notify_admin_of_moderator_listing(context, listing_id, listing, user, data.get("rasmlar") or [])
             except Exception:
                 logger.exception("Moderator e'loni haqida admin FYI xabarida xatolik")
+        if data.get("want_slideshow"):
+            asyncio.create_task(_generate_and_send_quick_slideshow(
+                context, listing_id, list(data.get("rasmlar") or []),
+                data.get("quick_manzil", ""), data.get("quick_narx", ""), data.get("quick_xona", ""),
+            ))
         await context.bot.send_message(chat_id, f"\u2705 E'lon #{listing_id} kanalga joylandi.", reply_markup=main_menu_keyboard(update.effective_user.id))
     context.user_data.clear()
     return ConversationHandler.END

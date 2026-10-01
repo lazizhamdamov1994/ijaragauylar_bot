@@ -72,7 +72,8 @@ logger = logging.getLogger(__name__)
     VALUATION_PHOTOS,
     VALUATION_RECEIPT_WAIT,
     BOOST_RECEIPT_WAIT,
-) = range(45)
+    QUICK_SLIDESHOW_CONFIRM,
+) = range(46)
 
 BTN_ELON = "\U0001F4DD E'lon berish"
 BTN_LISTINGS = "\U0001F4CB Mening e'lonlarim"
