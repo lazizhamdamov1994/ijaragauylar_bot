@@ -144,18 +144,25 @@
   .lang-switcher { position: relative; flex-shrink: 0; }
   .lang-current {
     width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg-soft);
-    font-size: 17px; display: flex; align-items: center; justify-content: center; cursor: pointer; line-height: 1;
-    transition: box-shadow .15s var(--ease), background .15s var(--ease);
+    display: flex; align-items: center; justify-content: center; cursor: pointer; line-height: 1;
+    overflow: hidden; padding: 0; transition: box-shadow .15s var(--ease), background .15s var(--ease), transform .15s var(--ease);
   }
-  .lang-current:hover { background: #fff; box-shadow: var(--shadow-sm); }
+  .lang-current:hover { background: #fff; box-shadow: var(--shadow-sm); transform: scale(1.05); }
+  /* To'rtburchak SVG bayroqni aylana tugma ichida TO'LIQ qoplaydigan
+     qilib ko'rsatish - object-fit:cover kabi, lekin SVG uchun. */
+  .lang-current svg { width: 100%; height: 100%; object-fit: cover; display: block; }
   .lang-menu {
     display: none; position: absolute; top: 46px; right: 0; background: #fff; border: 1px solid var(--line);
-    border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 6px; min-width: 160px; z-index: 600;
+    border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 6px; min-width: 170px; z-index: 600;
   }
   .lang-switcher.open .lang-menu { display: block; animation: menuDropIn .18s var(--ease); }
-  .lang-option { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--radius-sm); font-size: 13.5px; font-weight: 600; color: var(--ink); transition: background .12s var(--ease); }
+  .lang-option { display: flex; align-items: center; gap: 11px; padding: 9px 10px; border-radius: var(--radius-sm); font-size: 13.5px; font-weight: 600; color: var(--ink); transition: background .12s var(--ease); }
   .lang-option:hover { background: var(--bg-soft); }
-  .lang-flag { font-size: 17px; }
+  .lang-flag {
+    display: inline-flex; width: 22px; height: 16px; border-radius: 3px; overflow: hidden; flex-shrink: 0;
+    box-shadow: 0 0 0 1px rgba(16,24,38,.08);
+  }
+  .lang-flag svg { width: 100%; height: 100%; display: block; }
   /* Mobil menyuda - shu iconli tugma o'zi yetarli, alohida kenglikka cho'zish shart emas */
   .mobile-menu .lang-switcher { margin: 10px 6px 4px; }
   .mobile-menu .lang-menu { left: 0; right: auto; top: 48px; }
@@ -538,19 +545,38 @@
   .district-chip:hover { border-color: var(--brand); background: var(--brand-light); color: var(--brand-dark); transform: translateY(-2px); box-shadow: var(--shadow-float); }
   html.js .district-chip.is-visible:hover { transform: translateY(-2px); }
 
-  /* ============ FOOTER ============ */
-  footer.site-footer { background: var(--bg-soft); border-top: 1px solid var(--line); padding: 52px 0 26px; }
-  .footer-inner { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 32px; margin-bottom: 32px; }
-  @media (max-width: 720px) { .footer-inner { grid-template-columns: 1fr 1fr; } .footer-col-brand { grid-column: 1 / -1; } }
-  @media (max-width: 460px) { .footer-inner { grid-template-columns: 1fr; gap: 26px; } }
-  .footer-col { display: flex; flex-direction: column; gap: 11px; }
-  .footer-col a { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--ink-soft); transition: color .15s var(--ease), transform .15s var(--ease); }
-  .footer-col a:hover { color: var(--brand); transform: translateX(2px); }
-  .footer-col-title { font-size: 12px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--ink); margin-bottom: 2px; }
-  .footer-brand { display: flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 800; font-size: 17px; margin-bottom: 6px; }
-  .footer-brand img { width: 28px; height: 28px; border-radius: 7px; }
-  .footer-tagline { font-size: 13.5px; color: var(--muted); max-width: 320px; line-height: 1.6; }
-  .footer-bottom { border-top: 1px solid var(--line); padding-top: 18px; font-size: 12.5px; text-align: center; color: var(--muted); }
+  /* ============ FOOTER ============
+     Eski uch ustunli (sarlavha + uzun vertikal havolalar ro'yxati) tarkib
+     "og'ir"/eski ko'rinar edi. Endi: to'q (--ink) fon - hero bilan "bir
+     butun" tuyg'usi uchun saytni vizual ravishda yopadi (yuqorida to'q
+     hero, pastda to'q footer, orasida oq kontent) - va havolalar bitta
+     ixcham, erkin oqadigan (flex-wrap) qatorga jamlangan, ijtimoiy
+     tarmoqlar esa matn o'rniga aylana ikonka-tugmalar sifatida. */
+  footer.site-footer { background: var(--ink); padding: 56px 0 0; }
+  .footer-top {
+    display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 36px;
+    padding-bottom: 36px; border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .footer-brand-col { max-width: 300px; }
+  .footer-brand { display: flex; align-items: center; gap: 9px; color: #fff; font-weight: 800; font-size: 18px; margin-bottom: 10px; }
+  .footer-brand img { width: 30px; height: 30px; border-radius: 8px; }
+  .footer-tagline { font-size: 13.5px; color: rgba(255,255,255,.55); line-height: 1.6; margin-bottom: 18px; }
+  .footer-social { display: flex; gap: 10px; }
+  .footer-social-btn {
+    width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,.08); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .18s var(--ease), transform .18s var(--ease);
+  }
+  .footer-social-btn:hover { background: var(--brand); transform: translateY(-3px); }
+  .footer-links { display: flex; flex-wrap: wrap; gap: 11px 24px; max-width: 460px; padding-top: 4px; }
+  .footer-links a { font-size: 13.5px; font-weight: 600; color: rgba(255,255,255,.62); transition: color .15s var(--ease); }
+  .footer-links a:hover { color: #fff; }
+  .footer-bottom { padding: 20px 0 28px; font-size: 12.5px; text-align: center; color: rgba(255,255,255,.38); }
+  @media (max-width: 640px) {
+    footer.site-footer { padding: 40px 0 0; }
+    .footer-top { flex-direction: column; gap: 26px; padding-bottom: 26px; }
+    .footer-links { gap: 10px 18px; }
+  }
 
   .empty-state { text-align: center; padding: 70px 20px; color: var(--muted); }
   .empty-state .icon { color: var(--muted); margin-bottom: 16px; display: flex; justify-content: center; }

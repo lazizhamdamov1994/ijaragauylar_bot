@@ -98,7 +98,17 @@ def display_address(l: dict) -> str:
 
 SUPPORTED_LANGS = ("uz", "ru", "en")
 DEFAULT_LANG = "uz"
-LANG_FLAGS = {"uz": "\U0001F1FA\U0001F1FF", "ru": "\U0001F1F7\U0001F1FA", "en": "\U0001F1EC\U0001F1E7"}
+# MUHIM: Unicode emoji bayroqlar (masalan "U+1F1FA U+1F1FF") ko'plab
+# tizimlarda (ayniqsa Windows'ning eski versiyalari) HAQIQIY bayroq
+# sifatida EMAS, balki ikki harfli mamlakat kodi qutichasi sifatida
+# ko'rinadi - operatsion tizim shrifti bayroq glifini o'zida saqlamagan
+# bo'lsa shunday bo'ladi. Shuning uchun haqiqiy, platformadan mustaqil
+# vektor (SVG) bayroqlar ishlatiladi - barcha qurilmada bir xil ko'rinadi.
+LANG_FLAGS = {
+    "uz": """<svg viewBox="0 0 24 16" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="16" fill="#1EB53A"/><rect width="24" height="7.2" fill="#0099B5"/><rect y="6.8" width="24" height="0.6" fill="#CE1126"/><rect y="7.4" width="24" height="1.2" fill="#fff"/><rect y="8.6" width="24" height="0.6" fill="#CE1126"/><circle cx="5.2" cy="3.4" r="2.1" fill="#fff"/><circle cx="6" cy="2.9" r="1.8" fill="#0099B5"/><g fill="#fff"><circle cx="9" cy="1.6" r="0.35"/><circle cx="10.4" cy="1.6" r="0.35"/><circle cx="11.8" cy="1.6" r="0.35"/><circle cx="9" cy="3" r="0.35"/><circle cx="10.4" cy="3" r="0.35"/><circle cx="11.8" cy="3" r="0.35"/><circle cx="9" cy="4.4" r="0.35"/><circle cx="10.4" cy="4.4" r="0.35"/></g></svg>""",
+    "ru": """<svg viewBox="0 0 24 16" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="16" fill="#D52B1E"/><rect width="24" height="5.33" fill="#fff"/><rect y="5.33" width="24" height="5.33" fill="#0039A6"/></svg>""",
+    "en": """<svg viewBox="0 0 24 16" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="16" fill="#012169"/><path d="M0,0 L24,16 M24,0 L0,16" stroke="#fff" stroke-width="3.2"/><path d="M0,0 L24,16 M24,0 L0,16" stroke="#C8102E" stroke-width="1.3"/><path d="M12,0 V16 M0,8 H24" stroke="#fff" stroke-width="5.3"/><path d="M12,0 V16 M0,8 H24" stroke="#C8102E" stroke-width="3.2"/></svg>""",
+}
 LANG_META = {"uz": "O'zbekcha", "ru": "\u0420\u0443\u0441\u0441\u043a\u0438\u0439", "en": "English"}
 
 TRANSLATIONS = {
@@ -697,31 +707,27 @@ def render_footer(lang: str = DEFAULT_LANG) -> str:
     year = datetime.now().year
     logo = "/logo.png"
     return f"""<footer class="site-footer">
-  <div class="wrap">
-    <div class="footer-inner">
-      <div class="footer-col footer-col-brand">
-        <div class="footer-brand"><img src="{logo}" alt="{SITE_NAME}"> {BRAND_SHORT}</div>
-        <div class="footer-tagline">{t(lang,'footer_tagline')}</div>
-      </div>
-      <div class="footer-col">
-        <div class="footer-col-title">{t(lang,'footer_nav_title')}</div>
-        <a href="/">{t(lang,'nav_home')}</a>
-        <a href="/elon-joylash">{t(lang,'mobile_post')}</a>
-        <a href="/xarita">{t(lang,'nav_map_title')}</a>
-        <a href="/baholash">Uyni baholash</a>
-        <a href="/bozor-yangiliklari">Bozor yangiliklari</a>
-        <a href="/subarenda">{t(lang,'nav_subarenda')}</a>
-        <a href="/kabinet">{t(lang,'nav_account_label')}</a>
-      </div>
-      <div class="footer-col">
-        <div class="footer-col-title">{t(lang,'footer_social_title')}</div>
-        <a href="{channel_link}" target="_blank">{icon('send', 15)} {t(lang,'nav_channel_title')}</a>
-        <a href="{bot_link}" target="_blank">{icon('phone', 14)} {t(lang,'nav_bot_title')}</a>
-        <a href="{INSTAGRAM_URL}" target="_blank">{icon('instagram', 15)} Instagram</a>
+  <div class="wrap footer-top">
+    <div class="footer-brand-col">
+      <div class="footer-brand"><img src="{logo}" alt="{SITE_NAME}"> {BRAND_SHORT}</div>
+      <p class="footer-tagline">{t(lang,'footer_tagline')}</p>
+      <div class="footer-social">
+        <a href="{channel_link}" target="_blank" rel="noopener" aria-label="{t(lang,'nav_channel_title')}" class="footer-social-btn">{icon('send', 16)}</a>
+        <a href="{bot_link}" target="_blank" rel="noopener" aria-label="{t(lang,'nav_bot_title')}" class="footer-social-btn">{icon('phone', 15)}</a>
+        <a href="{INSTAGRAM_URL}" target="_blank" rel="noopener" aria-label="Instagram" class="footer-social-btn">{icon('instagram', 16)}</a>
       </div>
     </div>
-    <div class="footer-bottom">&copy; {year} {SITE_NAME}. {t(lang,'footer_rights')}</div>
+    <nav class="footer-links">
+      <a href="/">{t(lang,'nav_home')}</a>
+      <a href="/elon-joylash">{t(lang,'mobile_post')}</a>
+      <a href="/xarita">{t(lang,'nav_map_title')}</a>
+      <a href="/baholash">Uyni baholash</a>
+      <a href="/bozor-yangiliklari">Bozor yangiliklari</a>
+      <a href="/subarenda">{t(lang,'nav_subarenda')}</a>
+      <a href="/kabinet">{t(lang,'nav_account_label')}</a>
+    </nav>
   </div>
+  <div class="wrap footer-bottom">&copy; {year} {SITE_NAME}. {t(lang,'footer_rights')}</div>
 </footer>
 <script>
 // Skrolda paydo bo'lish (progressiv yaxshilanish - static/site.css'dagi
@@ -893,7 +899,20 @@ def render_ai_chat_widget(lang: str = DEFAULT_LANG) -> str:
 .ai-chat-input-row button:active {{ transform: scale(.96); }}
 @media (max-width: 640px) {{
   #ai-chat-widget {{ right: 14px; bottom: 14px; }}
-  #ai-chat-panel {{ width: calc(100vw - 24px); height: calc(100vh - 150px); bottom: 72px; }}
+  /* MUHIM: mobilda "bottom: 72px; height: calc(100vh - 150px)" bilan
+     hisoblangan balandlik yuqori chegarani ANIQ belgilamas edi - natijada
+     panel ko'pincha sticky header (z-index:500, vidjetning 200'dan
+     YUQORI) ORTIGA kirib ketib, yuqori qismi butunlay ko'rinmay qolardi.
+     Endi panel "position: fixed" bilan ANIQ top/bottom chegaralar orasiga
+     (header tagidan - taxminan 72px - tugma ustigacha) joylashtiriladi -
+     qaysi telefon/brauzer bo'lishidan qat'iy nazar hech qachon boshqa
+     element ortiga kirib ketmaydi. 100dvh (dynamic viewport height)
+     100vh'dan farqli, mobil brauzer manzil panelini hisobga oladi. */
+  #ai-chat-panel {{
+    position: fixed; left: 12px; right: 12px; bottom: 86px;
+    top: calc(env(safe-area-inset-top, 0px) + 72px);
+    width: auto; max-width: none; height: auto; max-height: none;
+  }}
 }}
 </style>
 <script>
