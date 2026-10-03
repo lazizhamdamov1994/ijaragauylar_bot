@@ -251,6 +251,7 @@ def _listings_page(
 
 <section class="hero">
   <div class="wrap">
+    <span class="hero-kicker">{icon('sparkle', 13)} {t(lang,'hero_kicker')}</span>
     <h1>{hero_title_text}</h1>
     <p class="sub">{t(lang,'hero_sub')}</p>
     <form class="search-pill" method="get" action="/">
@@ -288,9 +289,9 @@ def _listings_page(
 <div class="stats-strip">
   <div class="wrap">
     <div class="inner">
-      <div class="stat-item"><div class="num">{stats['active']}+</div><div class="lbl">{t(lang,'stat_active')}</div></div>
-      <div class="stat-item"><div class="num">{stats['users']}+</div><div class="lbl">{t(lang,'stat_users')}</div></div>
-      <div class="stat-item"><div class="num">100%</div><div class="lbl">{t(lang,'stat_nofee')}</div></div>
+      <div class="stat-item"><div class="num" data-count="{stats['active']}" data-suffix="+">{stats['active']}+</div><div class="lbl">{t(lang,'stat_active')}</div></div>
+      <div class="stat-item"><div class="num" data-count="{stats['users']}" data-suffix="+">{stats['users']}+</div><div class="lbl">{t(lang,'stat_users')}</div></div>
+      <div class="stat-item"><div class="num" data-count="100" data-suffix="%">100%</div><div class="lbl">{t(lang,'stat_nofee')}</div></div>
     </div>
   </div>
 </div>

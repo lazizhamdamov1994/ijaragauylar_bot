@@ -10,8 +10,34 @@
     --shadow: 0 8px 22px rgba(16,24,38,.08);
     --shadow-lg: 0 24px 48px rgba(16,24,38,.12), 0 4px 12px rgba(16,24,38,.05);
     --shadow-hover: 0 16px 32px rgba(16,24,38,.14), 0 4px 10px rgba(16,24,38,.06);
+    /* Ko'p qatlamli (layered) soya - yaqin/o'rta/uzoq uchta soya birga
+       qo'yilib, haqiqiy chuqurlik hissi beradi (bitta tekis soyadan ko'ra
+       ancha "premium" ko'rinadi) - muallaq kartalar/panellar uchun. */
+    --shadow-float: 0 2px 5px rgba(16,24,38,.04), 0 14px 28px rgba(16,24,38,.09), 0 36px 64px rgba(16,24,38,.08);
     --ease: cubic-bezier(.16,1,.3,1);
+    --ease-spring: cubic-bezier(.34,1.56,.64,1);
     --font-display: 'Plus Jakarta Sans', 'Inter', -apple-system, sans-serif;
+  }
+
+  /* Brauzerning o'zi qo'llab-quvvatlagan holatda (Chrome/Edge 126+) sahifalar
+     orasida yumshoq o'tish (cross-fade) beradi - qo'shimcha JS/kutubxona
+     SHART emas, qo'llamaydigan brauzerlarda esa shunchaki e'tiborga olinmaydi
+     (hech narsa buzilmaydi). Bugungi eng zamonaviy, "bepul" motion texnikasi. */
+  @view-transition { navigation: auto; }
+
+  /* Juda past zichlikdagi "don" (grain) teksturasi - butun saytga nozik,
+     bosma jurnal kabi hissi beradigan premium qatlam (qo'shimcha so'rov
+     YO'Q - inline SVG, bir necha baytlik ma'lumot). */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: 2147483647; pointer-events: none;
+    opacity: .02; mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .scroll-progress {
+    position: fixed; top: 0; left: 0; height: 3px; width: 0%;
+    background: linear-gradient(90deg, var(--brand), var(--gold));
+    z-index: 2147483647; pointer-events: none;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
@@ -55,6 +81,16 @@
   html.js .listing-card.is-visible, html.js .why-item.is-visible,
   html.js .district-chip.is-visible, html.js .fact-box.is-visible {
     opacity: 1; transform: translateY(0);
+  }
+
+  /* ============ UMUMIY MIKRO-INTERAKTIVLIK (bosilganda "siqilish") ============
+     Sayt bo'ylab asosiy tugmalar bosilganda sezilarli, "jonli" teginish
+     hissi berish uchun - shu bitta qoida barcha asosiy CTA'larni qamrab
+     oladi, har birida alohida yozish shart emas. */
+  .btn-cta:active, .search-pill button:active, .hero-ai-cta:active,
+  .sidebar-cta:active, .sidebar-cta-secondary:active, .form-submit-btn:active,
+  .rt-tab:active, .district-chip:active, .why-item:active {
+    transform: scale(.96); transition-duration: .1s;
   }
 
   /* ============ HEADER ============ */
@@ -134,15 +170,38 @@
 
   /* ============ HERO + SEARCH ============ */
   .hero {
-    background:
-      radial-gradient(900px 480px at 12% -12%, rgba(255,59,92,.09), transparent 60%),
-      radial-gradient(760px 420px at 100% -6%, rgba(214,150,11,.07), transparent 60%),
-      #fff;
-    padding: 60px 20px 100px; text-align: center;
+    position: relative; overflow: hidden; isolation: isolate;
+    background: linear-gradient(180deg, #FFF9F7 0%, #fff 72%);
+    padding: 76px 20px 110px; text-align: center;
   }
-  .hero h1 { font-size: 44px; font-weight: 800; letter-spacing: -1.3px; line-height: 1.08; margin-bottom: 14px; color: var(--ink); }
-  .hero p.sub { font-size: 17px; color: var(--ink-soft); max-width: 560px; margin: 0 auto 34px; line-height: 1.55; }
-  @media (max-width: 640px) { .hero { padding: 36px 16px 84px; } .hero h1 { font-size: 27px; letter-spacing: -0.7px; } .hero p.sub { font-size: 14.5px; margin-bottom: 26px; } }
+  /* Sekin "suzib yuradigan" xira rangli shar (blob) fonlar - haqiqiy
+     rasm/video shart emas, sof CSS bilan chuqur, jonli, "tirik" hero
+     fon hosil qiladi. z-index: -1 orqali matn/qidiruv ustida HECH QACHON
+     to'smaydi. */
+  .hero::before, .hero::after {
+    content: ""; position: absolute; border-radius: 50%; filter: blur(70px); z-index: -1;
+    animation: heroBlobDrift 18s ease-in-out infinite alternate;
+  }
+  .hero::before {
+    width: 560px; height: 560px; top: -240px; left: -140px;
+    background: radial-gradient(circle, rgba(255,59,92,.17), transparent 70%);
+  }
+  .hero::after {
+    width: 480px; height: 480px; top: -200px; right: -160px;
+    background: radial-gradient(circle, rgba(214,150,11,.14), transparent 70%);
+    animation-delay: -9s;
+  }
+  @keyframes heroBlobDrift { from { transform: translate(0,0) scale(1); } to { transform: translate(50px, 36px) scale(1.1); } }
+  @media (prefers-reduced-motion: reduce) { .hero::before, .hero::after { animation: none; } }
+
+  .hero-kicker {
+    display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 800;
+    color: var(--brand-dark); background: var(--brand-light); padding: 7px 16px; border-radius: var(--radius-pill);
+    margin-bottom: 20px; letter-spacing: .4px; text-transform: uppercase; border: 1px solid rgba(255,59,92,.14);
+  }
+  .hero h1 { font-size: clamp(32px, 5vw, 54px); font-weight: 800; letter-spacing: -1.8px; line-height: 1.04; margin-bottom: 16px; color: var(--ink); }
+  .hero p.sub { font-size: clamp(14.5px, 1.4vw, 17.5px); color: var(--ink-soft); max-width: 580px; margin: 0 auto 34px; line-height: 1.6; }
+  @media (max-width: 640px) { .hero { padding: 40px 16px 84px; } .hero p.sub { margin-bottom: 26px; } }
 
   /* Hero'ning har bir to'g'ridan-to'g'ri farzandi (sarlavha, matn, qidiruv,
      tab'lar, AI taklifi) sahifa ochilganda ketma-ket (stagger) ozgina
@@ -154,15 +213,16 @@
   .hero .wrap > *:nth-child(3) { animation-delay: .15s; }
   .hero .wrap > *:nth-child(4) { animation-delay: .22s; }
   .hero .wrap > *:nth-child(5) { animation-delay: .29s; }
+  .hero .wrap > *:nth-child(6) { animation-delay: .36s; }
   @keyframes heroIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
 
   .search-pill {
     background: #fff; border-radius: var(--radius-pill); padding: 8px; max-width: 720px; margin: 0 auto;
-    box-shadow: var(--shadow-lg); border: 1px solid var(--line);
+    box-shadow: var(--shadow-float); border: 1px solid var(--line);
     display: grid; grid-template-columns: 1fr 1fr auto; align-items: stretch; gap: 0;
-    transition: box-shadow .2s var(--ease);
+    transition: box-shadow .25s var(--ease);
   }
-  .search-pill:hover, .search-pill:focus-within { box-shadow: var(--shadow-hover); }
+  .search-pill:hover, .search-pill:focus-within { box-shadow: var(--shadow-float), 0 0 0 4px rgba(255,59,92,.09); }
   .search-pill .seg { padding: 10px 22px; border-right: 1px solid var(--line); text-align: left; }
   .search-pill .seg:last-of-type { border-right: none; }
   .search-pill label { display: block; font-size: 11px; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
@@ -248,11 +308,21 @@
   /* ============ STATS STRIP ============ */
   .stats-strip { margin-top: -60px; position: relative; z-index: 10; }
   .stats-strip .inner {
-    background: #fff; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); border: 1px solid var(--line);
+    background: #fff; border-radius: var(--radius-lg); box-shadow: var(--shadow-float); border: 1px solid var(--line);
     padding: 24px 32px; display: flex; justify-content: space-around; gap: 20px; flex-wrap: wrap; max-width: 720px; margin: 0 auto;
+    transition: box-shadow .3s var(--ease);
   }
+  .stats-strip .inner:hover { box-shadow: var(--shadow-float), 0 0 0 4px rgba(255,59,92,.06); }
   .stat-item { text-align: center; }
-  .stat-item .num { font-size: 27px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px; }
+  .stat-item .num {
+    font-size: 27px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px;
+  }
+  @supports (-webkit-background-clip: text) or (background-clip: text) {
+    .stat-item .num {
+      background: linear-gradient(135deg, var(--ink), var(--ink-soft));
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    }
+  }
   .stat-item .lbl { font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 2px; }
   @media (max-width: 640px) { .stats-strip .inner { padding: 16px 12px; gap: 8px; } .stat-item .num { font-size: 19px; } }
 
@@ -278,12 +348,22 @@
   /* ============ LISTING CARDS ============ */
   .listing-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 34px 24px; }
   @media (max-width: 640px) { .listing-grid { grid-template-columns: 1fr; gap: 20px; } }
-  .listing-card { cursor: pointer; transition: transform .3s var(--ease); }
-  .listing-card:hover { transform: translateY(-5px); }
-  html.js .listing-card.is-visible:hover { transform: translateY(-5px); }
-  .lc-photo { position: relative; aspect-ratio: 1/1; background: var(--bg-soft); overflow: hidden; border-radius: var(--radius); margin-bottom: 12px; }
-  .listing-card:hover .lc-photo img { transform: scale(1.045); }
-  .lc-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .45s var(--ease); }
+  .listing-card { cursor: pointer; transition: transform .35s var(--ease); }
+  .listing-card:hover { transform: translateY(-7px); }
+  html.js .listing-card.is-visible:hover { transform: translateY(-7px); }
+  .lc-photo {
+    position: relative; aspect-ratio: 1/1; overflow: hidden; border-radius: var(--radius); margin-bottom: 12px;
+    transition: box-shadow .35s var(--ease);
+    /* Rasm yuklanayotganda "shimmer" effekti - rasm o'zi ustiga tushgach
+       (opak bo'lgani uchun) bu fon ko'rinmay qoladi, shuning uchun qo'shimcha
+       JS/holatga ehtiyoj yo'q. */
+    background: linear-gradient(100deg, var(--bg-soft) 28%, #EEF0F4 50%, var(--bg-soft) 72%);
+    background-size: 220% 100%; animation: lcShimmer 1.8s linear infinite;
+  }
+  .listing-card:hover .lc-photo { box-shadow: var(--shadow-float); }
+  @keyframes lcShimmer { from { background-position: 220% 0; } to { background-position: -220% 0; } }
+  .listing-card:hover .lc-photo img { transform: scale(1.06); }
+  .lc-photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .5s var(--ease); position: relative; z-index: 1; }
   .lc-photo .lc-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 44px; background: linear-gradient(135deg,#FFEBEF,#FFF6F2); }
   .lc-badge {
     position: absolute; top: 10px; left: 10px; background: #fff; color: var(--ink);
@@ -363,19 +443,31 @@
   .pc-result.pc-ok { background: #EAF7EE; color: #1A7A3C; }
   .pc-result.pc-error { background: var(--bg-soft); color: var(--muted); }
 
-  .why-section { background: var(--bg-soft); padding: 72px 0; margin-top: 28px; }
-  .why-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 32px; margin-top: 36px; }
-  .why-item { text-align: center; padding: 14px; transition: transform .3s var(--ease); }
-  .why-item:hover { transform: translateY(-4px); }
-  .why-item .icon {
-    width: 58px; height: 58px; border-radius: 50%; background: var(--brand-light); display: flex;
-    align-items: center; justify-content: center; margin: 0 auto 16px; color: var(--brand);
-    transition: transform .3s var(--ease);
+  .why-section { background: var(--bg-soft); padding: 80px 0; margin-top: 28px; }
+  .why-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 22px; margin-top: 36px; }
+  .why-item {
+    text-align: center; padding: 34px 22px; background: #fff; border: 1px solid var(--line);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+    transition: transform .4s var(--ease-spring), box-shadow .35s var(--ease), border-color .35s var(--ease);
   }
-  .why-item:hover .icon { transform: scale(1.08) rotate(-4deg); }
+  .why-item:hover { transform: translateY(-7px); box-shadow: var(--shadow-float); border-color: transparent; }
+  /* MUHIM (CSS spetsifiklik): "html.js .why-item.is-visible" qoidasi
+     (skroll-reveal) uchta klassga ega bo'lgani uchun oddiy ".why-item:hover"
+     dan (ikkita klass) KUCHLIROQ - shu sabab hover'dagi transform shunchaki
+     e'tiborga olinmay qolardi. Shuning uchun xuddi shu (yoki yuqoriroq)
+     spetsifiklikdagi aniq qoida kerak. */
+  html.js .why-item.is-visible:hover { transform: translateY(-7px); }
+  .why-item .icon {
+    width: 62px; height: 62px; border-radius: 18px;
+    background: linear-gradient(135deg, var(--brand), var(--brand-dark)); display: flex;
+    align-items: center; justify-content: center; margin: 0 auto 18px; color: #fff;
+    box-shadow: 0 10px 20px rgba(255,59,92,.26);
+    transition: transform .4s var(--ease-spring);
+  }
+  .why-item:hover .icon { transform: scale(1.1) rotate(-6deg); }
   .why-item .icon .ico { width: 26px; height: 26px; }
-  .why-item h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
-  .why-item p { font-size: 13.5px; color: var(--muted); }
+  .why-item h3 { font-size: 16.5px; font-weight: 800; margin-bottom: 7px; letter-spacing: -0.2px; }
+  .why-item p { font-size: 13.5px; color: var(--muted); line-height: 1.55; }
 
   /* ============ TUMANLAR BO'YICHA (SEO ichki havolalar) ============ */
   .districts-section { padding: 44px 0 60px; }
@@ -386,7 +478,8 @@
     font-size: 13.5px; font-weight: 700; color: var(--ink-soft); white-space: nowrap;
     transition: border-color .18s var(--ease), background .18s var(--ease), color .18s var(--ease), transform .18s var(--ease);
   }
-  .district-chip:hover { border-color: var(--brand); background: var(--brand-light); color: var(--brand-dark); transform: translateY(-2px); }
+  .district-chip:hover { border-color: var(--brand); background: var(--brand-light); color: var(--brand-dark); transform: translateY(-2px); box-shadow: var(--shadow-float); }
+  html.js .district-chip.is-visible:hover { transform: translateY(-2px); }
 
   /* ============ FOOTER ============ */
   footer.site-footer { background: var(--bg-soft); border-top: 1px solid var(--line); padding: 52px 0 26px; }

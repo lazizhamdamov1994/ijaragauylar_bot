@@ -119,6 +119,11 @@ TRANSLATIONS = {
     "footer_nav_title": {"uz": "Sayt", "ru": "\u0421\u0430\u0439\u0442", "en": "Site"},
     "footer_social_title": {"uz": "Ijtimoiy tarmoqlar", "ru": "\u0421\u043e\u0446\u0441\u0435\u0442\u0438", "en": "Social"},
 
+    "hero_kicker": {
+        "uz": "Toshkentdagi #1 maklersiz platforma",
+        "ru": "Номер 1 платформа без посредников в Ташкенте",
+        "en": "Tashkent's #1 commission-free platform",
+    },
     "hero_title": {
         "uz": "Maklersiz uy toping va ijaraga bering",
         "ru": "\u041d\u0430\u0439\u0434\u0438\u0442\u0435 \u0438\u043b\u0438 \u0441\u0434\u0430\u0439\u0442\u0435 \u0436\u0438\u043b\u044c\u0451 \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432",
@@ -739,6 +744,52 @@ def render_footer(lang: str = DEFAULT_LANG) -> str:
   }} catch (err) {{
     els.forEach(function(el) {{ el.classList.add('is-visible'); }});
   }}
+}})();
+
+// Skroll progressi - sahifa tepasida yupqa, brend rangidagi chiziq.
+(function() {{
+  try {{
+    var bar = document.createElement('div');
+    bar.className = 'scroll-progress';
+    document.body.appendChild(bar);
+    function update() {{
+      var h = document.documentElement;
+      var max = h.scrollHeight - h.clientHeight;
+      bar.style.width = (max > 0 ? (h.scrollTop / max) * 100 : 0) + '%';
+    }}
+    window.addEventListener('scroll', update, {{ passive: true }});
+    update();
+  }} catch (err) {{}}
+}})();
+
+// Statistika raqamlari - ko'rinishga kirganda 0'dan haqiqiy qiymatgacha
+// "hisoblab" chiqadi (progressiv yaxshilanish - JS ishlamasa, HTML'dagi
+// tayyor son darhol ko'rinadi, hech narsa yo'qolmaydi).
+(function() {{
+  var nums = document.querySelectorAll('.stat-item .num[data-count]');
+  if (!nums.length || !('IntersectionObserver' in window)) return;
+  function animate(el) {{
+    var target = parseFloat(el.getAttribute('data-count')) || 0;
+    var suffix = el.getAttribute('data-suffix') || '';
+    var duration = 1100, startTime = null;
+    function step(ts) {{
+      if (!startTime) startTime = ts;
+      var progress = Math.min((ts - startTime) / duration, 1);
+      var eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = Math.floor(eased * target) + suffix;
+      if (progress < 1) requestAnimationFrame(step);
+      else el.textContent = target + suffix;
+    }}
+    requestAnimationFrame(step);
+  }}
+  try {{
+    var io2 = new IntersectionObserver(function(entries) {{
+      entries.forEach(function(entry) {{
+        if (entry.isIntersecting) {{ animate(entry.target); io2.unobserve(entry.target); }}
+      }});
+    }}, {{ threshold: 0.5 }});
+    nums.forEach(function(el) {{ io2.observe(el); }});
+  }} catch (err) {{}}
 }})();
 </script>
 {render_ai_chat_widget(lang)}"""
