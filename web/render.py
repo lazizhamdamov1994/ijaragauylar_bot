@@ -1064,6 +1064,23 @@ def render_listing_card(l: dict, favorited_ids: frozenset = frozenset()) -> str:
 </a>"""
 
 
+def render_hero_stack_card(l: dict) -> str:
+    """Hero bo'limining o'ng tomonidagi, bir-birining ustiga "sochilgan"
+    (overlapping) uchta mo'jaz e'lon-kartasidan biri uchun - to'liq
+    .listing-card'dan farqli, faqat rasm+manzil+narx (badge/sevimli tugma
+    yo'q) - diqqatni asosiy matndan chalg'itmasligi uchun atayin soddalashtirilgan."""
+    photos = l.get("photos") or []
+    img = photo_url(photos[0]) if photos else ""
+    img_html = f'<img src="{img}" alt="{esc_html(display_address(l))}" loading="lazy">' if img else f'<div class="lc-placeholder">{icon("home", 30)}</div>'
+    return f"""<a href="/uy/{l['id']}" class="hero-stack-card">
+  <div class="hsc-photo">{img_html}</div>
+  <div class="hsc-body">
+    <div class="hsc-addr">{esc_html(display_address(l))}</div>
+    <div class="hsc-price">{esc_html(l.get('narx') or '')}</div>
+  </div>
+</a>"""
+
+
 ICONS = {
     "bed": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6"/><path d="M3 18h18"/><path d="M7 10V7a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v3"/><path d="M3 14v4"/><path d="M21 14v4"/></svg>',
     "users": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1"/><circle cx="10" cy="8" r="3.5"/><path d="M21 20v-1a4 4 0 0 0-2.5-3.7"/><path d="M15.5 4.3a3.5 3.5 0 0 1 0 6.9"/></svg>',

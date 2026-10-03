@@ -168,60 +168,102 @@
     .mobile-menu-btn { display: flex; }
   }
 
-  /* ============ HERO + SEARCH ============ */
+  /* ============ HERO + SEARCH ============
+     Assimetrik, ikki ustunli ("split") tarkib - oddiy markazlashgan matn
+     o'rniga: chap tomonda matn/qidiruv, o'ng tomonda haqiqiy e'lonlardan
+     "sochilgan" (overlapping) karta to'plami. To'q fon (--ink) saytning
+     qolgan yumshoq qismidan ANIQ ajralib, pastga - oq kontentga - tekis
+     o'tadi (Stripe/Linear uslubidagi "dark hero -> light content"). */
   .hero {
     position: relative; overflow: hidden; isolation: isolate;
-    background: linear-gradient(180deg, #FFF9F7 0%, #fff 72%);
-    padding: 76px 20px 110px; text-align: center;
+    background: linear-gradient(180deg, var(--ink) 0%, #182233 58%, #1f2a3d 82%, #fff 100%);
+    padding: 68px 20px 150px; text-align: left; color: #fff;
   }
-  /* Sekin "suzib yuradigan" xira rangli shar (blob) fonlar - haqiqiy
-     rasm/video shart emas, sof CSS bilan chuqur, jonli, "tirik" hero
-     fon hosil qiladi. z-index: -1 orqali matn/qidiruv ustida HECH QACHON
-     to'smaydi. */
   .hero::before, .hero::after {
-    content: ""; position: absolute; border-radius: 50%; filter: blur(70px); z-index: -1;
+    content: ""; position: absolute; border-radius: 50%; filter: blur(80px); z-index: -1;
     animation: heroBlobDrift 18s ease-in-out infinite alternate;
   }
   .hero::before {
-    width: 560px; height: 560px; top: -240px; left: -140px;
-    background: radial-gradient(circle, rgba(255,59,92,.17), transparent 70%);
+    width: 620px; height: 620px; top: -260px; left: -160px;
+    background: radial-gradient(circle, rgba(255,59,92,.38), transparent 70%);
   }
   .hero::after {
-    width: 480px; height: 480px; top: -200px; right: -160px;
-    background: radial-gradient(circle, rgba(214,150,11,.14), transparent 70%);
+    width: 540px; height: 540px; top: 40px; right: -200px;
+    background: radial-gradient(circle, rgba(214,150,11,.3), transparent 70%);
     animation-delay: -9s;
   }
   @keyframes heroBlobDrift { from { transform: translate(0,0) scale(1); } to { transform: translate(50px, 36px) scale(1.1); } }
   @media (prefers-reduced-motion: reduce) { .hero::before, .hero::after { animation: none; } }
 
+  .hero-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 50px; align-items: center; position: relative; z-index: 1; }
+  .hero-grid.no-stack { grid-template-columns: minmax(0, 720px); justify-content: center; text-align: center; }
+  .hero-grid.no-stack .hero-left { margin: 0 auto; }
+  .hero-left { max-width: 560px; }
+
   .hero-kicker {
     display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 800;
-    color: var(--brand-dark); background: var(--brand-light); padding: 7px 16px; border-radius: var(--radius-pill);
-    margin-bottom: 20px; letter-spacing: .4px; text-transform: uppercase; border: 1px solid rgba(255,59,92,.14);
+    color: #fff; background: rgba(255,255,255,.12); backdrop-filter: blur(6px); padding: 7px 16px;
+    border-radius: var(--radius-pill); margin-bottom: 20px; letter-spacing: .4px; text-transform: uppercase;
+    border: 1px solid rgba(255,255,255,.18);
   }
-  .hero h1 { font-size: clamp(32px, 5vw, 54px); font-weight: 800; letter-spacing: -1.8px; line-height: 1.04; margin-bottom: 16px; color: var(--ink); }
-  .hero p.sub { font-size: clamp(14.5px, 1.4vw, 17.5px); color: var(--ink-soft); max-width: 580px; margin: 0 auto 34px; line-height: 1.6; }
-  @media (max-width: 640px) { .hero { padding: 40px 16px 84px; } .hero p.sub { margin-bottom: 26px; } }
+  .hero h1 { font-size: clamp(32px, 4.6vw, 52px); font-weight: 800; letter-spacing: -1.8px; line-height: 1.05; margin-bottom: 16px; color: #fff; }
+  .hero p.sub { font-size: clamp(14.5px, 1.3vw, 17px); color: rgba(255,255,255,.66); max-width: 480px; margin: 0 0 32px; line-height: 1.6; }
+  .hero-grid.no-stack p.sub { margin: 0 auto 32px; }
+  @media (max-width: 640px) { .hero { padding: 36px 16px 90px; } .hero p.sub { margin-bottom: 24px; } }
+  @media (max-width: 960px) {
+    .hero-grid { grid-template-columns: 1fr; text-align: center; }
+    .hero-left { max-width: 100%; margin: 0 auto; }
+    .hero-left p.sub { margin-left: auto; margin-right: auto; }
+    .hero-left .search-pill, .hero-left .hero-ai-cta { margin-left: auto; margin-right: auto; }
+    .hero-right { display: none; }
+  }
+  .hero-grid.no-stack .hero-ai-cta { margin-left: auto; margin-right: auto; }
 
-  /* Hero'ning har bir to'g'ridan-to'g'ri farzandi (sarlavha, matn, qidiruv,
+  /* Chap ustundagi har bir element (kicker, sarlavha, matn, qidiruv,
      tab'lar, AI taklifi) sahifa ochilganda ketma-ket (stagger) ozgina
-     pastdan chiqib, xiralikdan ravshanlashib kiradi - qo'shimcha
-     belgi/klass shart emas, tuzilma allaqachon barqaror. */
-  .hero .wrap > * { animation: heroIn .7s var(--ease) both; }
-  .hero .wrap > *:nth-child(1) { animation-delay: .02s; }
-  .hero .wrap > *:nth-child(2) { animation-delay: .08s; }
-  .hero .wrap > *:nth-child(3) { animation-delay: .15s; }
-  .hero .wrap > *:nth-child(4) { animation-delay: .22s; }
-  .hero .wrap > *:nth-child(5) { animation-delay: .29s; }
-  .hero .wrap > *:nth-child(6) { animation-delay: .36s; }
+     pastdan chiqib, xiralikdan ravshanlashib kiradi. */
+  .hero-left > * { animation: heroIn .7s var(--ease) both; }
+  .hero-left > *:nth-child(1) { animation-delay: .02s; }
+  .hero-left > *:nth-child(2) { animation-delay: .08s; }
+  .hero-left > *:nth-child(3) { animation-delay: .15s; }
+  .hero-left > *:nth-child(4) { animation-delay: .22s; }
+  .hero-left > *:nth-child(5) { animation-delay: .29s; }
+  .hero-left > *:nth-child(6) { animation-delay: .36s; }
+
+  /* ---- O'ng ustun: haqiqiy e'lonlardan "sochilgan" karta to'plami ---- */
+  .hero-stack { position: relative; height: 440px; }
+  .hero-stack-card {
+    position: absolute; width: 240px; background: #fff; border-radius: var(--radius-lg);
+    overflow: hidden; box-shadow: var(--shadow-float); opacity: 0;
+    transition: box-shadow .3s var(--ease);
+    animation: heroStackIn .6s var(--ease) both;
+  }
+  .hero-stack-card:nth-child(1) { top: 4px; left: 0; z-index: 1; --rot: -7deg; animation-delay: .32s; }
+  .hero-stack-card:nth-child(2) { top: 92px; left: 160px; z-index: 3; --rot: 5deg; animation-delay: .46s; }
+  .hero-stack-card:nth-child(3) { top: 232px; left: 48px; z-index: 2; --rot: -3deg; animation-delay: .6s; }
+  @keyframes heroStackIn { from { opacity: 0; transform: translateY(28px) rotate(0deg) scale(.94); } to { opacity: 1; transform: translateY(0) rotate(var(--rot)) scale(1); } }
+  /* MUHIM: animatsiya tugagach ham ("fill-mode: both") CSS "animation"
+     qatlami oddiy ":hover" qoidasidan KUCHLIROQ turadi - shuning uchun
+     hover'da aylanishni bekor qilish uchun shu yerda (asosli ravishda)
+     !important ishlatilgan, aks holda hover umuman ko'rinmas edi. */
+  .hero-stack:hover .hero-stack-card { transform: translateY(-10px) rotate(0deg) scale(1) !important; box-shadow: var(--shadow-float), 0 0 0 1px rgba(16,24,38,.06); z-index: 5 !important; }
+  @media (prefers-reduced-motion: reduce) { .hero-stack-card { animation: none; opacity: 1; transform: translateY(0) rotate(var(--rot)); } }
+
+  .hsc-photo { aspect-ratio: 4/3; background: var(--bg-soft); overflow: hidden; }
+  .hsc-photo img { width: 100%; height: 100%; object-fit: cover; }
+  .hsc-photo .lc-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg,#FFEBEF,#FFF6F2); }
+  .hsc-body { padding: 13px 15px; }
+  .hsc-addr { font-size: 13px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hsc-price { font-size: 14.5px; font-weight: 800; color: var(--brand); margin-top: 2px; }
   @keyframes heroIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
 
   .search-pill {
-    background: #fff; border-radius: var(--radius-pill); padding: 8px; max-width: 720px; margin: 0 auto;
+    background: #fff; border-radius: var(--radius-pill); padding: 8px; max-width: 720px; margin: 0;
     box-shadow: var(--shadow-float); border: 1px solid var(--line);
     display: grid; grid-template-columns: 1fr 1fr auto; align-items: stretch; gap: 0;
     transition: box-shadow .25s var(--ease);
   }
+  .hero-grid.no-stack .search-pill { margin: 0 auto; }
   .search-pill:hover, .search-pill:focus-within { box-shadow: var(--shadow-float), 0 0 0 4px rgba(255,59,92,.09); }
   .search-pill .seg { padding: 10px 22px; border-right: 1px solid var(--line); text-align: left; }
   .search-pill .seg:last-of-type { border-right: none; }
@@ -276,7 +318,9 @@
   .cs-option.selected { background: var(--brand-light); color: var(--brand-dark); font-weight: 700; }
 
   /* ============ IJARA TURI TABLARI (kunlik/uzoq muddat/dacha/mehmonxona) ============ */
-  .rt-tabs { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 20px; }
+  .rt-tabs { display: flex; gap: 8px; justify-content: flex-start; flex-wrap: wrap; margin-top: 20px; }
+  .hero-grid.no-stack .rt-tabs { justify-content: center; }
+  @media (max-width: 960px) { .rt-tabs { justify-content: center; } }
   .rt-tab {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 8px 16px; border-radius: var(--radius-pill); background: #fff; font-size: 12.5px; font-weight: 700;
@@ -288,7 +332,7 @@
   @media (max-width: 640px) { .rt-tabs { gap: 6px; margin-top: 14px; } .rt-tab { padding: 7px 12px; font-size: 12px; } }
 
   .hero-ai-cta {
-    display: flex; align-items: center; gap: 12px; margin: 24px auto 0; max-width: 520px;
+    display: flex; align-items: center; gap: 12px; margin: 24px 0 0; max-width: 520px;
     background: linear-gradient(135deg, var(--brand), var(--brand-dark)); color: #fff; border: none;
     border-radius: var(--radius-lg); padding: 14px 20px; cursor: pointer; text-align: left;
     box-shadow: 0 8px 24px rgba(255,59,92,.28); transition: transform .18s var(--ease), box-shadow .18s var(--ease);

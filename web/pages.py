@@ -80,6 +80,7 @@ from web.render import (
     render_footer,
     render_head,
     render_header,
+    render_hero_stack_card,
     render_listing_card,
     t,
 )
@@ -249,40 +250,47 @@ def _listings_page(
 <body>
 {render_header(lang, canonical_path)}
 
-<section class="hero">
-  <div class="wrap">
-    <span class="hero-kicker">{icon('sparkle', 13)} {t(lang,'hero_kicker')}</span>
-    <h1>{hero_title_text}</h1>
-    <p class="sub">{t(lang,'hero_sub')}</p>
-    <form class="search-pill" method="get" action="/">
-      <input type="hidden" name="lang" value="{lang}">
-      <div class="seg cs-wrap">
-        <label>{t(lang,'search_district_label')}</label>
-        <select name="hudud">
-          <option value="">{t(lang,'search_all_districts')}</option>
-          {district_options}
-        </select>
+<section class="hero hero-split">
+  <div class="wrap hero-grid{'  no-stack' if not listings else ''}">
+    <div class="hero-left">
+      <span class="hero-kicker">{icon('sparkle', 13)} {t(lang,'hero_kicker')}</span>
+      <h1>{hero_title_text}</h1>
+      <p class="sub">{t(lang,'hero_sub')}</p>
+      <form class="search-pill" method="get" action="/">
+        <input type="hidden" name="lang" value="{lang}">
+        <div class="seg cs-wrap">
+          <label>{t(lang,'search_district_label')}</label>
+          <select name="hudud">
+            <option value="">{t(lang,'search_all_districts')}</option>
+            {district_options}
+          </select>
+        </div>
+        <div class="seg cs-wrap">
+          <label>{t(lang,'search_rooms_label')}</label>
+          <select name="xona">
+            <option value="">{t(lang,'search_rooms_any')}</option>
+            <option value="1" {"selected" if xona=="1" else ""}>1</option>
+            <option value="2" {"selected" if xona=="2" else ""}>2</option>
+            <option value="3" {"selected" if xona=="3" else ""}>3</option>
+            <option value="4" {"selected" if xona=="4" else ""}>4+</option>
+          </select>
+        </div>
+        <button type="submit">{icon('search', 16)} {t(lang,'search_btn')}</button>
+      </form>
+      <div class="rt-tabs">{rt_tabs_html}</div>
+      <button type="button" class="hero-ai-cta" onclick="document.getElementById('ai-chat-toggle').click()">
+        <span class="hero-ai-cta-icon">{icon('sparkle', 20)}</span>
+        <span>
+          <span class="hero-ai-cta-title">{t(lang,'hero_ai_cta_title')}</span>
+          <span class="hero-ai-cta-sub">{t(lang,'hero_ai_cta_sub')}</span>
+        </span>
+      </button>
+    </div>
+    {f'''<div class="hero-right">
+      <div class="hero-stack">
+        {"".join(render_hero_stack_card(l) for l in listings[:3])}
       </div>
-      <div class="seg cs-wrap">
-        <label>{t(lang,'search_rooms_label')}</label>
-        <select name="xona">
-          <option value="">{t(lang,'search_rooms_any')}</option>
-          <option value="1" {"selected" if xona=="1" else ""}>1</option>
-          <option value="2" {"selected" if xona=="2" else ""}>2</option>
-          <option value="3" {"selected" if xona=="3" else ""}>3</option>
-          <option value="4" {"selected" if xona=="4" else ""}>4+</option>
-        </select>
-      </div>
-      <button type="submit">{icon('search', 16)} {t(lang,'search_btn')}</button>
-    </form>
-    <div class="rt-tabs">{rt_tabs_html}</div>
-    <button type="button" class="hero-ai-cta" onclick="document.getElementById('ai-chat-toggle').click()">
-      <span class="hero-ai-cta-icon">{icon('sparkle', 20)}</span>
-      <span>
-        <span class="hero-ai-cta-title">{t(lang,'hero_ai_cta_title')}</span>
-        <span class="hero-ai-cta-sub">{t(lang,'hero_ai_cta_sub')}</span>
-      </span>
-    </button>
+    </div>''' if listings else ''}
   </div>
 </section>
 
