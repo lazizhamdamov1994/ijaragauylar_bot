@@ -258,6 +258,19 @@
   @keyframes heroIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
 
   .search-pill {
+    /* MUHIM (qatlamlanish/z-index xatosi): ".hero-left > *" kirish
+       animatsiyasi (heroIn) tugagandan keyin ham "transform: translateY(0)"
+       qiymatini saqlab qoladi - CSS qoidasiga ko'ra, "none"dan boshqa
+       HAR QANDAY transform qiymati (hatto vizual jihatdan 0 bo'lsa ham)
+       elementni alohida "stacking context"ga aylantiradi. Natijada
+       ".search-pill" o'zining DOM tartibida KEYIN keladigan birodarlari
+       (.rt-tabs, .hero-ai-cta - ular ham xuddi shunday alohida qatlamga
+       aylangan) bilan TENG z-index'da taqqoslanadi va ular KEYINROQ
+       chizilgani uchun ustidan bosib chiqadi - ichidagi ochiq
+       dropdown (.cs-menu, z-index:80) esa faqat shu ICHKI qatlam
+       doirasida ishlaydi, tashqariga "chiqa olmaydi". Aniq, tashqi
+       z-index bilan bu muammo butunlay bartaraf etiladi. */
+    position: relative; z-index: 5;
     background: #fff; border-radius: var(--radius-pill); padding: 8px; max-width: 720px; margin: 0;
     box-shadow: var(--shadow-float); border: 1px solid var(--line);
     display: grid; grid-template-columns: 1fr 1fr auto; align-items: stretch; gap: 0;
