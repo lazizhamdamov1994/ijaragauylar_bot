@@ -6,9 +6,10 @@ from aiogram.types import (
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from app.bot.callbacks import PreviewCb, ProductCb, VariantCb
-from app.db.models import Product
-from app.services.formatting import format_price
+from app.bot.callbacks import BuyCb, PreviewCb, ProductCb, SellerOrderCb, VariantCb
+from app.db.models import Order, OrderStatus, Product, ProductVariant
+from app.services.formatting import format_price, status_label, variant_label
+from app.services.orders import TRANSITIONS
 from app.texts import t
 
 SIZES = ["XS", "S", "M", "L", "XL", "XXL", "3XL", "4XL"]
@@ -24,7 +25,10 @@ def _reply(*rows: list[str]) -> ReplyKeyboardMarkup:
 
 
 def main_menu(lang: str = "uz") -> ReplyKeyboardMarkup:
-    return _reply([t("btn_add_product", lang)], [t("btn_my_products", lang), t("btn_my_channel", lang)])
+    return _reply(
+        [t("btn_add_product", lang), t("btn_orders", lang)],
+        [t("btn_my_products", lang), t("btn_my_channel", lang)],
+    )
 
 
 def phone_request(lang: str = "uz") -> ReplyKeyboardMarkup:
@@ -144,4 +148,80 @@ def product_manage(product: Product, page: int, lang: str = "uz") -> InlineKeybo
         b.button(text=t("btn_activate", lang), callback_data=ProductCb(action="on", id=product.id, page=page))
     b.button(text=t("btn_back", lang), callback_data=ProductCb(action="list", page=page))
     b.adjust(1)
+    return b.as_markup()
+
+
+# ---------- Buyurtma: xaridor ----------
+
+def variant_picker(variants: list[ProductVariant], lang: str = "uz") -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for v in variants:
+        b.button(
+            text=t("order_variant_btn", lang, variant=variant_label(v.size, v.color), stock=v.stock),
+            callback_data=BuyCb(action="variant", id=v.id),
+        )
+    b.button(text=t("btn_cancel", lang), callback_data=BuyCb(action="cancel"))
+    b.adjust(2)
+    return b.as_markup()
+
+
+def buy_qty_picker(stock: int, lang: str = "uz") -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for q in range(1, min(stock, 5) + 1):
+        b.button(text=str(q), callback_data=BuyCb(action="qty", id=q))
+    b.button(text=t("btn_cancel", lang), callback_data=BuyCb(action="cancel"))
+    b.adjust(5, 1)
+    return b.as_markup()
+
+
+def buyer_phone(prev_phone: str | None, lang: str = "uz") -> ReplyKeyboardMarkup:
+    rows = [[KeyboardButton(text=t("btn_send_phone", lang), request_contact=True)]]
+    if prev_phone:
+        rows.append([KeyboardButton(text=prev_phone)])
+    rows.append([KeyboardButton(text=t("btn_cancel", lang))])
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
+
+
+def order_confirm(lang: str = "uz") -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=t("btn_order_send", lang), callback_data=BuyCb(action="send"))
+    b.button(text=t("btn_cancel", lang), callback_data=BuyCb(action="cancel"))
+    b.adjust(1)
+    return b.as_markup()
+
+
+# ---------- Buyurtma: sotuvchi ----------
+
+def seller_order_actions(order: Order, page: int = 0, lang: str = "uz") -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    order_of_buttons = [OrderStatus.CONFIRMED, OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.CANCELLED]
+    for st in order_of_buttons:
+        if st in TRANSITIONS[order.status]:
+            b.button(
+                text=t(f"btn_status_{st.value}", lang),
+                callback_data=SellerOrderCb(action="set", id=order.id, status=st.value, page=page),
+            )
+    if order.buyer_telegram_id:
+        b.button(text=t("btn_write_buyer", lang), url=f"tg://user?id={order.buyer_telegram_id}")
+    b.adjust(2)
+    return b.as_markup()
+
+
+def seller_orders_list(orders: list[Order], page: int, has_next: bool, lang: str = "uz") -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    for o in orders:
+        first = o.items[0].product_name if o.items else ""
+        b.row(
+            InlineKeyboardButton(
+                text=f"№{o.id} · {status_label(o.status, lang)} · {first[:25]} · {format_price(o.total)}",
+                callback_data=SellerOrderCb(action="view", id=o.id, page=page).pack(),
+            )
+        )
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton(text="⬅️", callback_data=SellerOrderCb(action="list", page=page - 1).pack()))
+    if has_next:
+        nav.append(InlineKeyboardButton(text="➡️", callback_data=SellerOrderCb(action="list", page=page + 1).pack()))
+    if nav:
+        b.row(*nav)
     return b.as_markup()

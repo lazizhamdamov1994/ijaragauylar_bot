@@ -2,7 +2,7 @@ from functools import lru_cache
 
 from aiogram import Router
 
-from app.bot.handlers import buyer, channel, common, my_products, product_add, registration
+from app.bot.handlers import buyer, channel, common, my_products, orders, product_add, registration
 
 
 @lru_cache(maxsize=1)
@@ -16,6 +16,7 @@ def build_router() -> Router:
         channel.router,
         product_add.router,
         my_products.router,
+        orders.router,
         common.fallback_router,
     )
     return root

@@ -72,8 +72,11 @@ async def view(call: CallbackQuery, callback_data: ProductCb, session: AsyncSess
     if not product.is_active:
         text = t("product_deactivated", lang) + "\n\n" + text
     markup = kb.product_manage(product, callback_data.page, lang)
-    if product.photos:
-        await call.message.answer_photo(product.photos[0].file_id, caption=text, reply_markup=markup)
+    first = product.media[0] if product.media else None
+    if first and first.kind == "video":
+        await call.message.answer_video(first.file_id, caption=text, reply_markup=markup)
+    elif first:
+        await call.message.answer_photo(first.file_id, caption=text, reply_markup=markup)
     else:
         await call.message.answer(text, reply_markup=markup)
     await call.answer()

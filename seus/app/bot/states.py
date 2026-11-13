@@ -20,3 +20,12 @@ class ProductAdd(StatesGroup):
     variant_qty = State()
     description = State()
     preview = State()
+
+
+class OrderFlow(StatesGroup):
+    variant = State()
+    qty = State()
+    phone = State()
+    address = State()
+    comment = State()
+    confirm = State()

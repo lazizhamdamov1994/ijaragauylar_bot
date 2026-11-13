@@ -8,7 +8,7 @@ from html import escape as _escape
 
 escape = partial(_escape, quote=False)
 
-from app.db.models import Product
+from app.db.models import Order, Product
 from app.services.dto import ProductDraft, ProductView, VariantData
 from app.texts import t
 
@@ -96,3 +96,42 @@ def variants_list_text(variants: list[VariantData], lang: str = "uz") -> str:
     if not variants:
         return t("variants_empty", lang)
     return "\n".join(f"• {escape(v.label())} — {v.stock} ta" for v in variants)
+
+
+def variant_label(size: str, color: str) -> str:
+    return " ".join(p for p in (size, color) if p) or "—"
+
+
+def status_label(status, lang: str = "uz") -> str:
+    return t(f"order_status_{getattr(status, 'value', status)}", lang)
+
+
+def order_text(order: Order, lang: str = "uz", with_status: bool = True) -> str:
+    """Buyurtma haqida to'liq matn (sotuvchi va xaridor uchun)."""
+    lines = [t("order_title", lang, number=order.id)]
+    for item in order.items:
+        lines.append(
+            t(
+                "order_item_line", lang,
+                name=escape(item.product_name),
+                variant=escape(variant_label(item.size, item.color)),
+                qty=item.quantity,
+                price=format_price(item.unit_price),
+            )
+        )
+    lines.append(t("order_total_line", lang, total=format_price(order.total)))
+    lines.append("")
+    lines.append(t("order_buyer_line", lang, name=escape(order.buyer_name)))
+    lines.append(t("order_phone_line", lang, phone=escape(order.buyer_phone)))
+    if order.address:
+        lines.append(t("order_address_line", lang, address=escape(order.address)))
+    if order.comment:
+        lines.append(t("order_comment_line", lang, comment=escape(order.comment)))
+    if with_status:
+        lines += ["", t("order_status_line", lang, status=status_label(order.status, lang))]
+    return "\n".join(lines)
+
+
+def post_buttons_text(view: ProductView, lang: str = "uz") -> str:
+    """Albomdan keyingi kichik xabar (tugmalar shunga qo'yiladi)."""
+    return t("post_buttons_text", lang, name=escape(view.name), price=format_price(view.price))

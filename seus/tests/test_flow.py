@@ -10,9 +10,11 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.methods import (
-    GetChat, GetChatMember, GetMe, SendMediaGroup, SendMessage, SendPhoto, TelegramMethod,
+    EditMessageCaption, GetChat, GetChatMember, GetMe, SendMediaGroup, SendMessage, SendPhoto,
+    SendVideo, TelegramMethod,
 )
 from aiogram.types import (
+    Video,
     Chat, ChatFullInfo, ChatMemberAdministrator, ChatMemberOwner, Message, Update, User,
 )
 from sqlalchemy import select
@@ -21,7 +23,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.bot.handlers import build_router
 from app.bot.middlewares import DbSessionMiddleware, SellerMiddleware
 from app.db import Base
-from app.db.models import ChannelPost, Product, Seller
+from app.db.models import ChannelPost, Order, OrderStatus, Product, ProductVariant, Seller
 from tests.conftest import TEST_DB_URL
 
 BOT_ID, USER_ID, CHANNEL_ID = 42, 1000, -1009999
@@ -56,7 +58,7 @@ class FakeSession(BaseSession):
             return ChatMemberOwner(user=USER, is_anonymous=False)
         if isinstance(method, SendMediaGroup):
             return [self._msg(method.chat_id, photo=[]) for _ in method.media]
-        if isinstance(method, (SendMessage, SendPhoto)):
+        if isinstance(method, (SendMessage, SendPhoto, SendVideo)):
             return self._msg(method.chat_id, text="ok")
         return True
 
@@ -67,7 +69,11 @@ class FakeSession(BaseSession):
         yield b""
 
     def texts(self) -> list[str]:
-        out = [getattr(r, "text", None) or getattr(r, "caption", None) for r in self.requests]
+        out = [
+            r.media[0].caption if isinstance(r, SendMediaGroup)
+            else getattr(r, "text", None) or getattr(r, "caption", None)
+            for r in self.requests
+        ]
         return [x for x in out if x]
 
 
@@ -128,10 +134,12 @@ async def test_full_flow(env):
     assert "ulangan kanal yo'q" in (await send(text="📢 Kanalim")).texts()[0]
     assert "Kanal ulandi" in (await send(text="@moda_kanal")).texts()[-1]
 
-    # Tovar qo'shish
+    # Tovar qo'shish: 2 ta rasm + 1 ta video
     await send(text="➕ Tovar qo'shish")
     assert "<b>1</b>/10" in (await send(photo=photo("A"))).texts()[0]
     assert "<b>2</b>/10" in (await send(photo=photo("B"))).texts()[0]
+    r = await send(video=Video(file_id="V", file_unique_id="v", width=1, height=1, duration=3))
+    assert "<b>3</b>/10" in r.texts()[0] and "🎬 1" in r.texts()[0]
     assert "nomini" in (await send(text="✅ Tayyor")).texts()[0]
     assert "Narxini" in (await send(text="Erkaklar ko'ylagi")).texts()[0]
     assert "Razmer" in (await send(text="250 000")).texts()[0]
@@ -144,19 +152,21 @@ async def test_full_flow(env):
     assert "L oq — 2 ta" in (await press("vw:qty:2")).texts()[0]
     assert "Tavsif" in (await send(text="✅ Tayyor")).texts()[0]
     r = await send(text="Paxta, Turkiya")
-    assert isinstance(r.requests[1], SendMediaGroup)  # oldindan ko'rish: albom + matn
+    assert isinstance(r.requests[1], SendMediaGroup)  # oldindan ko'rish: albom + tugmalar
 
     # Tahrirlash: narxni o'zgartiramiz
     await press("pv:edit:")
     await press("pv:field:price")
     r = await send(text="300k")
-    assert "300 000" in r.texts()[-1]
+    assert "300 000" in r.texts()[-2]  # albom izohida
 
     # Kanalga joylash
     r = await press("pv:publish:")
     sent_to_channel = [q for q in r.requests if getattr(q, "chat_id", None) == CHANNEL_ID]
-    assert isinstance(sent_to_channel[0], SendMediaGroup)
-    assert [m.media for m in sent_to_channel[0].media] == ["A", "B"]  # eng katta o'lcham
+    album = sent_to_channel[0]
+    assert isinstance(album, SendMediaGroup)
+    assert [(m.type, m.media) for m in album.media] == [("photo", "A"), ("photo", "B"), ("video", "V")]
+    assert "Erkaklar ko'ylagi" in album.media[0].caption and "300 000" in album.media[0].caption
     buttons = sent_to_channel[1].reply_markup.inline_keyboard
     async with factory() as s:
         product = await s.scalar(select(Product))
@@ -172,11 +182,46 @@ async def test_full_flow(env):
     r = await press("pv:publish:")
     assert not [q for q in r.requests if getattr(q, "chat_id", None) == CHANNEL_ID]
 
-    # Xaridor havolani ochadi
+    # ---- Xaridor buyurtma beradi ----
     r = await send(text=f"/start p_{product.public_id}")
-    assert "tez orada" in r.texts()[-1]
-    r = await send(text="/start p_YOQTOVAR12")
-    assert "sotuvda yo'q" in r.texts()[0]
+    assert "Razmer/rangni tanlang" in r.texts()[-1]
+    async with factory() as s:
+        variants = (await s.scalars(select(ProductVariant).order_by(ProductVariant.id))).all()
+    s_qora = variants[0]
+    r = await press(f"ob:variant:{s_qora.id}")
+    assert "Nechta" in r.texts()[0]
+    r = await send(text="9")
+    assert "faqat 5 ta" in r.texts()[0]
+    r = await press("ob:qty:2")
+    assert "Telefon" in r.texts()[0]
+    r = await send(text="+998 93 111 22 33")
+    assert "manzil" in r.texts()[0]
+    r = await send(text="Toshkent, Yunusobod 4-kvartal")
+    r = await send(text="⏭ O'tkazib yuborish")
+    assert "tekshiring" in r.texts()[-1] and "600 000" in r.texts()[-1]
+    r = await press("ob:send:")
+    assert any("qabul qilindi" in x for x in r.texts())
+    assert any("Yangi buyurtma" in x for x in r.texts())  # sotuvchiga xabar
+    assert any(isinstance(q, EditMessageCaption) for q in r.requests)  # kanal posti yangilandi
+    async with factory() as s:
+        order = await s.scalar(select(Order))
+        assert (await s.get(ProductVariant, s_qora.id)).stock == 3
+    assert order.buyer_phone == "+998931112233" and order.total == 600000
+
+    # Ikki marta yuborish — ikkinchi buyurtma yaratilmaydi
+    await press("ob:send:")
+    async with factory() as s:
+        assert len((await s.scalars(select(Order))).all()) == 1
+
+    # ---- Sotuvchi buyurtmani boshqaradi ----
+    r = await send(text="🧾 Buyurtmalar")
+    assert "1 ta" in r.texts()[0]
+    await press(f"os:set:{order.id}:confirmed:0")
+    r = await press(f"os:set:{order.id}:cancelled:0")
+    async with factory() as s:
+        assert (await s.get(Order, order.id)).status == OrderStatus.CANCELLED
+        assert (await s.get(ProductVariant, s_qora.id)).stock == 5  # qoldiq qaytdi
+    assert any(isinstance(q, EditMessageCaption) for q in r.requests)
 
     # Tovarlarim
     r = await send(text="📦 Tovarlarim")
@@ -184,9 +229,28 @@ async def test_full_flow(env):
     r = await press(f"pr:off:{product.id}:0")
     async with factory() as s:
         assert not (await s.get(Product, product.id)).is_active
+    r = await send(text=f"/start p_{product.public_id}")
+    assert "sotuvda yo'q" in r.texts()[0]
+
+
+async def test_buyer_single_variant_skips_choice(env):
+    send, press, factory = env
+    async with factory() as s:
+        seller = Seller(telegram_id=999, shop_name="Do'kon", phone="+998900000000")
+        s.add(seller)
+        await s.flush()
+        from app.services import products as psvc
+        from app.services.dto import MediaItem, ProductDraft, VariantData
+        p = await psvc.create_product(s, seller, ProductDraft(
+            media=[MediaItem("video", "V1")], name="Shim", price=100000, variants=[VariantData("", "", 2)]))
+        await s.commit()
+    r = await send(text=f"/start p_{p.public_id}")
+    assert any(isinstance(q, SendVideo) for q in r.requests) and "Nechta" in r.texts()[-1]
+    r = await press("ob:cancel:0")
+    assert "bekor" in r.texts()[0].lower()
 
 
 async def test_unknown_text_and_cancel(env):
     send, press, _ = env
     assert "ro'yxatdan" in (await send(text="salom")).texts()[0].lower()
-    assert "/start" in (await send(text="/cancel")).texts()[0]
+    assert "Bekor qilindi" in (await send(text="/cancel")).texts()[0]

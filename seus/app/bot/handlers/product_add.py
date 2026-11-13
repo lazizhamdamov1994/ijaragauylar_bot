@@ -1,4 +1,4 @@
-"""Tovar qo'shish: rasmlar → nom → narx → razmer/rang/son → tavsif → oldindan ko'rish → joylash."""
+"""Tovar qo'shish: rasm/video → nom → narx → razmer/rang/son → tavsif → oldindan ko'rish → joylash."""
 from __future__ import annotations
 
 from functools import partial
@@ -18,7 +18,7 @@ from app.bot.states import ProductAdd
 from app.db.models import Seller
 from app.services import channels as channel_service
 from app.services import products as product_service
-from app.services.dto import ProductDraft, VariantData
+from app.services.dto import MediaItem, ProductDraft, VariantData
 from app.services.errors import ServiceError
 from app.services.formatting import variants_list_text, view_from_draft
 from app.services.parsing import (
@@ -29,7 +29,7 @@ from app.services.parsing import (
     validate_description,
     validate_product_name,
 )
-from app.services.products import MAX_PHOTOS
+from app.services.products import MAX_MEDIA
 from app.texts import all_langs, t
 
 router = Router(name="product_add")
@@ -87,7 +87,7 @@ async def show_preview(message: Message, state: FSMContext, bot: Bot, seller: Se
     draft = await get_draft(state)
     await message.answer(t("preview_title", lang), reply_markup=ReplyKeyboardRemove())
     await send_product(
-        bot, message.chat.id, draft.photo_file_ids, view_from_draft(draft, seller.shop_name),
+        bot, message.chat.id, draft.media, view_from_draft(draft, seller.shop_name),
         kb.preview_actions(lang), lang,
     )
 
@@ -117,23 +117,34 @@ async def start_add(message: Message, state: FSMContext, seller: Seller | None, 
     await message.answer(t("ask_photos", lang), reply_markup=kb.done_cancel(lang))
 
 
-@router.message(ProductAdd.photos, F.photo)
-async def got_photos(message: Message, state: FSMContext, lang: str, album: list[Message] | None = None) -> None:
-    messages = album or [message]
-    new_ids = [m.photo[-1].file_id for m in messages if m.photo]  # eng katta o'lcham
+def _media_from(message: Message) -> MediaItem | None:
+    if message.photo:
+        return MediaItem("photo", message.photo[-1].file_id)  # eng katta o'lcham
+    if message.video:
+        return MediaItem("video", message.video.file_id)
+    return None
+
+
+@router.message(ProductAdd.photos, F.photo | F.video)
+async def got_media(message: Message, state: FSMContext, lang: str, album: list[Message] | None = None) -> None:
+    new_items = [m for m in (_media_from(x) for x in (album or [message])) if m]
     draft = await get_draft(state)
-    room = MAX_PHOTOS - len(draft.photo_file_ids)
-    draft.photo_file_ids += new_ids[:room]
+    room = MAX_MEDIA - len(draft.media)
+    draft.media += new_items[:room]
     await save_draft(state, draft)
-    if len(new_ids) > room:
+    if len(new_items) > room:
         await message.answer(t("photos_limit", lang))
-    await message.answer(t("photos_added", lang, count=len(draft.photo_file_ids)), reply_markup=kb.done_cancel(lang))
+    photos = sum(1 for m in draft.media if m.kind == "photo")
+    await message.answer(
+        t("photos_added", lang, count=len(draft.media), photos=photos, videos=len(draft.media) - photos),
+        reply_markup=kb.done_cancel(lang),
+    )
 
 
 @router.message(ProductAdd.photos, F.text.in_(all_langs("btn_done")))
 async def photos_done(message: Message, state: FSMContext, bot: Bot, seller: Seller, lang: str) -> None:
     draft = await get_draft(state)
-    if not draft.photo_file_ids:
+    if not draft.media:
         await message.answer(t("photos_need_one", lang))
         return
     await next_step("photos", message, state, bot, seller, lang)
@@ -313,7 +324,7 @@ async def preview_field(call: CallbackQuery, callback_data: PreviewCb, state: FS
     field = callback_data.field
     if field == "photos":
         draft = await get_draft(state)
-        draft.photo_file_ids = []
+        draft.media = []
         await save_draft(state, draft)
         await state.set_state(ProductAdd.photos)
         await call.message.answer(t("ask_photos", lang), reply_markup=kb.done_cancel(lang))

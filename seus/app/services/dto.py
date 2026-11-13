@@ -19,10 +19,16 @@ class VariantData:
 
 
 @dataclass
+class MediaItem:
+    kind: str  # "photo" yoki "video"
+    file_id: str
+
+
+@dataclass
 class ProductDraft:
     """Tovar qo'shilayotgan paytdagi qoralama (FSM'da dict ko'rinishida saqlanadi)."""
 
-    photo_file_ids: list[str] = field(default_factory=list)
+    media: list[MediaItem] = field(default_factory=list)
     name: str = ""
     price: Decimal | None = None
     variants: list[VariantData] = field(default_factory=list)
@@ -38,7 +44,7 @@ class ProductDraft:
         d = d or {}
         price = d.get("price")
         return cls(
-            photo_file_ids=list(d.get("photo_file_ids") or []),
+            media=[MediaItem(**m) for m in d.get("media") or []],
             name=d.get("name") or "",
             price=Decimal(price) if price is not None else None,
             variants=[VariantData(**v) for v in d.get("variants") or []],

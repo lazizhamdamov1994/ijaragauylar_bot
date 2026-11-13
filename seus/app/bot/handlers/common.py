@@ -19,7 +19,7 @@ fallback_router = Router(name="fallback")
 
 async def show_menu(message: Message, seller: Seller | None, lang: str, text: str | None = None) -> None:
     if seller is None:
-        await message.answer(t("not_registered", lang), reply_markup=ReplyKeyboardRemove())
+        await message.answer(text or t("not_registered", lang), reply_markup=ReplyKeyboardRemove())
         return
     await message.answer(text or t("menu", lang), reply_markup=kb.main_menu(lang))
 
@@ -33,7 +33,7 @@ async def cancel(message: Message, state: FSMContext, seller: Seller | None, lan
 
 @fallback_router.message()
 async def unknown(message: Message, seller: Seller | None, lang: str) -> None:
-    await show_menu(message, seller, lang, t("unknown_command", lang))
+    await show_menu(message, seller, lang, t("unknown_command", lang) if seller else None)
 
 
 @fallback_router.callback_query()

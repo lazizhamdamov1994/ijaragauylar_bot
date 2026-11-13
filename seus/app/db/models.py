@@ -76,9 +76,9 @@ class Product(TimestampMixin, Base):
     )
 
     seller: Mapped[Seller] = relationship(back_populates="products")
-    photos: Mapped[list[ProductPhoto]] = relationship(
+    media: Mapped[list[ProductMedia]] = relationship(
         back_populates="product",
-        order_by="ProductPhoto.position",
+        order_by="ProductMedia.position",
         cascade="all, delete-orphan",
         lazy="selectin",
     )
@@ -91,15 +91,18 @@ class Product(TimestampMixin, Base):
     posts: Mapped[list[ChannelPost]] = relationship(back_populates="product")
 
 
-class ProductPhoto(Base):
-    __tablename__ = "product_photos"
+class ProductMedia(Base):
+    """Tovar rasmi yoki videosi (Telegram file_id saqlanadi, fayl yuklab olinmaydi)."""
+
+    __tablename__ = "product_media"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"))
-    file_id: Mapped[str] = mapped_column(String(255))  # Telegram file_id
+    kind: Mapped[str] = mapped_column(String(10), default="photo", server_default="photo")  # photo / video
+    file_id: Mapped[str] = mapped_column(String(255))
     position: Mapped[int] = mapped_column(Integer, default=0)
 
-    product: Mapped[Product] = relationship(back_populates="photos")
+    product: Mapped[Product] = relationship(back_populates="media")
 
 
 class ProductVariant(Base):

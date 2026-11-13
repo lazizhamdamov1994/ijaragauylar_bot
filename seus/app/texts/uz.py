@@ -37,6 +37,7 @@ TEXTS: dict[str, str] = {
     "btn_add_product": "➕ Tovar qo'shish",
     "btn_my_products": "📦 Tovarlarim",
     "btn_my_channel": "📢 Kanalim",
+    "btn_orders": "🧾 Buyurtmalar",
     "menu": "Asosiy menyu:",
 
     # ---- Kanal ----
@@ -83,14 +84,14 @@ TEXTS: dict[str, str] = {
 
     # ---- Tovar qo'shish ----
     "ask_photos": (
-        "📸 Tovar rasmlarini yuboring (1 dan 10 tagacha).\n"
+        "📸 Tovar <b>rasm yoki videolarini</b> yuboring (jami 1 dan 10 tagacha).\n"
         "Bir nechtasini bitta albom qilib yuborsangiz ham bo'ladi.\n"
         "Tugatgach <b>«✅ Tayyor»</b> tugmasini bosing."
     ),
-    "photos_added": "🖼 Rasmlar: <b>{count}</b>/10. Yana yuboring yoki «✅ Tayyor»ni bosing.",
-    "photos_limit": "⚠️ Ko'pi bilan 10 ta rasm. Ortiqchalari qabul qilinmadi.",
-    "photos_need_one": "Kamida bitta rasm yuboring.",
-    "photos_only": "Iltimos, rasm yuboring (fayl emas, oddiy rasm sifatida).",
+    "photos_added": "🖼 Rasm/video: <b>{count}</b>/10 (📷 {photos}, 🎬 {videos}). Yana yuboring yoki «✅ Tayyor»ni bosing.",
+    "photos_limit": "⚠️ Ko'pi bilan 10 ta rasm/video. Ortiqchalari qabul qilinmadi.",
+    "photos_need_one": "Kamida bitta rasm yoki video yuboring.",
+    "photos_only": "Iltimos, rasm yoki video yuboring (fayl/hujjat sifatida emas).",
     "ask_name": "✏️ Tovar nomini yozing (masalan: <i>Erkaklar ko'ylagi, paxta</i>):",
     "name_invalid": "Nom 2 dan 200 gacha belgidan iborat bo'lsin. Qayta yozing:",
     "ask_price": "💰 Narxini so'mda yozing (masalan: <code>250000</code> yoki <code>250 000</code>):",
@@ -120,7 +121,7 @@ TEXTS: dict[str, str] = {
     "btn_publish": "📢 Kanalga joylash",
     "btn_edit": "✏️ Tahrirlash",
     "edit_what": "Nimani o'zgartiramiz?",
-    "btn_edit_photos": "🖼 Rasmlar",
+    "btn_edit_photos": "🖼 Rasm/video",
     "btn_edit_name": "✏️ Nom",
     "btn_edit_price": "💰 Narx",
     "btn_edit_variants": "📏 Razmer/rang",
@@ -149,6 +150,7 @@ TEXTS: dict[str, str] = {
     "post_shop": "🏪 {shop}",
     "btn_order": "🛒 Buyurtma berish",
     "btn_contact_seller": "📞 Sotuvchi bilan bog'lanish",
+    "post_buttons_text": "👆 <b>{name}</b> — {price} so'm\nBuyurtma berish uchun pastdagi tugmani bosing 👇",
 
     # ---- Tovarlarim ----
     "my_products_empty": "📦 Sizda hali tovar yo'q. «➕ Tovar qo'shish»ni bosing.",
@@ -167,7 +169,53 @@ TEXTS: dict[str, str] = {
         "Kanallardagi «🛒 Buyurtma berish» tugmasi orqali tovarlarni ko'rishingiz mumkin."
     ),
     "buyer_product_unavailable": "😔 Bu tovar hozir sotuvda yo'q.",
-    "buyer_order_soon": "🛒 Bot orqali buyurtma berish <b>tez orada</b> ishga tushadi. Hozircha sotuvchi bilan bog'laning.",
     "seller_contact": "🏪 <b>{shop}</b>\n📞 Telefon: {phone}",
     "seller_contact_username": "💬 Telegram: @{username}",
+
+    # ---- Buyurtma (xaridor) ----
+    "order_choose_variant": "👇 Razmer/rangni tanlang:",
+    "order_variant_btn": "{variant} ({stock} ta)",
+    "order_choose_qty": "🔢 Nechta olasiz? (<b>{variant}</b>, mavjud: {stock} ta)\nTugmani bosing yoki sonini yozing:",
+    "order_qty_invalid": "Son 1 dan {max} gacha bo'lsin.",
+    "order_not_enough_stock": "😔 Kechirasiz, bu razmerdan faqat {stock} ta qoldi.",
+    "order_variant_gone": "😔 Bu razmer endi mavjud emas. Boshqasini tanlang.",
+    "order_ask_phone": "📱 Telefon raqamingizni yuboring (tugma orqali yoki yozib, masalan <code>+998901234567</code>):",
+    "order_phone_invalid": "Raqamni tushunmadim. Masalan: <code>+998901234567</code> yoki tugmani bosing.",
+    "order_ask_address": "📍 Yetkazib berish manzilini yozing (shahar, ko'cha, uy):",
+    "order_address_invalid": "Manzil 5 dan 500 gacha belgidan iborat bo'lsin.",
+    "order_ask_comment": "💬 Sotuvchiga izoh (ixtiyoriy). Masalan: qo'ng'iroq qilish vaqti.",
+    "order_confirm_title": "✅ <b>Buyurtmani tekshiring:</b>",
+    "btn_order_send": "✅ Buyurtmani yuborish",
+    "order_created_buyer": (
+        "🎉 Buyurtmangiz qabul qilindi! <b>№{number}</b>\n"
+        "Sotuvchi tez orada siz bilan bog'lanadi."
+    ),
+    "order_cancelled_flow": "❌ Buyurtma bekor qilindi.",
+    "order_status_changed_buyer": "🔔 Buyurtma <b>№{number}</b> holati: {status}",
+
+    # ---- Buyurtma (sotuvchi) ----
+    "order_new_seller": "🔔 <b>Yangi buyurtma!</b>\n\n{text}",
+    "order_title": "🧾 <b>Buyurtma №{number}</b>",
+    "order_item_line": "👗 {name} — {variant} × {qty} ({price} so'm)",
+    "order_total_line": "💰 Jami: <b>{total} so'm</b>",
+    "order_buyer_line": "👤 {name}",
+    "order_phone_line": "📞 {phone}",
+    "order_address_line": "📍 {address}",
+    "order_comment_line": "💬 {comment}",
+    "order_status_line": "Holati: {status}",
+    "order_status_new": "🆕 Yangi",
+    "order_status_confirmed": "✅ Tasdiqlangan",
+    "order_status_shipped": "🚚 Yo'lda",
+    "order_status_delivered": "📦 Yetkazildi",
+    "order_status_cancelled": "❌ Bekor qilingan",
+    "btn_status_confirmed": "✅ Tasdiqlash",
+    "btn_status_shipped": "🚚 Jo'natildi",
+    "btn_status_delivered": "📦 Yetkazildi",
+    "btn_status_cancelled": "❌ Bekor qilish",
+    "btn_write_buyer": "💬 Xaridorga yozish",
+    "order_status_updated": "Holat yangilandi: {status}",
+    "order_status_not_allowed": "Bu buyurtma holatini endi o'zgartirib bo'lmaydi.",
+    "order_not_found": "Buyurtma topilmadi.",
+    "orders_empty": "🧾 Hozircha buyurtmalar yo'q.",
+    "orders_title": "🧾 <b>Buyurtmalar</b> ({count} ta). Birini tanlang:",
 }

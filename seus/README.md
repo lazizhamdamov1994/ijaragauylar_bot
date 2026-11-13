@@ -3,9 +3,10 @@
 Sotuvchi tovarni bot orqali qo'shadi → bot uni sotuvchining Telegram kanaliga
 rasmlar va tugmalar bilan joylaydi → xaridor «🛒 Buyurtma berish» tugmasini bosib botga keladi.
 
-**1-bosqichda tayyor:** ro'yxatdan o'tish, kanal ulash, tovar qo'shish (rasm, nom, narx,
-razmer/rang/son, tavsif), oldindan ko'rish va tahrirlash, kanalga joylash, «Tovarlarim»,
-xaridor uchun tovar kartochkasi. To'liq buyurtma berish — 2-bosqichda.
+**Tayyor:** ro'yxatdan o'tish, kanal ulash, tovar qo'shish (rasm **va video**, nom, narx,
+razmer/rang/son, tavsif), oldindan ko'rish va tahrirlash, kanalga joylash (media va matn bitta postda),
+«Tovarlarim», **buyurtma berish** (xaridor: razmer → soni → telefon → manzil → tasdiqlash;
+sotuvchi: «🧾 Buyurtmalar», tasdiqlash / jo'natildi / yetkazildi / bekor qilish).
 
 ---
 
@@ -98,8 +99,19 @@ Oyna ochiq tursa — bot ishlayapti. To'xtatish: oynada **Ctrl+C** yoki oynani y
    yoki kanaldan biror xabarni botga forward qiling.
 4. **➕ Tovar qo'shish** → 2–3 ta rasm → «✅ Tayyor» → nom → narx → `S qora 5` → «✅ Tayyor»
    → tavsif → oldindan ko'rish → **📢 Kanalga joylash**.
-5. Kanalni oching: albom + tugmali xabar chiqadi. **🛒 Buyurtma berish** ni bosing —
-   bot tovar kartochkasini ko'rsatadi.
+5. Kanalni oching: rasm/videolar va matn bitta postda, ostida tugmali kichik xabar.
+6. **🛒 Buyurtma berish** ni bosing → razmer → soni → telefon → manzil → «✅ Buyurtmani yuborish».
+   Sotuvchiga «🔔 Yangi buyurtma!» xabari keladi (o'zingiz sinasangiz — o'zingizga keladi).
+   **🧾 Buyurtmalar** bo'limida holatini o'zgartiring.
+
+> Nega tugmalar alohida xabarda? Telegram albomga (2+ rasm/video) tugma qo'yishga ruxsat bermaydi.
+> Bitta rasm yoki video bo'lsa — media, matn va tugmalar bitta xabarda chiqadi.
+
+## Yangilanishni o'rnatish
+
+Yangi ZIP kelganda: `run.bat` oynasini yoping → yangi ZIP ichidagi fayllarni `seus` papkasiga
+ko'chirib, **almashtiring** (`.env` faylingiz ZIP'da yo'q, u o'z joyida qoladi) → `run.bat`.
+Baza o'zgarishlari `run.bat` ishga tushganda avtomatik qo'llanadi, eski tovarlar saqlanib qoladi.
 
 ## Testlar
 

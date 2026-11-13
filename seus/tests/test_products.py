@@ -5,13 +5,13 @@ import pytest
 from app.db.models import Order, OrderItem, OrderStatus, Seller
 from app.services import channels as channel_svc
 from app.services import products as svc
-from app.services.dto import ProductDraft, VariantData
+from app.services.dto import MediaItem, ProductDraft, VariantData
 from app.services.errors import NotFoundError, ValidationError
 
 
 def draft(**kw) -> ProductDraft:
     base = dict(
-        photo_file_ids=["photo1", "photo2"],
+        media=[MediaItem("photo", "photo1"), MediaItem("video", "video1")],
         name="Ko'ylak",
         price=Decimal("250000"),
         variants=[VariantData("S", "qora", 5), VariantData("M", "oq", 2)],
@@ -24,8 +24,8 @@ def draft(**kw) -> ProductDraft:
 async def test_create_product(session, seller):
     p = await svc.create_product(session, seller, draft())
     assert p.id and len(p.public_id) == 10 and p.is_active
-    assert [ph.file_id for ph in p.photos] == ["photo1", "photo2"]
-    assert [ph.position for ph in p.photos] == [0, 1]
+    assert [(m.kind, m.file_id) for m in p.media] == [("photo", "photo1"), ("video", "video1")]
+    assert [m.position for m in p.media] == [0, 1]
     assert [(v.size, v.color, v.stock) for v in p.variants] == [("S", "qora", 5), ("M", "oq", 2)]
     assert p.price == Decimal("250000")
 
@@ -33,8 +33,9 @@ async def test_create_product(session, seller):
 @pytest.mark.parametrize(
     "kw, code",
     [
-        ({"photo_file_ids": []}, "photos_need_one"),
-        ({"photo_file_ids": [f"p{i}" for i in range(11)]}, "photos_need_one"),
+        ({"media": []}, "photos_need_one"),
+        ({"media": [MediaItem("photo", f"p{i}") for i in range(11)]}, "photos_need_one"),
+        ({"media": [MediaItem("document", "d1")]}, "photos_only"),
         ({"name": "x"}, "name_invalid"),
         ({"price": None}, "price_invalid"),
         ({"variants": []}, "variants_need_one"),

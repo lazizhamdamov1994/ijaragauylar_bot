@@ -3,18 +3,21 @@ from __future__ import annotations
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ChannelPost, Product, ProductPhoto, ProductVariant, Seller
+from app.db.models import ChannelPost, Product, ProductMedia, ProductVariant, Seller
 from app.services.dto import ProductDraft
 from app.services.errors import NotFoundError, ValidationError
 from app.services.ids import generate_public_id, is_valid_public_id
 from app.services.parsing import validate_description, validate_product_name
 
-MAX_PHOTOS = 10
+MAX_MEDIA = 10
+MEDIA_KINDS = ("photo", "video")
 
 
 def validate_draft(draft: ProductDraft) -> ProductDraft:
-    if not 1 <= len(draft.photo_file_ids) <= MAX_PHOTOS:
+    if not 1 <= len(draft.media) <= MAX_MEDIA:
         raise ValidationError("photos_need_one")
+    if any(m.kind not in MEDIA_KINDS for m in draft.media):
+        raise ValidationError("photos_only")
     draft.name = validate_product_name(draft.name)
     if draft.price is None or draft.price <= 0:
         raise ValidationError("price_invalid")
@@ -38,7 +41,7 @@ async def create_product(session: AsyncSession, seller: Seller, draft: ProductDr
         price=draft.price,
         description=draft.description,
         is_active=True,
-        photos=[ProductPhoto(file_id=f, position=i) for i, f in enumerate(draft.photo_file_ids)],
+        media=[ProductMedia(kind=m.kind, file_id=m.file_id, position=i) for i, m in enumerate(draft.media)],
         variants=[
             ProductVariant(size=v.size, color=v.color, stock=v.stock) for v in draft.variants
         ],

@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from app.services.dto import ProductDraft, ProductView, VariantData
+from app.services.dto import MediaItem, ProductDraft, ProductView, VariantData
 from app.services.formatting import build_caption, format_price, variants_list_text, view_from_draft
 from app.services.ids import generate_public_id, is_valid_public_id
 
@@ -46,7 +46,7 @@ def test_caption_truncates_long_description_but_keeps_price():
 
 
 def test_draft_roundtrip():
-    d = ProductDraft(["f1", "f2"], "Shim", Decimal("150000.00"), [VariantData("M", "", 3)], None)
+    d = ProductDraft([MediaItem("photo", "f1"), MediaItem("video", "v1")], "Shim", Decimal("150000.00"), [VariantData("M", "", 3)], None)
     assert ProductDraft.from_dict(d.to_dict()) == d
     assert ProductDraft.from_dict(None) == ProductDraft()
     assert view_from_draft(d, "Moda").shop_name == "Moda"
