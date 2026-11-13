@@ -55,8 +55,11 @@ topgan yangi parolni yozing (lotin harflari va raqamlar, masalan `Seus2026kuchli
 
 ```sql
 CREATE USER seus WITH PASSWORD 'BU_YERGA_PAROL';
-CREATE DATABASE seus OWNER seus;
+CREATE DATABASE seus OWNER seus ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C' TEMPLATE template0;
 ```
+
+> `ENCODING 'UTF8'` muhim: Windows rus tilida bo'lsa, baza odatda WIN1251 kodlashda yaratiladi
+> va emoji (👗🛒) hamda ba'zi o'zbekcha belgilarni saqlay olmaydi.
 
 Har biridan keyin `CREATE ROLE` va `CREATE DATABASE` deb javob bersa — tayyor. `\q` yozib chiqing.
 
