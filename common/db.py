@@ -192,6 +192,12 @@ def init_schema() -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS instagram_posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT, listing_id INTEGER NOT NULL, media_id TEXT,
         posted_at TEXT)""")
+    # Kunlik "Omad g'ildiragi" o'yini - har bir urinish shu yerga yoziladi,
+    # kuniga nechta urinish ishlatilgani ham shu jadvaldan hisoblanadi
+    # (bir foydalanuvchi/bir kun bo'yicha COUNT(*)).
+    conn.execute("""CREATE TABLE IF NOT EXISTS lucky_wheel_spins (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, full_name TEXT, username TEXT,
+        spin_date TEXT NOT NULL, prize_days INTEGER NOT NULL DEFAULT 0, created_at TEXT)""")
     conn.commit()
     conn.close()
 
@@ -279,6 +285,64 @@ def is_subscribed(user_id: int):
     if expire is None:
         return False, None
     return expire > datetime.now(), row["expire_at"]
+
+
+def count_today_lucky_wheel_spins(user_id: int, spin_date: str) -> int:
+    conn = db()
+    n = conn.execute(
+        "SELECT COUNT(*) c FROM lucky_wheel_spins WHERE user_id = ? AND spin_date = ?", (user_id, spin_date)
+    ).fetchone()["c"]
+    conn.close()
+    return n
+
+
+def record_lucky_wheel_spin(user_id: int, full_name: str, username: str, spin_date: str, prize_days: int) -> None:
+    conn = db()
+    conn.execute(
+        "INSERT INTO lucky_wheel_spins (user_id, full_name, username, spin_date, prize_days, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, full_name, username, spin_date, prize_days, now_str()),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_lucky_wheel_winners(spin_date: str) -> list:
+    conn = db()
+    rows = conn.execute(
+        "SELECT user_id, full_name, username, prize_days FROM lucky_wheel_spins "
+        "WHERE spin_date = ? AND prize_days > 0 ORDER BY prize_days DESC, id ASC",
+        (spin_date,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def grant_bonus_subscription_days(user_id: int, days: int) -> str:
+    """Yutuq sifatida bepul Limit (obuna) beradi - mavjud `subscriptions`
+    jadvalidan foydalanadi, shuning uchun bot/sayt/admin panelning BARCHA
+    joylarida ("Siz faol limitga egasiz" chegirmasi, saytdagi is_web_subscribed
+    va h.k.) darhol, qo'shimcha kod yozmasdan ishlay boshlaydi.
+
+    MUHIM: agar foydalanuvchida hali tugamagan limit bo'lsa, yangi kunlar
+    UNING USTIGA qo'shiladi (hozirgi muddat yo'qolmaydi) - aks holda yutuq
+    ba'zan foydalanuvchini ZARARGA uchratib qo'yardi (masalan 20 kun qolgan
+    odam 1 kunlik yutuqni yutsa)."""
+    active, current_expire = is_subscribed(user_id)
+    base = datetime.now()
+    if active and current_expire:
+        parsed = safe_parse_dt(current_expire)
+        if parsed and parsed > base:
+            base = parsed
+    expire_at = (base + timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = db()
+    conn.execute(
+        "INSERT INTO subscriptions (user_id, months, price_charged, status, created_at, approved_at, expire_at) "
+        "VALUES (?, 0, 0, 'approved', ?, ?, ?)",
+        (user_id, now_str(), now_str(), expire_at),
+    )
+    conn.commit()
+    conn.close()
+    return expire_at
 
 
 def get_blocked_phone(phone: str):

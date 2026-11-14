@@ -190,6 +190,26 @@ SETTINGS_FIELDS = {
         "hint": "Egasi shu necha kun davomida \"hali bo'shmi?\" so'roviga javob bermasa (tasdiqlamasa), e'lon kanal/bazadan BUTUNLAY o'chiriladi (server joyini tejash uchun). Masalan: 30",
         "kind": "int",
     },
+    "lucky_wheel_enabled": {
+        "label": "\U0001F3B0 Kunlik \"Omad g'ildiragi\" o'yini",
+        "hint": "Yoqilsa, har kuni kanalga \"Omadingizni sinab ko'ring\" posti avtomatik joylanadi va obunachilar bepul Limit (1/5/30 kun) yutib olishlari mumkin bo'ladi.",
+        "kind": "bool",
+    },
+    "lucky_wheel_post_hour": {
+        "label": "\U0001F3B0 Omad g'ildiragi - postni qaysi soatda joylash (0-23)",
+        "hint": "Har kuni shu soatda (Toshkent vaqti) kanalga yangi o'yin posti avtomatik joylanadi. Masalan: 19",
+        "kind": "int",
+    },
+    "lucky_wheel_attempts_per_day": {
+        "label": "\U0001F3B0 Omad g'ildiragi - kuniga nechta urinish",
+        "hint": "Bitta foydalanuvchi bir kunda nechta marta \"omadini sinashi\" mumkinligini yozing. Masalan: 3",
+        "kind": "int",
+    },
+    "lucky_wheel_prize_weights": {
+        "label": "\U0001F3B0 Omad g'ildiragi - yutuqlar va ehtimollik",
+        "hint": "Format: \"kun:og'irlik\" juftliklari vergul bilan, masalan \"0:85,1:10,5:4,30:1\" - bu yerda \"0\" hech narsa yutmaslikni bildiradi, qolganlari bepul Limit kunlarini. Raqamlar nisbiy og'irlik (yig'indisi 100 bo'lishi shart emas) - kattaroq raqam = ko'proq ehtimollik. Ehtiyot bo'ling: yutuq og'irliklarini oshirish xarajatni oshiradi.",
+        "kind": "text_long",
+    },
     "ai_market_digest_enabled": {
         "label": "\U0001F4F0 Kunlik AI bozor tahlili posti",
         "hint": "Yoqilsa, har kuni kechqurun AI bozor tahlili loyihasini tayyorlab, tasdiqlash uchun adminlarga yuboradi (avtomatik e'lon qilinmaydi).",

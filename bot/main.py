@@ -60,6 +60,7 @@ from bot.flow_edit import *  # noqa: F401,F403
 from bot.flow_viewing import *  # noqa: F401,F403
 from bot.jobs import *  # noqa: F401,F403
 from bot.flow_valuation import *  # noqa: F401,F403
+from bot.flow_lucky_wheel import *  # noqa: F401,F403
 from bot.flow_digest import *  # noqa: F401,F403
 from bot.flow_boost import *  # noqa: F401,F403
 
@@ -376,6 +377,13 @@ def main():
         app.job_queue.run_daily(job_morning_digest, time=dtime(hour=8, minute=45, tzinfo=TASHKENT_TZ))
         app.job_queue.run_daily(job_stale_check, time=dtime(hour=10, minute=0, tzinfo=TASHKENT_TZ))
         app.job_queue.run_daily(job_auto_delete_stale_listings, time=dtime(hour=10, minute=30, tzinfo=TASHKENT_TZ))
+        # MUHIM: "lucky_wheel_post_hour" sozlamasi shu YERDA (bot ishga
+        # tushganda) BIR MARTA o'qiladi - admin uni Sozlamalardan o'zgartirsa,
+        # kuchga kirishi uchun botni qayta ishga tushirish kerak (xuddi
+        # boshqa kunlik vazifalar vaqti kabi).
+        lucky_wheel_hour = int(get_setting("lucky_wheel_post_hour", "19") or "19")
+        app.job_queue.run_daily(job_post_lucky_wheel, time=dtime(hour=lucky_wheel_hour, minute=0, tzinfo=TASHKENT_TZ))
+        app.job_queue.run_daily(job_announce_lucky_wheel_winners, time=dtime(hour=23, minute=45, tzinfo=TASHKENT_TZ))
         # job_promote_limit va job_repost_paid_listings o'zlari admin
         # sozlagan oraliqni (promote_limit_interval_hours /
         # paid_repost_interval_hours, Sozlamalar) hisobga olib ishlaydi -

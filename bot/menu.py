@@ -45,6 +45,7 @@ from bot.admin_panel import *  # noqa: F401,F403
 from bot.flow_listing import *  # noqa: F401,F403
 from bot.admin_moderators import *  # noqa: F401,F403
 from bot.flow_complaint import *  # noqa: F401,F403
+from bot.flow_lucky_wheel import *  # noqa: F401,F403
 from bot.district_alias_ui import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await show_complain_menu(update, context, listing_id)
         except (IndexError, ValueError):
             pass
+        return
+
+    if payload and payload.startswith("wheel_"):
+        await lucky_wheel_spin(update, context, payload)
         return
 
     # QUYIDAGI 3 TA HOLAT: agar tegishli suhbat (elon_conv/sub_conv/check_phone_conv)

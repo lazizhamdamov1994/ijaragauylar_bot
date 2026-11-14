@@ -35,6 +35,10 @@ from common.db import (  # noqa: E402
     update_viewing_request_status,
     count_viewing_requests_today,
     log_ai_feedback,
+    count_today_lucky_wheel_spins,
+    record_lucky_wheel_spin,
+    grant_bonus_subscription_days,
+    get_lucky_wheel_winners,
 )
 
 

@@ -86,6 +86,10 @@ DEFAULT_SETTINGS = {
     "instagram_auto_post_enabled": "0",
     "instagram_daily_post_limit": "25",
     "listing_auto_delete_days": "30",
+    "lucky_wheel_enabled": "1",
+    "lucky_wheel_post_hour": "19",
+    "lucky_wheel_attempts_per_day": "3",
+    "lucky_wheel_prize_weights": "0:85,1:10,5:4,30:1",
 }
 
 # ---- Telegram orqali kirish (shaxsiy kabinet) ----
