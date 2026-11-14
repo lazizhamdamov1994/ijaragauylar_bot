@@ -98,6 +98,26 @@ async def job_post_lucky_wheel(context: ContextTypes.DEFAULT_TYPE, force: bool =
         logger.exception("Omad g'ildiragi postini kanalga joylashda xatolik")
 
 
+async def omadgoliblar_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin buyrug'i: /omadgoliblar - kun yakunidagi (23:45) g'oliblar
+    postini rejadagi vaqtni kutmasdan, HOZIR kanalga joylaydi (sinov
+    uchun)."""
+    if not is_admin(update.effective_user.id):
+        return
+    if not CHANNEL_ID:
+        await update.message.reply_text("⚠️ CHANNEL_ID sozlanmagan.")
+        return
+    today = _today_tashkent()
+    winners = get_lucky_wheel_winners(today)
+    if not winners:
+        await update.message.reply_text(
+            "ℹ️ Bugun hali hech kim yutuq yutmagan - joylash uchun g'olib yo'q."
+        )
+        return
+    await job_announce_lucky_wheel_winners(context)
+    await update.message.reply_text(f"✅ G'oliblar posti kanalga joylandi ({len(winners)} ta g'olib).")
+
+
 async def job_announce_lucky_wheel_winners(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Kun yakunida (admin postni qaysi soatda joylashidan qat'iy nazar,
     kechqurun bir marta) shu kungi BARCHA g'oliblarni BITTA postda e'lon

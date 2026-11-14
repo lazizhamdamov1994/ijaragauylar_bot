@@ -298,6 +298,7 @@ def main():
     app.add_handler(CommandHandler("fixbuttons", fixbuttons_command))
     app.add_handler(CommandHandler("setcategory", setcategory_command))
     app.add_handler(CommandHandler("omadpost", omadpost_command))
+    app.add_handler(CommandHandler("omadgoliblar", omadgoliblar_command))
     app.add_handler(CommandHandler("postmap", postmap_command))
     app.add_handler(CommandHandler("desktop_token", desktop_token_command))
     app.add_handler(CommandHandler("desktop_token_revoke", desktop_token_revoke_command))
