@@ -85,6 +85,7 @@ DEFAULT_SETTINGS = {
     "fraud_auto_throttle_daily_reveals": "20",
     "instagram_auto_post_enabled": "0",
     "instagram_daily_post_limit": "25",
+    "listing_auto_delete_days": "30",
 }
 
 # ---- Telegram orqali kirish (shaxsiy kabinet) ----

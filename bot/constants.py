@@ -65,15 +65,9 @@ logger = logging.getLogger(__name__)
     EDIT_LISTING_VALUE,
     VIEWING_TIME_WAIT,
     DISTALIAS_ADD_WAIT,
-    AI_CONCIERGE_CHAT,
-    VALUATION_DISTRICT_WAIT,
-    VALUATION_XONA,
-    VALUATION_CONDITION,
-    VALUATION_PHOTOS,
-    VALUATION_RECEIPT_WAIT,
     BOOST_RECEIPT_WAIT,
     QUICK_SLIDESHOW_CONFIRM,
-) = range(46)
+) = range(40)
 
 BTN_ELON = "\U0001F4DD E'lon berish"
 BTN_LISTINGS = "\U0001F4CB Mening e'lonlarim"
@@ -85,7 +79,6 @@ BTN_MY_LOCATIONS = "\U0001F4CD Mening lokatsiyalarim"
 BTN_LISTINGS_MAP = "\U0001F5FA E'lonlar xaritasi"
 BTN_ADMIN_PANEL = "\U0001F5A5 Admin Panel"
 BTN_PUBLIC_MAP = "\U0001F5FA Barcha e'lonlar xaritasi"
-BTN_SUBARENDA = "\U0001F3E2 Subarenda dasturi"
 BTN_CHANNEL = "\U0001F4E2 Kanalga o'tish"
 BTN_STATS = "\U0001F4CA Statistika"
 BTN_SUBSCRIBERS = "\U0001F465 Obunachilar"
@@ -97,9 +90,9 @@ BTN_MODERATORS = "\U0001F46E Moderatorlar"
 BTN_FLAGGED = "\U0001F6A8 Shubhali faollik"
 BTN_USER_SEARCH = "\U0001F50E Qidirish"
 BTN_DISTRICT_ALIASES = "\U0001F5FA Tuman kalit so'zlari"
-BTN_AI_CONCIERGE = "\U0001F916 AI yordamchi"
-BTN_AI_CONCIERGE_END = "\U0001F51A Suhbatni tugatish"
-BTN_VALUATION = "\U0001F3F7 Uyimni baholash (AI)"
+# MUHIM: bot o'zining "Uyimni baholash (AI)" menyusi OLIB TASHLANDI, lekin bu
+# ikki tugma matni hali bot/flow_valuation.py'dagi (veb-saytdan kelgan to'lov
+# tasdiqlangandan keyingi) ichki klaviaturada ishlatiladi - shu sabab qolsin.
 BTN_VALUATION_SKIP_PHOTOS = "➡️ Rasmsiz davom etish"
 BTN_VALUATION_DONE_PHOTOS = "✅ Tayyor, baholang"
 
@@ -163,8 +156,8 @@ SETTINGS_FIELDS = {
         "kind": "bool",
     },
     "ai_concierge_daily_limit": {
-        "label": "\U0001F4AC AI yordamchi - kunlik xabar chegarasi (bitta foydalanuvchi)",
-        "hint": "Bitta foydalanuvchi/mehmon bir kunda AI yordamchiga nechta xabar yozishi mumkinligini yozing. Masalan: 30",
+        "label": "\U0001F4AC AI yordamchi (veb-sayt) - kunlik xabar chegarasi (bitta foydalanuvchi)",
+        "hint": "Veb-saytdagi AI chat vidjetida bitta mehmon bir kunda nechta xabar yozishi mumkinligini yozing. Masalan: 30",
         "kind": "int",
     },
     "ai_ops_report_enabled": {
@@ -178,8 +171,8 @@ SETTINGS_FIELDS = {
         "kind": "text_long",
     },
     "ai_valuation_extra_guidance": {
-        "label": "\U0001F9E0 AI uy baholashga qo'shimcha ko'rsatma",
-        "hint": "AI narxni noto'g'ri baholayotganini payqasangiz, shu yerga tuzatuvchi ko'rsatma yozing (masalan \"eski uylarga rasm asosida narxni oshirmang\") - darhol kuchga kiradi.",
+        "label": "\U0001F9E0 AI uy baholashga (veb-sayt) qo'shimcha ko'rsatma",
+        "hint": "Veb-saytdagi /baholash sahifasida AI narxni noto'g'ri baholayotganini payqasangiz, shu yerga tuzatuvchi ko'rsatma yozing - darhol kuchga kiradi.",
         "kind": "text_long",
     },
     "ai_receipt_extra_guidance": {
@@ -188,8 +181,13 @@ SETTINGS_FIELDS = {
         "kind": "text_long",
     },
     "valuation_price": {
-        "label": "\U0001F3F7 Pullik uy baholash narxi (so'm)",
-        "hint": "Har bir foydalanuvchining BIRINCHI baholashi doim bepul. Keyingi (2-, 3- ...) baholashlar uchun narxni shu yerda belgilang. Masalan: 10000",
+        "label": "\U0001F3F7 Pullik uy baholash narxi (veb-sayt, so'm)",
+        "hint": "Veb-saytdagi /baholash sahifasida har bir foydalanuvchining BIRINCHI baholashi doim bepul. Keyingi baholashlar uchun narxni shu yerda belgilang. Masalan: 10000",
+        "kind": "int",
+    },
+    "listing_auto_delete_days": {
+        "label": "\U0001F5D1 E'lonlarni avtomatik o'chirish muddati (kun)",
+        "hint": "Egasi shu necha kun davomida \"hali bo'shmi?\" so'roviga javob bermasa (tasdiqlamasa), e'lon kanal/bazadan BUTUNLAY o'chiriladi (server joyini tejash uchun). Masalan: 30",
         "kind": "int",
     },
     "ai_market_digest_enabled": {

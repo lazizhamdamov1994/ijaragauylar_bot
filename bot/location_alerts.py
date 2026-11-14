@@ -74,23 +74,6 @@ def get_active_listings_with_location() -> list:
     return [dict(r) for r in rows]
 
 
-async def show_subarenda_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Uy egalari uchun \"Subarenda\" (uzoq muddatli boshqaruv) dasturi haqida
-    ma'lumot va ariza sahifasiga havola."""
-    if not DASHBOARD_URL:
-        await update.message.reply_text("\u26a0\ufe0f Bu xizmat hali sozlanmagan.")
-        return
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("\U0001F4DD Ariza qoldirish", url=f"{DASHBOARD_URL}/subarenda")]])
-    await update.message.reply_text(
-        "\U0001F3E2 <b>Subarenda dasturi</b>\n\n"
-        "Uyingizni bizga uzoq muddatga bering \u2014 qolganini biz bajaramiz:\n\n"
-        "\u2705 Ijarachini biz topamiz\n"
-        "\u2705 Har oy kafolatlangan to'lov (uy bo'sh tursa ham)\n"
-        "\u2705 Rasmiy shartnoma asosida\n"
-        "\u2705 Uy holatini muntazam nazorat qilamiz\n\n"
-        "Qiziqsangiz, pastdagi tugma orqali ariza qoldiring \u2014 24 soat ichida bog'lanamiz.",
-        parse_mode=ParseMode.HTML, reply_markup=keyboard,
-    )
 
 
 async def show_admin_panel_link(update: Update, context: ContextTypes.DEFAULT_TYPE):

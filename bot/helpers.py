@@ -180,9 +180,7 @@ def channel_link_button():
 
 
 def main_menu_keyboard(user_id: int) -> ReplyKeyboardMarkup:
-    rows = [[BTN_ELON], [BTN_AI_CONCIERGE], [BTN_VALUATION], [BTN_LISTINGS, BTN_SUBSCRIPTION], [BTN_CHECK_PHONE, BTN_HELP], [BTN_LOCATION_ALERT, BTN_MY_LOCATIONS], [BTN_CHANNEL]]
-    if DASHBOARD_URL:
-        rows.append([BTN_SUBARENDA])
+    rows = [[BTN_ELON], [BTN_LISTINGS, BTN_SUBSCRIPTION], [BTN_CHECK_PHONE, BTN_HELP], [BTN_LOCATION_ALERT, BTN_MY_LOCATIONS], [BTN_CHANNEL]]
     # MUHIM: Telegram WebApp tugmalari FAQAT https:// havolalarni qabul qiladi -
     # http:// bo'lsa, butun klaviaturani yuborishda XATOLIK chiqadi va bot
     # ISHLAMAY QOLADI. Shuning uchun bu yerda ALBATTA tekshiramiz.

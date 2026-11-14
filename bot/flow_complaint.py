@@ -232,6 +232,42 @@ async def stillavail_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("\U0001F4CB Tushunarli, e'loningiz \u00abtopshirilgan\u00bb deb belgilandi.")
 
 
+async def job_auto_delete_stale_listings(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Uzoq vaqt (standart 30 kun) davomida tasdiqlanmagan/javobsiz qolgan
+    e'lonlarni kanaldan va bazadan BUTUNLAY o'chiradi - Telegram
+    kanalida/bazada keraksiz eski yozuvlar to'planib qolmasligi uchun.
+    MUHIM: bu faqat `job_stale_check`ning "hali ham bo'shmi?" so'roviga
+    UZOQ VAQT javob bermagan e'lonlarni o'chiradi - faol, muntazam
+    tasdiqlanadigan (yoki yangi joylangan) e'lonlar HECH QACHON bunga
+    uchramaydi, chunki ularning `last_confirmed_at`'i doim yangi turadi
+    (`get_stale_listings` bilan bir xil so'rovni qayta ishlatadi -
+    `job_stale_check`dagi kabi)."""
+    days = int(get_setting("listing_auto_delete_days", "30") or "30")
+    if days <= 0:
+        return
+    for listing in get_stale_listings(days):
+        try:
+            if listing.get("channel_msg_id"):
+                try:
+                    await context.bot.delete_message(CHANNEL_ID, listing["channel_msg_id"])
+                except Exception:
+                    logger.exception("Kanal postini o'chirishda xatolik (listing_id=%s)", listing["id"])
+            delete_listing_row(listing["id"])
+            if not is_staff(listing["user_id"]):
+                try:
+                    await context.bot.send_message(
+                        listing["user_id"],
+                        f"\U0001F5D1 E'loningiz (#{listing['id']} — {esc(listing.get('manzil') or '')}) "
+                        f"{days} kundan beri tasdiqlanmagani sababli avtomatik o'chirildi. Agar hali ham "
+                        f"dolzarb bo'lsa, qayta joylashingiz mumkin.",
+                        parse_mode=ParseMode.HTML,
+                    )
+                except Exception:
+                    pass
+        except Exception:
+            logger.exception("E'lonni avtomatik o'chirishda xatolik (listing_id=%s)", listing["id"])
+
+
 async def job_stale_check(context: ContextTypes.DEFAULT_TYPE):
     for listing in get_stale_listings(STALE_CHECK_DAYS):
         if is_staff(listing["user_id"]):

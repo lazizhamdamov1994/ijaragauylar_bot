@@ -462,6 +462,9 @@ def ai_generate_public_digest(market_text: str) -> str:
 
 
 # ============================= 7: UY BAHOLASH (FOYDALANUVCHILAR UCHUN) =============================
+# MUHIM: bu bo'lim web/pages.py'dagi /baholash sahifasi tomonidan hali
+# ishlatiladi - veb-sayt bosqichida shu funksiya olib tashlanganda, shu
+# bo'lim ham BIRGALIKDA o'chiriladi (hozircha faqat BOT tomoni tozalandi).
 
 MAX_VALUATION_PHOTOS = 10
 

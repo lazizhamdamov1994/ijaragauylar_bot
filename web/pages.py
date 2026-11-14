@@ -40,13 +40,12 @@ from common.db import (
     update_valuation_payment_status,
 )
 from common.telegram_media import watermark_photo_bytes_list
-from common.ai import ai_check_receipt, ai_features_enabled, ai_screen_for_scam, ai_valuate_property
+from common.ai import MAX_VALUATION_PHOTOS, ai_check_receipt, ai_features_enabled, ai_screen_for_scam, ai_valuate_property
 from common.ai_agent import find_comparable_listings
 from common.receipt_security import find_cross_user_receipt_reuse, receipt_phash, record_approved_receipt, store_receipt_phash
 
 from bot.db import get_listing, set_listing_scam_warning, update_listing_status
 from bot.admin_moderation import log_channel_post
-from bot.flow_valuation import MAX_VALUATION_PHOTOS
 
 from web.auth import _client_ip, get_current_tg_user, is_web_subscribed
 from web.listings_data import (
