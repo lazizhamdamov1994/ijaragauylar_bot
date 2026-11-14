@@ -58,13 +58,28 @@ def _today_tashkent() -> str:
     return datetime.now(TASHKENT_TZ).strftime("%Y-%m-%d")
 
 
-async def job_post_lucky_wheel(context: ContextTypes.DEFAULT_TYPE) -> None:
+async def omadpost_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin buyrug'i: /omadpost - kunlik "Omad g'ildiragi" postini
+    rejadagi vaqtni kutmasdan, HOZIR qo'lda kanalga joylaydi (sinov yoki
+    rejadagi post negadir o'tkazib yuborilgan holatlar uchun)."""
+    if not is_admin(update.effective_user.id):
+        return
+    if not CHANNEL_ID:
+        await update.message.reply_text("⚠️ CHANNEL_ID sozlanmagan.")
+        return
+    await job_post_lucky_wheel(context, force=True)
+    await update.message.reply_text("✅ Omad g'ildiragi posti kanalga joylandi.")
+
+
+async def job_post_lucky_wheel(context: ContextTypes.DEFAULT_TYPE, force: bool = False) -> None:
     """Har kuni kanalga yangi o'yin postini joylaydi (admin sozlagan
     soatda) - tugma https://t.me/BOT?start=wheel_<bugungi-sana> havolasiga
-    olib boradi."""
+    olib boradi. `force=True` - /omadpost orqali qo'lda chaqirilganda
+    "yoqilgan/o'chirilgan" sozlamasini e'tiborsiz qoldirib, baribir
+    joylaydi (sinov uchun)."""
     if not CHANNEL_ID:
         return
-    if (get_setting("lucky_wheel_enabled", "1") or "1") != "1":
+    if not force and (get_setting("lucky_wheel_enabled", "1") or "1") != "1":
         return
     today = _today_tashkent()
     attempts = int(get_setting("lucky_wheel_attempts_per_day", "3") or "3")
