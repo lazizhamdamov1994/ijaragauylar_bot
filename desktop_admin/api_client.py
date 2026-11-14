@@ -114,3 +114,10 @@ class ApiClient:
     def olx_photos(self, url: str) -> list:
         data = self._post("/api/desktop/olx-photos", data={"url": url})
         return data.get("photo_urls", [])
+
+    def olx_html_import(self, file_path: str) -> dict:
+        with open(file_path, "rb") as fh:
+            return self._post(
+                "/api/desktop/olx-html-import",
+                files={"html_file": (os.path.basename(file_path), fh, "text/html")},
+            )

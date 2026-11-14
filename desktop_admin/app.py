@@ -421,6 +421,15 @@ class NewListingPage(ctk.CTkFrame):
         styled_entry(olx_row, textvariable=self.olx_url_var, placeholder="OLX e'lon havolasi (https://www.olx.uz/...)", width=380).pack(side="left")
         secondary_button(olx_row, "\U0001F310  OLX'dan rasm olish", self.fetch_olx_photos, width=180).pack(side="left", padx=(10, 0))
 
+        olx_file_row = ctk.CTkFrame(photo_inner, fg_color="transparent")
+        olx_file_row.pack(fill="x", pady=(10, 0))
+        secondary_button(olx_file_row, "\U0001F4C4  OLX HTML fayldan import", self.import_olx_html, width=230).pack(side="left")
+        ctk.CTkLabel(
+            olx_file_row,
+            text="(OLX e'lon sahifasini brauzerdan \"Saqlash\" - Ctrl+S, \"To'liq sahifa\" qilib, shu yerdan tanlang)",
+            font=ctk.CTkFont(size=11), text_color=C["muted"],
+        ).pack(side="left", padx=(10, 0))
+
         self.photo_list_frame = ctk.CTkFrame(photo_inner, fg_color=C["bg_soft"], corner_radius=10)
         self.photo_list_frame.pack(fill="x", pady=(14, 0))
         self._photo_rows = []
@@ -532,6 +541,42 @@ class NewListingPage(ctk.CTkFrame):
 
     def _olx_error(self, e):
         self.olx_status.set(f"⚠ Rasmlarni yuklab olishda xatolik: {e}", "warning")
+
+    def import_olx_html(self):
+        path = filedialog.askopenfilename(
+            title="OLX e'lon sahifasini tanlang (.html)",
+            filetypes=[("HTML fayllar", "*.html *.htm"), ("Barcha fayllar", "*.*")],
+        )
+        if not path:
+            return
+        self.olx_status.set("Fayl o'qilmoqda...", "neutral")
+        run_in_background(lambda: self.app.client.olx_html_import(path), self._olx_html_import_done, self._olx_html_import_error)
+
+    def _olx_html_import_done(self, data: dict):
+        title = (data.get("title") or "").strip()
+        description = (data.get("description") or "").strip()
+        district = (data.get("district") or "").strip()
+        price_formatted = (data.get("price_formatted") or "").strip()
+        image_urls = data.get("image_urls") or []
+        page_url = data.get("page_url") or ""
+
+        if district:
+            self.fields["manzil"].set(district)
+        combined_desc = "\n\n".join(p for p in (title, description) if p)
+        if combined_desc:
+            self.fields["qulaylik"].set(combined_desc)
+        if price_formatted:
+            self.fields["narx"].set(price_formatted)
+
+        note = " Manzil, Xonalar soni va Telefon maydonlarini albatta TEKSHIRIB/to'ldirib chiqing (OLX sahifasida ular yo'q)."
+        if image_urls:
+            self.olx_status.set(f"✓ Ma'lumot import qilindi.{note} Rasmlar yuklanmoqda...", "success")
+            run_in_background(lambda: self._download_olx_photos(image_urls, page_url), self._olx_download_done, self._olx_error)
+        else:
+            self.olx_status.set(f"✓ Ma'lumot import qilindi, lekin rasm topilmadi.{note}", "warning")
+
+    def _olx_html_import_error(self, e):
+        self.olx_status.set(f"✕ {e}", "error")
 
     def submit(self):
         manzil = self.fields["manzil"].get().strip()

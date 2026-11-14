@@ -39,17 +39,37 @@ Token kompyuteringizda saqlanadi (`%USERPROFILE%\.ijaragauylar_admin_config.json
 Botga `/desktop_token_revoke` buyrug'ini yuboring - bu BARCHA eski
 tokenlaringizni bekor qiladi. Keyin `/desktop_token` bilan yangisini oling.
 
-## OLX'dan rasm olish haqida muhim eslatma
+## OLX'dan e'lon import qilish (TAVSIYA ETILGAN usul)
 
-"Yangi e'lon" bo'limidagi "OLX'dan rasm olish" tugmasi OLX e'lon sahifasidan
-rasmlarni avtomatik topishga harakat qiladi. Bu funksiya **tekshirilmagan**
-holda yuborilgan - chunki ishlab chiqish muhitida olx.uz saytiga tarmoq
-ulanishi yo'q edi. Agar ishlamasa yoki noto'g'ri ishlasa:
+"Yangi e'lon" bo'limida **"\U0001F4C4 OLX HTML fayldan import"** tugmasi bor -
+bu eng ishonchli usul:
 
-- Rasmlarni oddiy qo'lda ("Kompyuterdan rasm qo'shish" tugmasi orqali,
-  avval OLX sahifasidan rasmlarni kompyuteringizga saqlab) yuklashingiz
-  mumkin - bu har doim ishlaydi.
-- Menga aniq qaysi OLX havolasida ishlamaganini ayting - men xatoni tuzataman.
+1. OLX'dagi kerakli e'lonning O'ZINING sahifasini (ro'yxat emas, aniq
+   e'lonning o'zi) brauzeringizda oching.
+2. `Ctrl+S` bosing, "To'liq sahifa" / "Webpage, Complete" formatini
+   tanlab, kompyuteringizga saqlang (`.html` fayl sifatida).
+3. Desktop dasturda "OLX HTML fayldan import" tugmasini bosib, shu
+   faylni tanlang.
+4. Narx, tavsif va tuman maydonlari avtomatik to'ldiriladi, rasmlar
+   ham avtomatik yuklab olinadi.
+5. **Manzil, Xonalar soni va Telefon** maydonlarini albatta o'zingiz
+   tekshirib/to'ldirib chiqing - OLX sahifasida bular yo'q (yoki aniq
+   emas).
+
+Bu usul OLX sahifasining ichidagi tayyor, tuzilgan ma'lumotdan (JSON-LD)
+foydalanadi - shuning uchun sahifa tashqi ko'rinishi o'zgarsa ham odatda
+ishlayveradi.
+
+## OLX havolasidan rasm olish (zahira usul)
+
+Shu bo'limdagi "OLX'dan rasm olish" tugmasi - faqat havolani kiritib,
+rasmlarni topishga harakat qiladigan ESKI usul. HTML-fayl usuli
+ishlamasa (masalan tarmoq cheklovi sabab) shuni sinab ko'ring, lekin u
+umumiy taxminlarga asoslangani uchun har doim ishlashi kafolatlanmaydi.
+
+Ikkala usul ham ishlamasa: rasmlarni oddiy qo'lda ("Kompyuterdan rasm
+qo'shish" tugmasi orqali, avval OLX sahifasidan rasmlarni kompyuteringizga
+saqlab) yuklashingiz mumkin - bu har doim ishlaydi.
 
 ## Nusxa ko'chirish/joylashtirish (Ctrl+V) ishlamasa
 

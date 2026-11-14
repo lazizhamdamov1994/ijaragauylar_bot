@@ -5,12 +5,19 @@ o'rniga - Bearer token, common/desktop_auth.py'ga qarang), lekin xuddi
 shu BIR XIL "yurak" funksiyalaridan foydalanadi (get_pending_listings,
 post_listing_to_channel va h.k.) - mantiq ikki marta yozilmaydi.
 
-MUHIM (OLX rasm olish): /api/desktop/olx-photos TEKSHIRILMAGAN - bu
-muhitdan olx.uz saytiga chiqish imkoni yo'q edi, shuning uchun bu kod
-OLX kabi saytlarning UMUMIY naqshlariga (og:image meta teglar + <img>
-teglar) asoslanadi, lekin olx.uz'ning HAQIQIY joriy sahifa tuzilishi
-bilan TEKSHIRILMAGAN. Agar ishlamasa - admin baribir rasmlarni qo'lda
-(kompyuteriga saqlab) yuklay oladi, hech narsa buzilmaydi.
+OLX'DAN MA'LUMOT OLISH - IKKI YO'L:
+  1. /api/desktop/olx-html-import - admin OLX e'lon sahifasini brauzerdan
+     ".html" fayl qilib saqlab, shu faylni yuklaydi. HAQIQIY OLX sahifasi
+     namunasida TASDIQLANGAN usul: har bir OLX e'lon sahifasi ichida
+     "application/ld+json" (schema.org Product) bloki bo'ladi - u yerda
+     sarlavha, tavsif, narx, tuman va BARCHA rasm manzillari tayyor holda
+     turadi (_extract_olx_product_data). Tarmoqqa chiqish shart emas -
+     fayl allaqachon foydalanuvchi tomonidan yuklab olingan.
+  2. /api/desktop/olx-photos - eski, URL-asosli yo'l (admin shunchaki
+     havolani kiritadi, server sahifani o'zi yuklab oladi). Bu ham endi
+     birinchi navbatda xuddi shu ishonchli JSON-LD usulini sinaydi,
+     topilmasa - umumiy <img>/og:image skanlashga (oldingi, kamroq
+     ishonchli usul) qaytadi.
 """
 import json as _json
 import logging
@@ -221,7 +228,106 @@ async def api_desktop_create_listing(
     return {"ok": True, "listing_id": listing_id, "posted": posted}
 
 
-# ============================= OLX RASM OLISH (tekshirilmagan) =============================
+# ============================= OLX - TUZILGAN MA'LUMOT (JSON-LD) =============================
+# Haqiqiy OLX e'lon sahifasi namunasida tasdiqlangan: har bir sahifada
+# <script type="application/ld+json"> ichida schema.org "Product" obyekti
+# bo'ladi - sarlavha, tavsif, narx/valyuta, tuman (areaServed) va BARCHA
+# rasm manzillari (hech qanday CSS-klass/HTML tuzilishiga bog'liqmasdan)
+# shu bir joyda, standart JSON ko'rinishida turadi.
+
+_LD_JSON_RE = re.compile(
+    r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', re.IGNORECASE | re.DOTALL
+)
+
+
+def _extract_olx_product_data(html_text: str) -> dict | None:
+    """OLX sahifasidagi JSON-LD "Product" blokidan ma'lumotni o'qiydi.
+    Bir sahifada bir nechta ld+json bloki bo'lishi mumkin (masalan sayt
+    navigatsiyasi uchun) - shuning uchun HAMMASINI tekshirib, aynan
+    "offers" (narx) maydoni bor blokni tanlaymiz. Topa olmasa - None
+    (chaqiruvchi tomondan xavfsiz qaytariladi, hech narsa qulamaydi)."""
+    for raw in _LD_JSON_RE.findall(html_text or ""):
+        try:
+            data = _json.loads(raw)
+        except ValueError:
+            continue
+        if not isinstance(data, dict) or "offers" not in data:
+            continue
+        offers = data.get("offers") or {}
+        area = offers.get("areaServed") or {}
+        images = data.get("image") or []
+        if isinstance(images, str):
+            images = [images]
+        image_urls = []
+        for img in images:
+            img = (img or "").strip()
+            if not img:
+                continue
+            if ";s=" not in img:  # OLX CDN - ";s=1280x960" eng yuqori sifatli o'lchamni beradi
+                img = img + ";s=1280x960"
+            if img not in image_urls:
+                image_urls.append(img)
+        return {
+            "title": (data.get("name") or "").strip(),
+            "description": (data.get("description") or "").strip(),
+            "price": offers.get("price"),
+            "currency": (offers.get("priceCurrency") or "").strip(),
+            "district": (area.get("name") or "").strip(),
+            "page_url": (data.get("url") or "").strip(),
+            "image_urls": image_urls,
+        }
+    return None
+
+
+def _format_olx_price(price, currency: str) -> str:
+    if price is None or price == "":
+        return ""
+    try:
+        price_int = int(float(price))
+    except (TypeError, ValueError):
+        return str(price)
+    if currency == "USD":
+        return f"{price_int} $"
+    if currency in ("UZS", "SOM", ""):
+        return f"{price_int:,}".replace(",", " ") + " so'm"
+    return f"{price_int} {currency}"
+
+
+_MAX_OLX_HTML_MB = 20
+
+
+@router.post("/api/desktop/olx-html-import")
+async def api_desktop_olx_html_import(
+    html_file: UploadFile = File(...),
+    user_id: int = Depends(desktop_auth_required),
+):
+    """Admin OLX e'lon sahifasini brauzerdan ".html" fayl qilib saqlab,
+    shu faylni yuklaydi - sahifani serverning o'zi yana bir marta
+    yuklab olishi (va shu bilan bog'liq tarmoq/bloklanish xavfi) SHART
+    EMAS, chunki kerakli hamma narsa allaqachon shu faylning ICHIDA."""
+    content = await html_file.read()
+    if len(content) > _MAX_OLX_HTML_MB * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"Fayl juda katta ({_MAX_OLX_HTML_MB}MB dan oshmasligi kerak).")
+    try:
+        html_text = content.decode("utf-8", errors="replace")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Faylni o'qib bo'lmadi.")
+
+    data = _extract_olx_product_data(html_text)
+    if not data:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Bu faylda OLX e'lon ma'lumotini topib bo'lmadi. OLX'dagi e'lonning O'ZINING sahifasini "
+                "(ro'yxat/qidiruv sahifasi emas) brauzerdan \"Sahifani saqlash\" (Ctrl+S, "
+                "\"To'liq sahifa\"/\"Webpage, Complete\") orqali saqlaganingizga ishonch hosil qiling."
+            ),
+        )
+    data["price_formatted"] = _format_olx_price(data.get("price"), data.get("currency"))
+    return {"ok": True, **data}
+
+
+# ============================= OLX RASM OLISH (URL-asosli, zahira usul) =============================
 
 _IMG_TAG_RE = re.compile(r'<img[^>]+src=["\']([^"\']+)["\']', re.IGNORECASE)
 _OG_IMAGE_RE = re.compile(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']', re.IGNORECASE)
@@ -256,6 +362,12 @@ async def api_desktop_olx_photos(url: str = Form(...), user_id: int = Depends(de
     except Exception:
         logger.exception("OLX sahifasini yuklab bo'lmadi: %s", url)
         raise HTTPException(status_code=502, detail="Sahifani ochib bo'lmadi. Havolani tekshiring yoki rasmlarni qo'lda yuklang.")
+
+    # Avval ISHONCHLI (JSON-LD) usulni sinaymiz - topilsa, umumiy
+    # <img>/og:image skanlashga umuman ehtiyoj qolmaydi.
+    structured = _extract_olx_product_data(html_text)
+    if structured and structured.get("image_urls"):
+        return {"ok": True, "photo_urls": structured["image_urls"]}
 
     candidates: list[str] = []
     for pattern in (_IMG_TAG_RE, _OG_IMAGE_RE, _NEXT_DATA_RE):
