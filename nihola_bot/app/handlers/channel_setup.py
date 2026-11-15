@@ -12,7 +12,7 @@ import logging
 import re
 
 from aiogram import Bot, F, Router
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.types import (
     CallbackQuery, ChatMemberUpdated, InlineKeyboardButton, InlineKeyboardMarkup, Message,
 )
@@ -88,8 +88,9 @@ async def connect_here(message: Message, bot: Bot) -> None:
     await message.reply(("✅ Ulandi! E’lonlar endi shu guruhga joylanadi.\n\n" if ok else "") + report)
 
 
-# 3) Kanaldan forward qilingan post
-@router.message(F.chat.type == "private", F.forward_origin.type == "channel")
+# 3) Kanaldan forward qilingan post — faqat hech qanday jarayon ochiq bo'lmaganda.
+#    E'lon yaratishda kanaldan rasm forward qilinsa, u oddiy rasm sifatida qabul qilinadi.
+@router.message(StateFilter(None), F.chat.type == "private", F.forward_origin.type == "channel")
 async def forwarded_from_channel(message: Message) -> None:
     if not is_admin_id(message.from_user.id):
         return
