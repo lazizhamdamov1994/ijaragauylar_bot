@@ -27,6 +27,25 @@ Python 3.10+ talab qilinadi. Bot **aiogram 3** va **SQLite** asosida ishlaydi (S
 - ❤️ **Saqlanganlar.** Saqlangan uyning narxi tushsa yoki uy sotilsa, mijozga xabar boradi.
 - 🔎 Uy qidirish, 📞 rieltor bilan bog‘lanish, 🏡 uyini sotish uchun ariza.
 
+## 🌐 Web sayt
+
+Sayt bot bilan **bitta bazadan** (`nihola.db`) va rasmlar papkasidan (`media/`) o‘qiydi. Botda joylangan e’lon saytda o‘zi paydo bo‘ladi.
+
+- **Bosh sahifa.** Sotuv va Ijara tablari, chip-filtrlar (uy turi, tuman, xonalar, oxirgi hafta/oy), to‘liq filtr paneli (narx, maydon), qidiruv (tuman, majmua yoki `N0012` raqami), saralash, “Yangi e’lonlar” karuseli. E’lonlarni katta, panjara yoki ro‘yxat ko‘rinishida chiqarish mumkin.
+- **E’lon sahifasi.** Galereya (rasm va video, telefonda barmoq bilan surish), xususiyatlar, xarita, “Telegramda bog‘lanish” (lid botga tushadi), qo‘ng‘iroq, saqlash, ulashish, o‘xshash e’lonlar.
+- **🗺 Xarita** (`/xarita`). Har bir uy narx yorlig‘i bilan ko‘rinadi, yaqin uylar guruhlanadi.
+- **❤️ Sevimlilar.** Brauzerda saqlanadi.
+- **Qo‘shimcha:** ipoteka kalkulyatori, o‘zbek va rus tillari, tungi rejim, telefon uchun pastki menyu, `sitemap.xml` (Google uchun).
+
+Ishga tushirish (bot ishlab turgan holda, **ikkinchi** cmd oynasida):
+
+```bash
+.venv\Scripts\activate
+python web.py
+```
+
+Brauzerda **http://localhost:8000** manzilini oching.
+
 ## O‘rnatish (noutbukda sinash)
 
 1. **@BotFather** → `/newbot` buyrug‘i bilan bot yarating va tokenni oling.
@@ -68,7 +87,9 @@ Mijoz sifatida sinash uchun **👤 Mijoz menyusi** tugmasini bosing.
 
 ```
 nihola_bot/
-├── run.py                  # ishga tushirish
+├── run.py                  # botni ishga tushirish
+├── web.py                  # saytni ishga tushirish (http://localhost:8000)
+├── web/                    # sayt: app.py, data.py, i18n.py, templates/, static/
 ├── app/
 │   ├── config.py           # .env sozlamalari
 │   ├── db.py               # SQLite jadvallari va so‘rovlar

@@ -80,6 +80,16 @@ async def cmd_start(
 async def handle_payload(
     message: Message, state: FSMContext, bot: Bot, db: Database, uid: int, payload: str,
 ) -> bool:
+    # Web saytdagi tugmalar: ?start=sell / contact / filter
+    if payload == "sell":
+        await sell_start(message, state)
+        return True
+    if payload == "contact":
+        await contact(message, state, bot, db)
+        return True
+    if payload == "filter":
+        await start_filter(message, state)
+        return True
     m = re.fullmatch(r"(call|save|sim|pics|l)_(\d+)", payload)
     if not m:
         return False

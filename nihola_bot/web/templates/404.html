@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}404 — Nihola Estate{% endblock %}
+{% block content %}
+<div class="empty">
+  <div class="empty-ic"><svg class="i"><use href="#i-home"/></svg></div>
+  <h3>{{ t('not_found') }}</h3>
+  <a class="btn btn-primary" href="/">{{ t('to_home') }}</a>
+</div>
+{% endblock %}

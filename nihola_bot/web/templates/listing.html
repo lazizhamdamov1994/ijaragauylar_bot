@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}{{ listing_title(l) }} — {{ price_label(l) }} · {{ listing_place(l) }} | Nihola Estate{% endblock %}
+{% block description %}{{ listing_title(l) }}, {{ listing_place(l) }}. {{ t('price') }}: {{ price_label(l) }}.{% if l.landmark %} {{ t('landmark') }}: {{ l.landmark }}.{% endif %}{% endblock %}
+{% block og %}{% if l.cover %}<meta property="og:image" content="{{ request.base_url }}{{ l.cover[1:] }}">{% endif %}{% endblock %}
+{% block head %}
+{% if l.lat is not none %}
+<link rel="stylesheet" href="/static/vendor/leaflet.css">
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<a href="javascript:history.length>1?history.back():location.assign('/')" class="back-link"><svg class="i"><use href="#i-arrow-left"/></svg>{{ t('back') }}</a>
+
+{% if l.status == 'sold' %}<div class="notice">{{ t('sold_note') }}</div>{% endif %}
+
+<div class="detail">
+  <div class="detail-main">
+    <div class="gallery" data-gallery>
+      <div class="g-stage">
+        {% if l.media %}
+          {% for m in l.media %}
+            <div class="g-slide{{ ' on' if loop.first }}">
+              {% if m.kind == 'video' %}
+                <video src="{{ m.url }}" controls playsinline preload="metadata"></video>
+              {% else %}
+                <img src="{{ m.url }}" alt="{{ listing_title(l) }} — {{ loop.index }}" {{ 'loading=lazy' if not loop.first }}>
+              {% endif %}
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="g-slide on"><div class="ph"><svg class="i"><use href="#i-building"/></svg></div></div>
+        {% endif %}
+        {% if l.media|length > 1 %}
+          <button type="button" class="g-arrow prev" aria-label="prev"><svg class="i"><use href="#i-chevron-left"/></svg></button>
+          <button type="button" class="g-arrow next" aria-label="next"><svg class="i"><use href="#i-chevron-right"/></svg></button>
+          <span class="g-counter"><span data-g-index>1</span> / {{ l.media|length }}</span>
+        {% endif %}
+        <div class="card-badges">
+          {% if l.status == 'sold' %}<span class="pill pill-dark">{{ t('sold_rent') if l.deal == 'rent' else t('sold') }}</span>
+          {% elif l.status == 'reserved' %}<span class="pill pill-dark">{{ t('reserved') }}</span>
+          {% elif is_new(l) %}<span class="pill pill-accent">✦ {{ t('new_badge') }}</span>{% endif %}
+        </div>
+      </div>
+      {% if l.media|length > 1 %}
+      <div class="g-thumbs">
+        {% for m in l.media %}
+          <button type="button" class="g-thumb{{ ' on' if loop.first }}" data-g-go="{{ loop.index0 }}" aria-label="{{ loop.index }}">
+            {% if m.kind == 'video' %}<span class="ph"><svg class="i"><use href="#i-camera"/></svg></span>
+            {% else %}<img src="{{ m.url }}" alt="" loading="lazy">{% endif %}
+          </button>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <section class="block">
+      <h2>{{ t('features') }}</h2>
+      <dl class="specs">
+        <div><dt>{{ t('deal') }}</dt><dd>{{ t(l.deal) }}</dd></div>
+        {% if l.ptype %}<div><dt>{{ t('type') }}</dt><dd>{{ t('ptype_' + l.ptype) }}</dd></div>{% endif %}
+        {% if l.rooms %}<div><dt>{{ t('rooms') }}</dt><dd>{{ l.rooms }}</dd></div>{% endif %}
+        {% if l.area %}<div><dt>{{ t('area') }}</dt><dd>{{ area_label(l.area) }}</dd></div>{% endif %}
+        {% if l.floor %}<div><dt>{{ t('floor') }}</dt><dd>{{ l.floor }}</dd></div>{% endif %}
+        {% if l.balcony %}<div><dt>{{ t('balcony') }}</dt><dd>{{ l.balcony }}</dd></div>{% endif %}
+        {% if l.bathroom %}<div><dt>{{ t('bathroom') }}</dt><dd>{{ l.bathroom }}</dd></div>{% endif %}
+        {% if l.renovation %}<div><dt>{{ t('renovation') }}</dt><dd>{{ l.renovation }}</dd></div>{% endif %}
+        {% if l.furniture %}<div><dt>{{ t('furniture') }}</dt><dd>{{ l.furniture }}</dd></div>{% endif %}
+        <div><dt>{{ t('district') }}</dt><dd>{{ district_name(l.district) }}</dd></div>
+        {% if l.address %}<div><dt>{{ t('address') }}</dt><dd>{{ l.address }}</dd></div>{% endif %}
+        {% if l.landmark %}<div><dt>{{ t('landmark') }}</dt><dd>{{ l.landmark }}</dd></div>{% endif %}
+        <div><dt>{{ t('listing_no') }}</dt><dd>#N{{ '%04d'|format(l.id) }}</dd></div>
+        <div><dt>{{ t('published') }}</dt><dd>{{ ago(l) }}</dd></div>
+      </dl>
+      {% if l.extra %}
+        <h3>{{ t('extra') }}</h3>
+        <p class="extra">{{ l.extra }}</p>
+      {% endif %}
+    </section>
+
+    {% if l.lat is not none %}
+    <section class="block">
+      <h2>{{ t('location') }}</h2>
+      <p class="muted place"><svg class="i"><use href="#i-pin"/></svg>{{ listing_place(l) }}</p>
+      <div id="detail-map" class="detail-map" data-lat="{{ l.lat }}" data-lng="{{ l.lng }}"></div>
+      <a class="small" href="https://maps.google.com/?q={{ l.lat }},{{ l.lng }}" target="_blank" rel="noopener">Google Maps ↗</a>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside class="detail-side">
+    <div class="side-card">
+      <div class="side-price">{{ price_label(l) }}</div>
+      <h1 class="side-title">{{ listing_title(l) }}</h1>
+      <p class="muted place"><svg class="i"><use href="#i-pin"/></svg>{{ listing_place(l) }}</p>
+      <div class="facts">
+        {% if l.rooms %}<div><svg class="i"><use href="#i-bed"/></svg><b>{{ l.rooms }}</b><span>{{ t('rooms') }}</span></div>{% endif %}
+        {% if l.area %}<div><svg class="i"><use href="#i-area"/></svg><b>{{ area_label(l.area) }}</b><span>{{ t('area') }}</span></div>{% endif %}
+        {% if l.floor %}<div><svg class="i"><use href="#i-stairs"/></svg><b>{{ l.floor }}</b><span>{{ t('floor') }}</span></div>{% endif %}
+      </div>
+      {% if l.status != 'sold' %}
+        <a class="btn btn-primary btn-block btn-lg" href="{{ tg('call_' ~ l.id) }}" target="_blank" rel="noopener"><svg class="i"><use href="#i-telegram"/></svg>{{ t('contact_tg') }}</a>
+        {% if realtor_phone %}<a class="btn btn-soft btn-block btn-lg" href="tel:{{ realtor_phone|replace(' ', '') }}"><svg class="i"><use href="#i-phone"/></svg>{{ t('call') }}</a>{% endif %}
+      {% endif %}
+      <div class="side-row">
+        <button type="button" class="btn btn-soft" data-fav="{{ l.id }}" data-fav-label><svg class="i"><use href="#i-heart"/></svg><span>{{ t('save') }}</span></button>
+        <button type="button" class="btn btn-soft" data-share><svg class="i"><use href="#i-share"/></svg>{{ t('share') }}</button>
+      </div>
+      {% if l.deal == 'sale' and l.status != 'sold' %}
+        <button type="button" class="promo-card promo-inline" data-open="calc" data-calc-price="{{ l.price }}">
+          <span class="promo-ic"><svg class="i"><use href="#i-calc"/></svg></span>
+          <span><b>{{ t('mortgage') }}</b><small>{{ t('mortgage_sub') }}</small></span>
+          <svg class="i chev"><use href="#i-chevron-right"/></svg>
+        </button>
+      {% endif %}
+    </div>
+  </aside>
+</div>
+
+{% if similar %}
+<section class="block">
+  <div class="section-head"><h2>{{ t('similar') }}</h2></div>
+  <div class="cards view-grid">{% with items=similar %}{% include "_cards.html" %}{% endwith %}</div>
+</section>
+{% endif %}
+
+<div class="mobile-cta">
+  {% if l.status != 'sold' %}
+    {% if realtor_phone %}<a class="btn btn-soft" href="tel:{{ realtor_phone|replace(' ', '') }}" aria-label="{{ t('call') }}"><svg class="i"><use href="#i-phone"/></svg></a>{% endif %}
+    <a class="btn btn-primary" href="{{ tg('call_' ~ l.id) }}" target="_blank" rel="noopener"><svg class="i"><use href="#i-telegram"/></svg>{{ t('contact_tg') }}</a>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if l.lat is not none %}
+<script src="/static/vendor/leaflet.js"></script>
+<script>
+  (function () {
+    var el = document.getElementById('detail-map');
+    var ll = [parseFloat(el.dataset.lat), parseFloat(el.dataset.lng)];
+    var map = L.map(el, { scrollWheelZoom: false }).setView(ll, 15);
+    L.tileLayer(window.niholaTiles(), { attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19 }).addTo(map);
+    L.marker(ll, { icon: L.divIcon({ className: 'pin-marker', html: '<span></span>', iconSize: [28, 28], iconAnchor: [14, 28] }) }).addTo(map);
+  })();
+</script>
+{% endif %}
+{% endblock %}

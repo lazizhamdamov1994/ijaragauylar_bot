@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% block title %}{{ t('site_title') }}{% endblock %}</title>
+<meta name="description" content="{% block description %}{{ t('site_desc') }}{% endblock %}">
+<meta property="og:site_name" content="Nihola Estate">
+<meta property="og:title" content="{{ self.title() }}">
+<meta property="og:description" content="{{ self.description() }}">
+{% block og %}<meta property="og:image" content="/static/og.png">{% endblock %}
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111214" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="/static/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem('nihola_theme');
+      if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+  })();
+</script>
+<link rel="stylesheet" href="/static/style.css?v=1">
+{% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+{% include "_icons.html" %}
+
+<header class="topbar">
+  <div class="container topbar-inner">
+    <a href="/" class="logo" aria-label="Nihola Estate">
+      <img src="/static/logo.svg" alt="" width="36" height="36">
+      <span class="logo-text">NIHOLA<small>ESTATE</small></span>
+    </a>
+
+    <details class="dropdown lang-switch">
+      <summary class="icon-btn lang-btn" aria-label="{{ t('lang') }}">
+        <svg class="i"><use href="#i-globe"/></svg><b>{{ lang|upper }}</b><svg class="i i-sm hide-sm"><use href="#i-chevron-down"/></svg>
+      </summary>
+      <div class="menu">
+        <a href="/lang/uz?next={{ request.url.path }}{% if request.url.query %}%3F{{ request.url.query|urlencode }}{% endif %}" class="{{ 'on' if lang=='uz' }}">O‘zbekcha</a>
+        <a href="/lang/ru?next={{ request.url.path }}{% if request.url.query %}%3F{{ request.url.query|urlencode }}{% endif %}" class="{{ 'on' if lang=='ru' }}">Русский</a>
+      </div>
+    </details>
+
+    <button class="icon-btn" data-theme-toggle aria-label="{{ t('theme') }}">
+      <svg class="i only-light"><use href="#i-moon"/></svg>
+      <svg class="i only-dark"><use href="#i-sun"/></svg>
+    </button>
+
+    <form class="search hide-sm" action="/" method="get" role="search">
+      <svg class="i"><use href="#i-search"/></svg>
+      <input type="search" name="q" value="{{ f.q if f is defined else '' }}" placeholder="{{ t('search_ph') }}" aria-label="{{ t('search') }}">
+      {% if f is defined %}<input type="hidden" name="deal" value="{{ f.deal }}">{% endif %}
+    </form>
+
+    <nav class="top-actions">
+      <a href="/xarita" class="icon-btn hide-sm" aria-label="{{ t('map') }}"><svg class="i"><use href="#i-map"/></svg></a>
+      <a href="/sevimlilar" class="icon-btn fav-link" aria-label="{{ t('favorites') }}">
+        <svg class="i"><use href="#i-heart"/></svg><span class="badge" data-fav-count hidden>0</span>
+      </a>
+      <a href="{{ tg('sell') }}" target="_blank" rel="noopener" class="btn btn-primary hide-sm">{{ t('post_ad') }}</a>
+      {% if channel_url %}<a href="{{ channel_url }}" target="_blank" rel="noopener" class="icon-btn hide-sm" aria-label="{{ t('channel') }}"><svg class="i"><use href="#i-telegram"/></svg></a>{% endif %}
+    </nav>
+  </div>
+</header>
+
+<main class="{% block main_class %}container page{% endblock %}">
+{% block content %}{% endblock %}
+</main>
+
+{% block footer %}
+<footer class="footer">
+  <div class="container footer-inner">
+    <span>© {{ 2026 }} Nihola Estate · {{ t('rights') }}</span>
+    <nav>
+      <a href="/xarita">{{ t('map') }}</a>
+      <a href="{{ tg('contact') }}" target="_blank" rel="noopener">{{ t('consult') }}</a>
+      {% if channel_url %}<a href="{{ channel_url }}" target="_blank" rel="noopener">{{ t('channel') }}</a>{% endif %}
+      {% if realtor_phone %}<a href="tel:{{ realtor_phone|replace(' ', '') }}">{{ realtor_phone }}</a>{% endif %}
+    </nav>
+  </div>
+</footer>
+{% endblock %}
+
+<nav class="bottom-nav" aria-label="Menu">
+  <a href="/" class="{{ 'on' if path == '/' }}"><svg class="i"><use href="#i-home"/></svg><span>{{ t('home') }}</span></a>
+  <a href="/#search" data-focus-search><svg class="i"><use href="#i-search"/></svg><span>{{ t('search') }}</span></a>
+  <a href="{{ tg('sell') }}" target="_blank" rel="noopener" class="add"><span class="plus"><svg class="i"><use href="#i-plus"/></svg></span><span>{{ t('add') }}</span></a>
+  <a href="/xarita" class="{{ 'on' if path == '/xarita' }}"><svg class="i"><use href="#i-map"/></svg><span>{{ t('map') }}</span></a>
+  <a href="/sevimlilar" class="{{ 'on' if path == '/sevimlilar' }}"><svg class="i"><use href="#i-heart"/></svg><span>{{ t('favorites') }}</span></a>
+</nav>
+
+<!-- Ipoteka kalkulyatori -->
+<div class="modal" id="calc" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="calc-title">
+    <div class="modal-head">
+      <h3 id="calc-title">{{ t('calc_title') }}</h3>
+      <button class="icon-btn" data-close aria-label="{{ t('close') }}"><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <form class="calc" oninput="window.niholaCalc && niholaCalc()">
+      <label>{{ t('calc_price') }}<input type="number" name="price" min="0" step="500" value="50000"></label>
+      <label>{{ t('calc_down') }} <output name="down_o">30%</output><input type="range" name="down" min="0" max="90" step="5" value="30"></label>
+      <label>{{ t('calc_years') }} <output name="years_o">10</output><input type="range" name="years" min="1" max="25" step="1" value="10"></label>
+      <label>{{ t('calc_rate') }}<input type="number" name="rate" min="0" max="60" step="0.5" value="18"></label>
+      <div class="calc-result">
+        <div><span>{{ t('calc_monthly') }}</span><b data-out="monthly">—</b></div>
+        <div><span>{{ t('calc_loan') }}</span><b data-out="loan">—</b></div>
+        <div><span>{{ t('calc_overpay') }}</span><b data-out="over">—</b></div>
+      </div>
+      <p class="muted small">{{ t('calc_note') }}</p>
+      <a class="btn btn-primary btn-block" href="{{ tg('contact') }}" target="_blank" rel="noopener">{{ t('calc_ask') }}</a>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+<script>window.NIHOLA = { copied: {{ t('copied')|tojson }}, saved: {{ t('saved')|tojson }}, save: {{ t('save')|tojson }} };</script>
+<script src="/static/app.js?v=1"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

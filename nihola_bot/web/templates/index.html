@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="toolbar">
+  <div class="seg view-switch" role="group" aria-label="View">
+    <button type="button" data-view="big" aria-label="{{ t('view_big') }}"><svg class="i"><use href="#i-view-big"/></svg></button>
+    <button type="button" data-view="grid" aria-label="{{ t('view_grid') }}"><svg class="i"><use href="#i-view-grid"/></svg></button>
+    <button type="button" data-view="list" aria-label="{{ t('view_list') }}"><svg class="i"><use href="#i-view-list"/></svg></button>
+  </div>
+  <a class="btn btn-soft map-btn" href="/xarita?deal={{ f.deal }}"><svg class="i"><use href="#i-map"/></svg>{{ t('view_map') }}</a>
+  <button type="button" class="btn btn-soft filter-btn hide-sm" data-open="filters">
+    <svg class="i"><use href="#i-filter"/></svg>{{ t('filters') }}{% if active_filters %}<span class="count">{{ active_filters }}</span>{% endif %}
+  </button>
+</div>
+
+<div class="promo">
+  <button type="button" class="promo-card" data-open="calc">
+    <span class="promo-ic"><svg class="i"><use href="#i-calc"/></svg></span>
+    <span><b>{{ t('mortgage') }}</b><small>{{ t('mortgage_sub') }}</small></span>
+    <svg class="i chev"><use href="#i-chevron-right"/></svg>
+  </button>
+  <a class="promo-card" href="{{ tg('contact') }}" target="_blank" rel="noopener">
+    <span class="promo-ic"><svg class="i"><use href="#i-headset"/></svg></span>
+    <span><b>{{ t('consult') }}</b><small>{{ t('consult_sub') }}</small></span>
+    <svg class="i chev"><use href="#i-chevron-right"/></svg>
+  </a>
+</div>
+
+<form class="search-row show-sm" id="search" action="/" method="get" role="search">
+  <div class="search">
+    <svg class="i"><use href="#i-search"/></svg>
+    <input type="search" name="q" value="{{ f.q }}" placeholder="{{ t('search_ph') }}" aria-label="{{ t('search') }}">
+    <input type="hidden" name="deal" value="{{ f.deal }}">
+  </div>
+  <button type="button" class="icon-btn icon-btn-soft" data-open="filters" aria-label="{{ t('filters') }}">
+    <svg class="i"><use href="#i-filter"/></svg>{% if active_filters %}<span class="badge">{{ active_filters }}</span>{% endif %}
+  </button>
+</form>
+
+<nav class="tabs" aria-label="{{ t('deal') }}">
+  <a href="{{ url_with(deal='sale') }}" class="{{ 'on' if f.deal == 'sale' }}">{{ t('sale') }}</a>
+  <a href="{{ url_with(deal='rent') }}" class="{{ 'on' if f.deal == 'rent' }}">{{ t('rent') }}</a>
+</nav>
+
+<div class="chips">
+  <details class="dropdown">
+    <summary class="chip{{ ' on' if f.ptype }}"><svg class="i"><use href="#i-building"/></svg>
+      {% if f.ptype %}{% for v, n in ptypes if v == f.ptype %}{{ n }}{% endfor %}{% else %}{{ t('ptype') }}{% endif %}
+      <svg class="i i-sm"><use href="#i-chevron-down"/></svg></summary>
+    <div class="menu">
+      <a href="{{ url_with(ptype=None) }}" class="{{ 'on' if not f.ptype }}">{{ t('any') }}</a>
+      {% for v, n in ptypes %}<a href="{{ url_with(ptype=v) }}" class="{{ 'on' if f.ptype == v }}">{{ n }}</a>{% endfor %}
+    </div>
+  </details>
+  <details class="dropdown">
+    <summary class="chip{{ ' on' if f.district }}"><svg class="i"><use href="#i-pin"/></svg>
+      {{ district_name(f.district) if f.district else t('district') }}
+      <svg class="i i-sm"><use href="#i-chevron-down"/></svg></summary>
+    <div class="menu menu-scroll">
+      <a href="{{ url_with(district=None) }}" class="{{ 'on' if not f.district }}">{{ t('all_districts') }}</a>
+      {% for s, n in districts %}<a href="{{ url_with(district=s) }}" class="{{ 'on' if f.district == s }}">{{ n }}</a>{% endfor %}
+    </div>
+  </details>
+  {% for r in room_choices %}
+    {% set on = r in f.rooms %}
+    {% set new_rooms = f.rooms|reject('equalto', r)|list if on else f.rooms + [r] %}
+    <a class="chip{{ ' on' if on }}" href="{{ url_with(rooms=new_rooms) }}"><svg class="i"><use href="#i-bed"/></svg>{{ r }}{{ '+' if r == '4' }}</a>
+  {% endfor %}
+  <a class="chip{{ ' on' if f.period == '7' }}" href="{{ url_with(period=None if f.period == '7' else '7') }}"><svg class="i"><use href="#i-clock"/></svg>{{ t('last_week') }}</a>
+  <a class="chip{{ ' on' if f.period == '30' }}" href="{{ url_with(period=None if f.period == '30' else '30') }}"><svg class="i"><use href="#i-calendar"/></svg>{{ t('last_month') }}</a>
+  {% if active_filters or f.rooms or f.ptype or f.period or f.q %}
+    <a class="chip chip-clear" href="/?deal={{ f.deal }}"><svg class="i"><use href="#i-x"/></svg>{{ t('reset') }}</a>
+  {% endif %}
+</div>
+
+{% if latest %}
+<section class="rail">
+  <div class="section-head">
+    <h2>{{ t('latest') }}</h2>
+  </div>
+  <div class="carousel">
+    <button type="button" class="car-arrow prev" aria-label="prev"><svg class="i"><use href="#i-chevron-left"/></svg></button>
+    <div class="car-track">
+      {% with items=latest %}{% include "_cards.html" %}{% endwith %}
+    </div>
+    <button type="button" class="car-arrow next" aria-label="next"><svg class="i"><use href="#i-chevron-right"/></svg></button>
+  </div>
+  <div class="car-dots"></div>
+</section>
+{% endif %}
+
+<section>
+  <div class="results-head">
+    <div>
+      <h2>{{ t('found') }}: {{ '{:,}'.format(total).replace(',', ' ') }}</h2>
+      <p class="muted">{{ t('all_listings') }}: {{ '{:,}'.format(all_total).replace(',', ' ') }}</p>
+    </div>
+    <details class="dropdown dropdown-right">
+      <summary class="sort-btn"><svg class="i"><use href="#i-sort"/></svg><span class="muted">{{ t('sorting') }}:</span>
+        {{ t('sort_' + f.sort) }}</summary>
+      <div class="menu">
+        {% for s in ['new', 'cheap', 'expensive', 'area'] %}
+          <a href="{{ url_with(sort=s) }}" class="{{ 'on' if f.sort == s }}">{{ t('sort_' + s) }}</a>
+        {% endfor %}
+      </div>
+    </details>
+  </div>
+
+  {% if items %}
+    <div class="cards" id="cards">{% include "_cards.html" %}</div>
+    {% if has_more %}
+      <div class="more"><button type="button" class="btn btn-soft" data-load-more data-page="{{ f.page + 1 }}">{{ t('load_more') }}</button></div>
+    {% endif %}
+  {% else %}
+    <div class="empty">
+      <div class="empty-ic"><svg class="i"><use href="#i-search"/></svg></div>
+      <h3>{{ t('no_results') }}</h3>
+      <p class="muted">{{ t('no_results_sub') }}</p>
+      <a class="btn btn-primary" href="{{ tg('filter') }}" target="_blank" rel="noopener">{{ t('subscribe_bot') }}</a>
+    </div>
+  {% endif %}
+</section>
+
+<!-- Filtrlar paneli -->
+<div class="modal modal-side" id="filters" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <form class="modal-box" action="/" method="get">
+    <div class="modal-head">
+      <h3>{{ t('filters') }}</h3>
+      <button type="button" class="icon-btn" data-close aria-label="{{ t('close') }}"><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" name="deal" value="{{ f.deal }}">
+      {% if f.q %}<input type="hidden" name="q" value="{{ f.q }}">{% endif %}
+      {% if f.sort != 'new' %}<input type="hidden" name="sort" value="{{ f.sort }}">{% endif %}
+      {% if f.period %}<input type="hidden" name="period" value="{{ f.period }}">{% endif %}
+
+      <div class="field">
+        <span class="label">{{ t('ptype') }}</span>
+        <div class="radio-pills">
+          <label><input type="radio" name="ptype" value="" {{ 'checked' if not f.ptype }}><span>{{ t('any') }}</span></label>
+          {% for v, n in ptypes %}<label><input type="radio" name="ptype" value="{{ v }}" {{ 'checked' if f.ptype == v }}><span>{{ n }}</span></label>{% endfor %}
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">{{ t('rooms') }}</span>
+        <div class="radio-pills">
+          {% for r in room_choices %}<label><input type="checkbox" name="rooms" value="{{ r }}" {{ 'checked' if r in f.rooms }}><span>{{ r }}{{ '+' if r == '4' }}</span></label>{% endfor %}
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">{{ t('price') }}, $</span>
+        <div class="range">
+          <input type="number" name="pmin" inputmode="numeric" min="0" placeholder="{{ t('price_from') }}" value="{{ f.pmin or '' }}">
+          <input type="number" name="pmax" inputmode="numeric" min="0" placeholder="{{ t('price_to') }}" value="{{ f.pmax or '' }}">
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">{{ t('area_m2') }}</span>
+        <div class="range">
+          <input type="number" name="amin" inputmode="numeric" min="0" placeholder="{{ t('price_from') }}" value="{{ f.amin or '' }}">
+          <input type="number" name="amax" inputmode="numeric" min="0" placeholder="{{ t('price_to') }}" value="{{ f.amax or '' }}">
+        </div>
+      </div>
+      <div class="field">
+        <span class="label">{{ t('district') }}</span>
+        <select name="district">
+          <option value="">{{ t('all_districts') }}</option>
+          {% for s, n in districts %}<option value="{{ s }}" {{ 'selected' if f.district == s }}>{{ n }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <a class="btn btn-soft" href="/?deal={{ f.deal }}">{{ t('reset') }}</a>
+      <button class="btn btn-primary" type="submit">{{ t('apply') }}</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

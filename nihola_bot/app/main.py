@@ -49,6 +49,7 @@ async def main() -> None:
     )
     me = await bot.get_me()
     runtime.bot_username = me.username
+    await db.set_meta("bot_username", me.username)  # web sayt deep-link uchun o'qiydi
     log.info("Bot: @%s", me.username)
 
     ok, report = await check_channel(bot)

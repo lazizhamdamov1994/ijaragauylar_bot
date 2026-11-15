@@ -1,0 +1,33 @@
+{% for l in items %}
+<a class="card{% if l.status != 'active' %} is-{{ l.status }}{% endif %}" href="/uy/{{ l.id }}" data-id="{{ l.id }}">
+  <div class="card-img">
+    {% if l.cover %}
+      <img src="{{ l.cover }}" alt="{{ listing_title(l) }}" loading="lazy" decoding="async">
+    {% else %}
+      <div class="ph"><svg class="i"><use href="#i-building"/></svg></div>
+    {% endif %}
+    <div class="card-badges">
+      {% if l.status == 'sold' %}<span class="pill pill-dark">{{ t('sold_rent') if l.deal == 'rent' else t('sold') }}</span>
+      {% elif l.status == 'reserved' %}<span class="pill pill-dark">{{ t('reserved') }}</span>
+      {% elif is_new(l) %}<span class="pill pill-accent">✦ {{ t('new_badge') }}</span>{% endif %}
+    </div>
+    <button type="button" class="fav-btn" data-fav="{{ l.id }}" aria-label="{{ t('save') }}"><svg class="i"><use href="#i-heart"/></svg></button>
+    {% if l.photo_count > 1 %}<span class="photo-count"><svg class="i"><use href="#i-camera"/></svg>{{ l.photo_count }}</span>{% endif %}
+    <div class="card-overlay">
+      <div class="card-price">{{ price_label(l) }}</div>
+      <div class="card-title">{{ listing_title(l) }}</div>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="card-price">{{ price_label(l) }}</div>
+    <div class="card-title">{{ listing_title(l) }}</div>
+    <div class="card-place"><svg class="i"><use href="#i-pin"/></svg>{{ listing_place(l) }}</div>
+    <div class="card-meta">
+      {% if l.rooms %}<span><svg class="i"><use href="#i-bed"/></svg>{{ l.rooms }}</span>{% endif %}
+      {% if l.area %}<span><svg class="i"><use href="#i-area"/></svg>{{ area_label(l.area) }}</span>{% endif %}
+      {% if l.floor %}<span><svg class="i"><use href="#i-stairs"/></svg>{{ l.floor }}</span>{% endif %}
+      <span class="muted">{{ ago(l) }}</span>
+    </div>
+  </div>
+</a>
+{% endfor %}

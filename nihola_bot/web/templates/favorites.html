@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ t('favorites') }} — Nihola Estate{% endblock %}
+{% block content %}
+<div class="results-head"><h2>{{ t('favorites') }}</h2></div>
+<div class="cards view-grid" id="fav-cards"></div>
+<div class="empty" id="fav-empty" hidden>
+  <div class="empty-ic"><svg class="i"><use href="#i-heart"/></svg></div>
+  <h3>{{ t('no_favorites') }}</h3>
+  <p class="muted">{{ t('no_favorites_sub') }}</p>
+  <a class="btn btn-primary" href="/">{{ t('to_home') }}</a>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var ids = window.niholaFavs.list();
+    var box = document.getElementById('fav-cards');
+    if (!ids.length) { document.getElementById('fav-empty').hidden = false; return; }
+    fetch('/api/cards?ids=' + ids.join(',')).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.count) { document.getElementById('fav-empty').hidden = false; return; }
+      box.innerHTML = d.html;
+      window.niholaFavs.paint();
+    });
+  });
+</script>
+{% endblock %}

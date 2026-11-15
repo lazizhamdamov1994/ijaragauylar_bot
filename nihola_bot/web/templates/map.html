@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}{{ t('map') }} — Nihola Estate{% endblock %}
+{% block body_class %}map-page{% endblock %}
+{% block main_class %}map-main{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="/static/vendor/leaflet.css">
+<link rel="stylesheet" href="/static/vendor/MarkerCluster.css">
+{% endblock %}
+{% block content %}
+<div id="map" class="full-map"></div>
+<div class="map-bar">
+  <a href="/" class="icon-btn icon-btn-soft" aria-label="{{ t('back') }}"><svg class="i"><use href="#i-arrow-left"/></svg></a>
+  <nav class="tabs tabs-sm">
+    <a href="/xarita?deal=sale" class="{{ 'on' if deal == 'sale' }}">{{ t('sale') }}</a>
+    <a href="/xarita?deal=rent" class="{{ 'on' if deal == 'rent' }}">{{ t('rent') }}</a>
+  </nav>
+  <span class="map-count" data-map-count></span>
+</div>
+{% endblock %}
+{% block footer %}{% endblock %}
+{% block scripts %}
+<script src="/static/vendor/leaflet.js"></script>
+<script src="/static/vendor/leaflet.markercluster.js"></script>
+<script>
+  (function () {
+    var TXT = { count: {{ t('on_map_count', n='__N__')|tojson }}, open: {{ t('open')|tojson }} };
+    var map = L.map('map', { zoomControl: false }).setView([41.3111, 69.2797], 11);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.tileLayer(window.niholaTiles(), { attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 19 }).addTo(map);
+    var cluster = L.markerClusterGroup({
+      showCoverageOnHover: false, maxClusterRadius: 50,
+      iconCreateFunction: function (c) {
+        return L.divIcon({ className: 'cluster-marker', html: '<span>' + c.getChildCount() + '</span>', iconSize: [44, 44] });
+      }
+    });
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    fetch('/api/map?deal={{ deal }}').then(function (r) { return r.json(); }).then(function (rows) {
+      document.querySelector('[data-map-count]').textContent = TXT.count.replace('__N__', rows.length);
+      var bounds = [];
+      rows.forEach(function (p) {
+        var short = p.price.replace(/ /g, ' ');
+        var icon = L.divIcon({ className: 'price-marker' + (p.status !== 'active' ? ' muted' : ''), html: '<span>' + esc(short) + '</span>', iconSize: null });
+        var m = L.marker([p.lat, p.lng], { icon: icon });
+        m.bindPopup(
+          '<a class="map-card" href="' + p.url + '">' +
+            (p.cover ? '<img src="' + p.cover + '" alt="">' : '<div class="ph"></div>') +
+            '<div class="map-card-body"><b>' + esc(p.price) + '</b><span>' + esc(p.title) + '</span><small>' + esc(p.place) + '</small></div>' +
+          '</a>', { closeButton: false, maxWidth: 260, minWidth: 240 });
+        cluster.addLayer(m);
+        bounds.push([p.lat, p.lng]);
+      });
+      map.addLayer(cluster);
+      if (bounds.length) map.fitBounds(bounds, { padding: [60, 60], maxZoom: 15 });
+    });
+  })();
+</script>
+{% endblock %}
