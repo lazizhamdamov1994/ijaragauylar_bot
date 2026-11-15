@@ -161,8 +161,10 @@ def explain_channel_error(e: Exception) -> str:
     """Telegram xatosini oddiy tilda tushuntiradi."""
     t = str(e).lower()
     if "chat not found" in t:
-        return ("Kanal topilmadi. .env dagi CHANNEL_ID ni tekshiring: ochiq kanal bo‘lsa @username, "
-                "yopiq bo‘lsa -100 bilan boshlanadigan raqam. Bot kanalga qo‘shilgan bo‘lishi ham shart.")
+        return ("Bot bu chatni ko‘ra olmayapti: yoki bot kanal/guruhga qo‘shilmagan, yoki ID noto‘g‘ri. "
+                "Eslatma: oddiy guruh «supergroup»ga aylanganda (masalan botni admin qilganda) uning ID’si o‘zgaradi.")
+    if "upgraded to a supergroup" in t:
+        return "Guruh supergroup’ga aylangan va ID’si o‘zgargan. Guruhda /ulash deb yozing — bot yangi ID’ni o‘zi saqlaydi."
     if "not enough rights" in t or "administrator" in t or "not a member" in t or "forbidden" in t:
         return ("Botda kanalga yozish huquqi yo‘q. Kanal → Administratorlar → botni admin qiling va "
                 "«Xabar joylash» hamda «Xabarlarni tahrirlash» huquqlarini yoqing.")
@@ -171,19 +173,36 @@ def explain_channel_error(e: Exception) -> str:
     return "Noma’lum xato. Shu xabarni dasturchiga yuboring."
 
 
-async def check_channel(bot: Bot) -> tuple[bool, str]:
-    """Bot kanalga post joylay oladimi — tekshiradi va hisobot qaytaradi."""
+async def check_channel(bot: Bot, chat_id=None) -> tuple[bool, str]:
+    """Bot e'lon joylanadigan chatga (kanal yoki test guruh) post joylay oladimi — tekshiradi."""
+    target = chat_id if chat_id is not None else settings.channel_id
+    hint = ("\n\n💡 Eng oson yo‘l: botni kanal/guruhga <b>admin</b> qilib qo‘shing — bot sizga "
+            "ID’ni o‘zi yuboradi va «✅ Ulash» tugmasini beradi. Guruhda <code>/ulash</code> deb yozsangiz ham bo‘ladi.")
+    if not target:
+        return False, "❌ CHANNEL_ID hali sozlanmagan." + hint
     try:
-        chat = await bot.get_chat(settings.channel_id)
+        chat = await bot.get_chat(target)
     except Exception as e:
-        return False, f"❌ Kanal: {settings.channel_id}\n{explain_channel_error(e)}\n<code>{e}</code>"
+        return False, f"❌ Chat topilmadi: <code>{target}</code>\n{explain_channel_error(e)}" + hint
     me = await bot.me()
+    kind = "kanal" if chat.type == "channel" else "guruh"
+    title = chat.title or str(chat.id)
     try:
         member = await bot.get_chat_member(chat.id, me.id)
     except Exception as e:
-        return False, f"❌ Kanal «{chat.title}» topildi, lekin bot a’zo emas.\n<code>{e}</code>"
-    if member.status != "administrator":
-        return False, (f"❌ Kanal «{chat.title}» topildi, lekin bot <b>admin emas</b> (holati: {getattr(member.status, "value", member.status)}).\n"
+        return False, f"❌ «{title}» {kind}i topildi, lekin bot a’zo emas.\n<code>{e}</code>" + hint
+    status = getattr(member.status, "value", member.status)
+
+    if chat.type != "channel":
+        # Guruhda oddiy a'zo ham yoza oladi, o'z xabarini tahrirlashi mumkin
+        if status in ("left", "kicked"):
+            return False, f"❌ Bot «{title}» guruhidan chiqarilgan. Botni guruhga qayta qo‘shing." + hint
+        if status == "restricted" and not getattr(member, "can_send_messages", True):
+            return False, f"❌ Botga «{title}» guruhida yozish taqiqlangan." + hint
+        return True, f"✅ Hammasi joyida: bot «{title}» guruhiga (ID <code>{chat.id}</code>) e’lon joylay oladi."
+
+    if status != "administrator":
+        return False, (f"❌ «{title}» kanali topildi, lekin bot <b>admin emas</b> (holati: {status}).\n"
                        "Kanal → Administratorlar → Admin qo‘shish → botni tanlang.")
     missing = []
     if not getattr(member, "can_post_messages", False):
@@ -191,6 +210,6 @@ async def check_channel(bot: Bot) -> tuple[bool, str]:
     if not getattr(member, "can_edit_messages", False):
         missing.append("«Boshqalarning xabarlarini tahrirlash» (Edit messages)")
     if missing:
-        return False, (f"⚠️ Bot «{chat.title}» kanalida admin, lekin quyidagi huquq(lar) o‘chiq:\n• "
+        return False, (f"⚠️ Bot «{title}» kanalida admin, lekin quyidagi huquq(lar) o‘chiq:\n• "
                        + "\n• ".join(missing))
-    return True, f"✅ Hammasi joyida: bot «{chat.title}» kanaliga post joylay oladi."
+    return True, f"✅ Hammasi joyida: bot «{title}» kanaliga (ID <code>{chat.id}</code>) e’lon joylay oladi."

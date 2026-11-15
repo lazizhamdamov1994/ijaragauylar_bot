@@ -62,7 +62,7 @@ pip install -r requirements.txt
 cp .env.example .env        # Windows: copy .env.example .env
 ```
 
-5. `.env` faylini oching va `BOT_TOKEN`, `CHANNEL_ID`, `ADMIN_IDS`, `REALTOR_PHONE` qiymatlarini to‘ldiring.
+5. `.env` faylini oching va `BOT_TOKEN`, `ADMIN_IDS`, `REALTOR_PHONE` qiymatlarini to‘ldiring. `CHANNEL_ID` ni bilmasangiz, bo‘sh qoldiring: botni kanal yoki guruhga qo‘shsangiz, bot ID’ni o‘zi yuboradi va «✅ Ulash» tugmasi bilan saqlaydi.
 6. Botni ishga tushiring:
 
 ```bash
@@ -82,6 +82,7 @@ Mijoz sifatida sinash uchun **👤 Mijoz menyusi** tugmasini bosing.
 | `/e 12` | 12-e’lonni ochish (sotildi / narx) |
 | `/stats` | Statistika |
 | `/tekshir` | Bot kanalga post joylay olishini tekshirish |
+| `/ulash` | (guruh ichida yoziladi) e’lonlar shu guruhga joylanadi — test uchun qulay |
 
 ## Fayllar
 

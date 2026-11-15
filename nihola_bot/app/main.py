@@ -12,7 +12,7 @@ from aiogram.types import BotCommand, LinkPreviewOptions
 
 from .config import runtime, settings
 from .db import Database
-from .handlers import admin_manage, admin_new, user
+from .handlers import admin_manage, admin_new, channel_setup, user
 from .middlewares import UserTrackingMiddleware
 from .notifier import digest_loop
 from .posting import check_channel
@@ -24,8 +24,6 @@ def check_settings() -> None:
     problems = []
     if not settings.bot_token:
         problems.append("BOT_TOKEN bo'sh")
-    if not settings.channel_id:
-        problems.append("CHANNEL_ID bo'sh")
     if not settings.admin_ids:
         problems.append("ADMIN_IDS bo'sh")
     if problems:
@@ -55,6 +53,12 @@ async def main() -> None:
     ok, report = await check_channel(bot)
     clean = re.sub(r"<[^>]+>", "", report)
     (log.info if ok else log.warning)("Kanal tekshiruvi: %s", clean.replace("\n", " | "))
+    if not ok:  # adminga ham darhol aytamiz
+        for admin_id in settings.admin_ids:
+            try:
+                await bot.send_message(admin_id, "⚠️ <b>E’lonlar chati ulanmagan</b>\n\n" + report)
+            except Exception:
+                pass
 
     await bot.set_my_commands([
         BotCommand(command="start", description="Bosh menyu"),
@@ -64,7 +68,7 @@ async def main() -> None:
     dp["db"] = db
     dp.message.outer_middleware(UserTrackingMiddleware())
     dp.callback_query.outer_middleware(UserTrackingMiddleware())
-    dp.include_routers(admin_manage.router, admin_new.router, user.router)
+    dp.include_routers(channel_setup.router, admin_manage.router, admin_new.router, user.router)
 
     digest = asyncio.create_task(digest_loop(bot, db))
     try:

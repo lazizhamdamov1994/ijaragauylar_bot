@@ -108,16 +108,22 @@ def parse_value(step: Step, text: str):
     return t[:500] if t else None
 
 
-def step_kb(step: Step, editing: bool):
+def step_kb(step: Step, editing: bool, has_value: bool = False):
     b = InlineKeyboardBuilder()
     for i, (_, label) in enumerate(step.choices):
         b.button(text=label, callback_data=f"nl:c:{i}")
     b.adjust(step.cols)
+    if has_value and not editing:
+        b.row(_btn("✔️ O‘zgartirmasdan davom etish", "nl:keep"))
     if step.skippable:
         b.row(_btn("⏭ O‘tkazib yuborish", "nl:skip"))
     if editing:
         b.row(_btn("🔙 Ko‘rinishga qaytish", "nl:preview"))
-    b.row(_btn(C.BTN_CANCEL, "nl:cancel"))
+    nav = []
+    if not editing and KEYS.index(step.key) > 0:
+        nav.append(_btn("⬅️ Orqaga", "nl:back"))
+    nav.append(_btn(C.BTN_CANCEL, "nl:cancel"))
+    b.row(*nav)
     return b.as_markup()
 
 
@@ -141,9 +147,10 @@ async def ask(message: Message, state: FSMContext, key: str) -> None:
     await state.update_data(cur=key)
     head = "✏️ Tahrirlash" if editing else f"<b>{KEYS.index(key) + 1}/{len(KEYS)}</b>"
     text = f"{head} · {step.prompt}"
-    if editing and data.get(key) not in (None, ""):
+    has_value = data.get(key) not in (None, "")
+    if has_value:
         text += f"\n\nHozirgi qiymat: <b>{_display(step, data[key])}</b>"
-    await message.answer(text, reply_markup=step_kb(step, editing))
+    await message.answer(text, reply_markup=step_kb(step, editing, has_value))
 
 
 async def advance(message: Message, state: FSMContext, bot: Bot, db: Database) -> None:
@@ -156,16 +163,24 @@ async def advance(message: Message, state: FSMContext, bot: Bot, db: Database) -
     await ask_media(message, state)
 
 
-async def ask_media(message: Message, state: FSMContext) -> None:
+async def ask_media(message: Message, state: FSMContext, keep: bool = False) -> None:
+    """keep=True — orqaga qaytilganda avval yuklangan fayllar saqlanib qoladi."""
     await state.set_state(NewListing.media)
-    await state.update_data(media=[])
+    data = await state.get_data()
+    count = len(data.get("media", [])) if keep else 0
+    if not keep:
+        await state.update_data(media=[])
     b = InlineKeyboardBuilder()
     b.row(_btn("✅ Tayyor", "nl:media_done"), _btn("⏭ Rasmsiz", "nl:media_done"))
-    b.row(_btn(C.BTN_CANCEL, "nl:cancel"))
+    if count:
+        b.row(_btn("🗑 Yuklanganlarni o‘chirib, qaytadan", "nl:media_clear"))
+    nav = [] if data.get("editing") else [_btn("⬅️ Orqaga", "nl:back")]
+    b.row(*nav, _btn(C.BTN_CANCEL, "nl:cancel"))
+    extra = f"\n\n📥 Hozir yuklangan: <b>{count}</b> ta fayl." if count else ""
     await message.answer(
         "📸 Rasm va videolarni yuboring (10 tagacha, albom qilib ham bo‘ladi).\n"
         "Birinchi fayl postning asosiy rasmi bo‘ladi.\n\n"
-        "Tugatgach <b>✅ Tayyor</b> ni bosing.",
+        "Tugatgach <b>✅ Tayyor</b> ni bosing." + extra,
         reply_markup=b.as_markup(),
     )
 
@@ -173,8 +188,12 @@ async def ask_media(message: Message, state: FSMContext) -> None:
 async def ask_location(message: Message, state: FSMContext) -> None:
     await state.set_state(NewListing.location)
     b = InlineKeyboardBuilder()
+    data = await state.get_data()
     b.row(_btn("⏭ Lokatsiyasiz", "nl:loc_skip"))
-    b.row(_btn(C.BTN_CANCEL, "nl:cancel"))
+    if data.get("lat") is not None and not data.get("editing"):
+        b.row(_btn("✔️ Avvalgi lokatsiya qolsin", "nl:loc_keep"))
+    nav = [] if data.get("editing") else [_btn("⬅️ Orqaga", "nl:back")]
+    b.row(*nav, _btn(C.BTN_CANCEL, "nl:cancel"))
     await message.answer(
         "📍 Uy joylashuvini yuboring:\n"
         "• 📎 → <b>Joylashuv (Location)</b> orqali xaritadan nuqta tanlang, yoki\n"
@@ -355,6 +374,46 @@ async def on_location_text(message: Message, state: FSMContext, bot: Bot, db: Da
 
 @router.callback_query(NewListing.location, F.data == "nl:loc_skip")
 async def on_location_skip(cb: CallbackQuery, state: FSMContext, bot: Bot, db: Database) -> None:
+    await cb.answer()
+    await cb.message.edit_reply_markup(reply_markup=None)
+    await show_preview(cb.message, state, bot, db)
+
+
+# ---------------- orqaga qaytish ----------------
+@router.callback_query(F.data == "nl:back")
+async def on_back(cb: CallbackQuery, state: FSMContext) -> None:
+    current = await state.get_state()
+    data = await state.get_data()
+    await cb.answer("⬅️ Orqaga")
+    await cb.message.edit_reply_markup(reply_markup=None)
+    if current == NewListing.location.state:
+        await state.update_data(media_saved=False)
+        return await ask_media(cb.message, state, keep=True)
+    if current == NewListing.media.state:
+        return await ask(cb.message, state, KEYS[-1])
+    if current == NewListing.field.state and data.get("cur") in KEYS:
+        idx = KEYS.index(data["cur"])
+        return await ask(cb.message, state, KEYS[max(0, idx - 1)])
+    await cb.message.answer("Sessiya eskirgan. ➕ Yangi e’lon dan boshlang.")
+
+
+@router.callback_query(NewListing.field, F.data == "nl:keep")
+async def on_keep(cb: CallbackQuery, state: FSMContext, bot: Bot, db: Database) -> None:
+    await cb.answer("O‘zgarishsiz")
+    await cb.message.edit_reply_markup(reply_markup=None)
+    await advance(cb.message, state, bot, db)
+
+
+@router.callback_query(NewListing.media, F.data == "nl:media_clear")
+async def on_media_clear(cb: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(media=[], media_saved=False)
+    await cb.answer("O‘chirildi")
+    await cb.message.edit_reply_markup(reply_markup=None)
+    await ask_media(cb.message, state, keep=True)
+
+
+@router.callback_query(NewListing.location, F.data == "nl:loc_keep")
+async def on_location_keep(cb: CallbackQuery, state: FSMContext, bot: Bot, db: Database) -> None:
     await cb.answer()
     await cb.message.edit_reply_markup(reply_markup=None)
     await show_preview(cb.message, state, bot, db)
