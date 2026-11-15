@@ -15,12 +15,11 @@ Python 3.10+ talab qilinadi. Bot **aiogram 3** va **SQLite** asosida ishlaydi (S
 - 🔥 **Lidlar.** Mijoz “Bog‘lanish”ni bossa, ismi, raqami, qaysi uy va filtri adminga (yoki `LEADS_CHAT_ID` guruhiga) keladi.
 - 🏡 **Sotuvchi arizalari.** Uy egalari “Uyimni sotmoqchiman” orqali ariza qoldiradi.
 
-**Kanal posti ostidagi tugmalar** (hammasi mijozni botga olib kiradi va bazaga qo‘shadi):
+**Kanal posti** ikki qismdan iborat: avval rasm/videolar albomi, keyin e’lon matni alohida xabar bo‘lib chiqadi. Matn ostida tugmalar bor (hammasi mijozni botga olib kiradi va bazaga qo‘shadi):
 
 ```
 [📞 Bog‘lanish]      [🗺 Xaritada]
 [❤️ Saqlash]         [🔔 O‘xshash uylar]
-[📸 Barcha rasmlar (N)]
 ```
 
 **Mijoz:**
@@ -63,6 +62,7 @@ Mijoz sifatida sinash uchun **👤 Mijoz menyusi** tugmasini bosing.
 | `/new` | Yangi e’lon |
 | `/e 12` | 12-e’lonni ochish (sotildi / narx) |
 | `/stats` | Statistika |
+| `/tekshir` | Bot kanalga post joylay olishini tekshirish |
 
 ## Fayllar
 

@@ -39,7 +39,7 @@ def realtor_url() -> str | None:
 
 # ---------- kanal posti ostidagi tugmalar ----------
 def channel_kb(listing: dict, media_count: int) -> InlineKeyboardMarkup | None:
-    """Kanal postidagi tugmalar. Hammasi mijozni botga olib kiradi (deep-link)."""
+    """Kanal postidagi tugmalar (matn xabari ostida). Hammasi mijozni botga olib kiradi (deep-link)."""
     if listing.get("status") == "sold":
         return None
     lid = listing["id"]
@@ -52,9 +52,6 @@ def channel_kb(listing: dict, media_count: int) -> InlineKeyboardMarkup | None:
         InlineKeyboardButton(text="❤️ Saqlash", url=deep_link(f"save_{lid}")),
         InlineKeyboardButton(text="🔔 O‘xshash uylar", url=deep_link(f"sim_{lid}")),
     ])
-    if media_count > 1:
-        rows.append([InlineKeyboardButton(
-            text=f"📸 Barcha rasmlar ({media_count})", url=deep_link(f"pics_{lid}"))])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

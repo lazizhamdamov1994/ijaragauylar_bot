@@ -75,12 +75,13 @@ async def send_post(
     return await bot.send_message(chat_id, text, reply_markup=kb), "text"
 
 
-async def send_gallery(bot: Bot, db: Database, chat_id, media: list[dict]) -> None:
-    """Barcha rasm/videolarni albom qilib yuboradi (10 tadan)."""
+async def send_gallery(bot: Bot, db: Database, chat_id, media: list[dict]) -> list[Message]:
+    """Barcha rasm/videolarni albom qilib yuboradi (10 tadan). Yuborilgan xabarlarni qaytaradi."""
+    sent: list[Message] = []
     for start in range(0, len(media), 10):
         chunk = media[start:start + 10]
         if len(chunk) == 1:
-            await send_media_item(bot, db, chat_id, chunk[0])
+            sent.append(await send_media_item(bot, db, chat_id, chunk[0]))
             continue
         group = [
             InputMediaVideo(media=_media_input(r)) if r["kind"] == "video"
@@ -88,8 +89,27 @@ async def send_gallery(bot: Bot, db: Database, chat_id, media: list[dict]) -> No
             for r in chunk
         ]
         msgs = await bot.send_media_group(chat_id, group)
+        sent.extend(msgs)
         for row, msg in zip(chunk, msgs):
             await _capture(db, row, msg)
+    return sent
+
+
+async def send_channel_style(
+    bot: Bot, db: Database, chat_id, listing: dict, media: list[dict], with_media: bool = True,
+) -> Message:
+    """Kanal formati: avval rasm/videolar albomi, keyin e'lon matni tugmalar bilan alohida xabar."""
+    sent = await send_gallery(bot, db, chat_id, media) if (media and with_media) else []
+    try:
+        return await bot.send_message(
+            chat_id, build_post(listing), reply_markup=channel_kb(listing, len(media)))
+    except Exception:
+        for m in sent:  # matn ketmasa — kanalda "yetim" rasmlar qolmasin
+            try:
+                await bot.delete_message(chat_id, m.message_id)
+            except Exception:
+                pass
+        raise
 
 
 async def send_card(bot: Bot, db: Database, chat_id, listing: dict, prefix: str = "") -> Message:
@@ -104,11 +124,10 @@ async def publish_listing(bot: Bot, db: Database, listing_id: int) -> dict:
     listing = await db.get_listing(listing_id)
     media = await db.get_media(listing_id)
     listing["status"] = "active"
-    msg, kind = await send_post(
-        bot, db, settings.channel_id, listing, media, channel_kb(listing, len(media)))
+    msg = await send_channel_style(bot, db, settings.channel_id, listing, media)
     await db.update_listing(
         listing_id, status="active", channel_msg_id=msg.message_id,
-        channel_post_kind=kind, published_at=utcnow_iso(),
+        channel_post_kind="text", published_at=utcnow_iso(),
     )
     return await db.get_listing(listing_id)
 
@@ -136,3 +155,42 @@ async def refresh_channel_post(bot: Bot, db: Database, listing_id: int) -> bool:
             return True
         log.warning("Kanal posti #%s tahrirlanmadi: %s", listing_id, e)
         return False
+
+
+def explain_channel_error(e: Exception) -> str:
+    """Telegram xatosini oddiy tilda tushuntiradi."""
+    t = str(e).lower()
+    if "chat not found" in t:
+        return ("Kanal topilmadi. .env dagi CHANNEL_ID ni tekshiring: ochiq kanal bo‘lsa @username, "
+                "yopiq bo‘lsa -100 bilan boshlanadigan raqam. Bot kanalga qo‘shilgan bo‘lishi ham shart.")
+    if "not enough rights" in t or "administrator" in t or "not a member" in t or "forbidden" in t:
+        return ("Botda kanalga yozish huquqi yo‘q. Kanal → Administratorlar → botni admin qiling va "
+                "«Xabar joylash» hamda «Xabarlarni tahrirlash» huquqlarini yoqing.")
+    if "wrong file identifier" in t or "wrong remote file" in t:
+        return "Rasm fayli topilmadi. E’lonni rasmlarni qayta yuklab yarating."
+    return "Noma’lum xato. Shu xabarni dasturchiga yuboring."
+
+
+async def check_channel(bot: Bot) -> tuple[bool, str]:
+    """Bot kanalga post joylay oladimi — tekshiradi va hisobot qaytaradi."""
+    try:
+        chat = await bot.get_chat(settings.channel_id)
+    except Exception as e:
+        return False, f"❌ Kanal: {settings.channel_id}\n{explain_channel_error(e)}\n<code>{e}</code>"
+    me = await bot.me()
+    try:
+        member = await bot.get_chat_member(chat.id, me.id)
+    except Exception as e:
+        return False, f"❌ Kanal «{chat.title}» topildi, lekin bot a’zo emas.\n<code>{e}</code>"
+    if member.status != "administrator":
+        return False, (f"❌ Kanal «{chat.title}» topildi, lekin bot <b>admin emas</b> (holati: {getattr(member.status, "value", member.status)}).\n"
+                       "Kanal → Administratorlar → Admin qo‘shish → botni tanlang.")
+    missing = []
+    if not getattr(member, "can_post_messages", False):
+        missing.append("«Xabar joylash» (Post messages)")
+    if not getattr(member, "can_edit_messages", False):
+        missing.append("«Boshqalarning xabarlarini tahrirlash» (Edit messages)")
+    if missing:
+        return False, (f"⚠️ Bot «{chat.title}» kanalida admin, lekin quyidagi huquq(lar) o‘chiq:\n• "
+                       + "\n• ".join(missing))
+    return True, f"✅ Hammasi joyida: bot «{chat.title}» kanaliga post joylay oladi."

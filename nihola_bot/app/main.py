@@ -1,5 +1,6 @@
 """Botni ishga tushirish."""
 import asyncio
+import re
 import logging
 import sys
 
@@ -14,6 +15,7 @@ from .db import Database
 from .handlers import admin_manage, admin_new, user
 from .middlewares import UserTrackingMiddleware
 from .notifier import digest_loop
+from .posting import check_channel
 
 log = logging.getLogger("nihola")
 
@@ -49,12 +51,9 @@ async def main() -> None:
     runtime.bot_username = me.username
     log.info("Bot: @%s", me.username)
 
-    try:
-        chat = await bot.get_chat(settings.channel_id)
-        log.info("Kanal topildi: %s", chat.title)
-    except Exception as e:
-        log.warning("Kanalga ulanib bo'lmadi (%s): botni kanalga ADMIN qilib qo'shing! %s",
-                    settings.channel_id, e)
+    ok, report = await check_channel(bot)
+    clean = re.sub(r"<[^>]+>", "", report)
+    (log.info if ok else log.warning)("Kanal tekshiruvi: %s", clean.replace("\n", " | "))
 
     await bot.set_my_commands([
         BotCommand(command="start", description="Bosh menyu"),

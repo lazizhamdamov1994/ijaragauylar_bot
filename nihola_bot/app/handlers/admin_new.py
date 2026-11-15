@@ -16,11 +16,11 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from .. import constants as C
 from ..db import Database
 from ..geo import resolve_location
-from ..keyboards import admin_menu, channel_kb, channel_post_url
+from ..keyboards import admin_menu, channel_post_url
 from ..media import process_listing_media, remove_listing_dir
 from ..middlewares import IsAdmin
 from ..notifier import notify_new_listing
-from ..posting import publish_listing, send_gallery, send_post
+from ..posting import check_channel, explain_channel_error, publish_listing, send_channel_style
 from ..states import NewListing
 from ..texts import code
 
@@ -216,15 +216,15 @@ async def show_preview(message: Message, state: FSMContext, bot: Bot, db: Databa
 
     listing = await db.get_listing(listing_id)
     media = await db.get_media(listing_id)
-    if len(media) > 1 and not data.get("gallery_shown"):
-        await message.answer("📸 Barcha fayllar:")
-        await send_gallery(bot, db, admin_id, media)
-        await state.update_data(gallery_shown=True)
-        media = await db.get_media(listing_id)
-
-    await message.answer("👇 Post kanalda shunday ko‘rinadi:")
     listing["status"] = "active"
-    await send_post(bot, db, admin_id, listing, media, channel_kb(listing, len(media)))
+    show_media = bool(media) and not data.get("gallery_shown")
+    if show_media:
+        await message.answer("👇 Post kanalda shunday chiqadi — avval rasmlar, keyin matn:")
+    else:
+        await message.answer("👇 Yangilangan matn (rasmlar o‘zgarmagan):" if media
+                             else "👇 Post kanalda shunday chiqadi:")
+    await send_channel_style(bot, db, admin_id, listing, media, with_media=show_media)
+    await state.update_data(gallery_shown=True)
 
     loc = "✅ bor" if listing.get("lat") is not None else "❌ yo‘q"
     b = InlineKeyboardBuilder()
@@ -427,9 +427,11 @@ async def on_publish(cb: CallbackQuery, state: FSMContext, bot: Bot, db: Databas
     except Exception as e:
         log.exception("Kanalga joylashda xato")
         await state.set_state(NewListing.preview)
+        _, report = await check_channel(bot)
         return await cb.message.answer(
-            f"⚠️ Kanalga joylab bo‘lmadi:\n<code>{e}</code>\n\n"
-            "Bot kanalga <b>admin</b> qilib qo‘shilganini va .env dagi CHANNEL_ID to‘g‘riligini tekshiring.")
+            f"⚠️ <b>Kanalga joylab bo‘lmadi.</b>\n{explain_channel_error(e)}\n\n"
+            f"<b>Tekshiruv:</b>\n{report}\n\n<code>{e}</code>\n\n"
+            "Tuzatgach, yuqoridagi <b>✅ Kanalga joylash</b> tugmasini qayta bosing.")
     await state.clear()
     await cb.message.edit_reply_markup(reply_markup=None)
     url = channel_post_url(listing)
@@ -438,3 +440,10 @@ async def on_publish(cb: CallbackQuery, state: FSMContext, bot: Bot, db: Databas
         reply_markup=admin_menu(),
     )
     asyncio.create_task(notify_new_listing(bot, db, lid, report_to=cb.from_user.id))
+
+
+@router.message(Command("tekshir"))
+async def cmd_check(message: Message, bot: Bot) -> None:
+    """/tekshir — bot kanalga post joylay olishini tekshiradi."""
+    _, report = await check_channel(bot)
+    await message.answer(report)
