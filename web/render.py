@@ -113,7 +113,6 @@ LANG_META = {"uz": "O'zbekcha", "ru": "\u0420\u0443\u0441\u0441\u043a\u0438\u043
 
 TRANSLATIONS = {
     "nav_home": {"uz": "Bosh sahifa", "ru": "\u0413\u043b\u0430\u0432\u043d\u0430\u044f", "en": "Home"},
-    "nav_subarenda": {"uz": "Ijara hamkorligi", "ru": "\u041f\u0430\u0440\u0442\u043d\u0451\u0440\u0441\u0442\u0432\u043e \u043f\u043e \u0430\u0440\u0435\u043d\u0434\u0435", "en": "Rental partnership"},
     "nav_map_title": {"uz": "Xaritadan topish", "ru": "\u041d\u0430\u0439\u0442\u0438 \u043d\u0430 \u043a\u0430\u0440\u0442\u0435", "en": "Find on map"},
     "nav_bot_title": {"uz": "Telegram bot", "ru": "Telegram-\u0431\u043e\u0442", "en": "Telegram bot"},
     "nav_channel_title": {"uz": "Telegram kanal", "ru": "Telegram-\u043a\u0430\u043d\u0430\u043b", "en": "Telegram channel"},
@@ -129,21 +128,12 @@ TRANSLATIONS = {
     "footer_nav_title": {"uz": "Sayt", "ru": "\u0421\u0430\u0439\u0442", "en": "Site"},
     "footer_social_title": {"uz": "Ijtimoiy tarmoqlar", "ru": "\u0421\u043e\u0446\u0441\u0435\u0442\u0438", "en": "Social"},
 
-    "hero_kicker": {
-        "uz": "Toshkentdagi #1 maklersiz platforma",
-        "ru": "Номер 1 платформа без посредников в Ташкенте",
-        "en": "Tashkent's #1 commission-free platform",
-    },
     "hero_title": {
         "uz": "Maklersiz uy toping va ijaraga bering",
         "ru": "\u041d\u0430\u0439\u0434\u0438\u0442\u0435 \u0438\u043b\u0438 \u0441\u0434\u0430\u0439\u0442\u0435 \u0436\u0438\u043b\u044c\u0451 \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432",
         "en": "Find or list a home \u2014 no agents involved",
     },
-    "hero_sub": {
-        "uz": "Pulingizni qadrlang \u2014 makler uchun emas, o'zingiz uchun ishlating",
-        "ru": "\u0426\u0435\u043d\u0438\u0442\u0435 \u0441\u0432\u043e\u0438 \u0434\u0435\u043d\u044c\u0433\u0438 \u2014 \u0442\u0440\u0430\u0442\u044c\u0442\u0435 \u0438\u0445 \u043d\u0430 \u0441\u0435\u0431\u044f, \u0430 \u043d\u0435 \u043d\u0430 \u043c\u0430\u043a\u043b\u0435\u0440\u0430",
-        "en": "Value your money \u2014 spend it on yourself, not on an agent",
-    },
+    "top_carousel_title": {"uz": "TOP e'lonlar", "ru": "\u0422\u041e\u041f \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f", "en": "TOP listings"},
     "search_district_label": {"uz": "HUDUD", "ru": "\u0420\u0410\u0419\u041e\u041d", "en": "DISTRICT"},
     "search_all_districts": {"uz": "Barcha hududlar", "ru": "\u0412\u0441\u0435 \u0440\u0430\u0439\u043e\u043d\u044b", "en": "All districts"},
     "search_rooms_label": {"uz": "XONALAR SONI", "ru": "\u041a\u041e\u041b\u0418\u0427\u0415\u0421\u0422\u0412\u041e \u041a\u041e\u041c\u041d\u0410\u0422", "en": "ROOMS"},
@@ -165,38 +155,6 @@ TRANSLATIONS = {
     "sort_yangi": {"uz": "Eng yangi", "ru": "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u043d\u043e\u0432\u044b\u0435", "en": "Newest"},
     "sort_arzon": {"uz": "Eng arzon", "ru": "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0434\u0435\u0448\u0451\u0432\u044b\u0435", "en": "Cheapest"},
     "sort_qimmat": {"uz": "Eng qimmat", "ru": "\u0421\u043d\u0430\u0447\u0430\u043b\u0430 \u0434\u043e\u0440\u043e\u0433\u0438\u0435", "en": "Most expensive"},
-    "ai_chat_title": {"uz": "AI yordamchi", "ru": "\u0418\u0418-\u043f\u043e\u043c\u043e\u0449\u043d\u0438\u043a", "en": "AI assistant"},
-    "hero_ai_cta_title": {
-        "uz": "\U0001F916 AI yordamchidan so'rang",
-        "ru": "\U0001F916 \u0421\u043f\u0440\u043e\u0441\u0438\u0442\u0435 \u0418\u0418-\u043f\u043e\u043c\u043e\u0449\u043d\u0438\u043a\u0430",
-        "en": "\U0001F916 Ask the AI assistant",
-    },
-    "hero_ai_cta_sub": {
-        "uz": "\u00abChilonzorda 2 xonali, 300$ gacha\u00bb kabi yozing - bir necha soniyada mos uylarni topib beradi",
-        "ru": "\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435, \u043d\u0430\u043f\u0440\u0438\u043c\u0435\u0440 \u00ab2-\u043a\u043e\u043c\u043d\u0430\u0442\u043d\u0430\u044f \u0432 \u0427\u0438\u043b\u0430\u043d\u0437\u0430\u0440\u0435, \u0434\u043e $300\u00bb \u2014 \u0437\u0430 \u043d\u0435\u0441\u043a\u043e\u043b\u044c\u043a\u043e \u0441\u0435\u043a\u0443\u043d\u0434 \u043f\u043e\u0434\u0431\u0435\u0440\u0451\u0442 \u0432\u0430\u0440\u0438\u0430\u043d\u0442\u044b",
-        "en": "Try \u00ab2-room in Chilonzor, up to $300\u00bb - it finds matching places in seconds",
-    },
-    "ai_chat_welcome": {
-        "uz": "Salom! Menga qanday uy kerakligini yozing - masalan \u00abChilonzorda 2 xonali, 300$ gacha\u00bb.",
-        "ru": "\u041f\u0440\u0438\u0432\u0435\u0442! \u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435, \u043a\u0430\u043a\u043e\u0435 \u0436\u0438\u043b\u044c\u0451 \u0432\u0430\u043c \u043d\u0443\u0436\u043d\u043e \u2014 \u043d\u0430\u043f\u0440\u0438\u043c\u0435\u0440 \u00ab2-\u043a\u043e\u043c\u043d\u0430\u0442\u043d\u0430\u044f \u0432 \u0427\u0438\u043b\u0430\u043d\u0437\u0430\u0440\u0435, \u0434\u043e $300\u00bb.",
-        "en": "Hi! Tell me what kind of place you're looking for - e.g. \u00ab2-room in Chilonzor, up to $300\u00bb.",
-    },
-    "ai_chat_placeholder": {"uz": "Savolingizni yozing...", "ru": "\u041d\u0430\u043f\u0438\u0448\u0438\u0442\u0435 \u0432\u043e\u043f\u0440\u043e\u0441...", "en": "Type your question..."},
-    "ai_chat_disabled": {
-        "uz": "AI yordamchi hozircha ishga tushirilmagan.",
-        "ru": "\u0418\u0418-\u043f\u043e\u043c\u043e\u0449\u043d\u0438\u043a \u043f\u043e\u043a\u0430 \u043d\u0435 \u0432\u043a\u043b\u044e\u0447\u0451\u043d.",
-        "en": "AI assistant isn't enabled yet.",
-    },
-    "ai_chat_error": {
-        "uz": "Texnik nosozlik. Birozdan keyin qayta urinib ko'ring.",
-        "ru": "\u0422\u0435\u0445\u043d\u0438\u0447\u0435\u0441\u043a\u0430\u044f \u043d\u0435\u043f\u043e\u043b\u0430\u0434\u043a\u0430. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u043f\u043e\u0437\u0436\u0435.",
-        "en": "Technical issue. Please try again shortly.",
-    },
-    "ai_chat_rate_limited": {
-        "uz": "Bugungi xabar chegarasiga yetdingiz. Ertaga qayta urinib ko'ring.",
-        "ru": "\u0412\u044b \u0434\u043e\u0441\u0442\u0438\u0433\u043b\u0438 \u0434\u043d\u0435\u0432\u043d\u043e\u0433\u043e \u043b\u0438\u043c\u0438\u0442\u0430 \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0439. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0437\u0430\u0432\u0442\u0440\u0430.",
-        "en": "You've reached today's message limit. Try again tomorrow.",
-    },
     "empty_listings": {
         "uz": "Hech qanday e'lon topilmadi. Boshqa filtrni sinab ko'ring.",
         "ru": "\u041e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u044b. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0434\u0440\u0443\u0433\u043e\u0439 \u0444\u0438\u043b\u044c\u0442\u0440.",
@@ -339,32 +297,6 @@ TRANSLATIONS = {
     "ej_err_generic": {"uz": "Xatolik yuz berdi. Qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Something went wrong. Please try again."},
     "ej_err_network": {"uz": "Internet aloqasida muammo. Qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0431\u043b\u0435\u043c\u0430 \u0441 \u0438\u043d\u0442\u0435\u0440\u043d\u0435\u0442-\u0441\u043e\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435\u043c. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Network problem. Please try again."},
 
-    "sr_hero_title": {"uz": "Uyingizni bizga ishoning", "ru": "\u0414\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0441\u0432\u043e\u0451 \u0436\u0438\u043b\u044c\u0451 \u043d\u0430\u043c", "en": "Trust us with your property"},
-    "sr_hero_sub": {
-        "uz": "Ijarachi qidirish, shartnoma va oylik to'lovlar bilan bosh og'rig'ini unuting \u2014 biz hammasini boshqaramiz, sizga esa har oy kafolatlangan ijara puli keladi.",
-        "ru": "\u0417\u0430\u0431\u0443\u0434\u044c\u0442\u0435 \u043e \u043f\u043e\u0438\u0441\u043a\u0435 \u0430\u0440\u0435\u043d\u0434\u0430\u0442\u043e\u0440\u043e\u0432, \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u0430\u0445 \u0438 \u0435\u0436\u0435\u043c\u0435\u0441\u044f\u0447\u043d\u044b\u0445 \u043f\u043b\u0430\u0442\u0435\u0436\u0430\u0445 \u2014 \u043c\u044b \u0431\u0435\u0440\u0451\u043c \u0432\u0441\u0451 \u043d\u0430 \u0441\u0435\u0431\u044f, \u0430 \u0432\u044b \u043a\u0430\u0436\u0434\u044b\u0439 \u043c\u0435\u0441\u044f\u0446 \u043f\u043e\u043b\u0443\u0447\u0430\u0435\u0442\u0435 \u0433\u0430\u0440\u0430\u043d\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u0443\u044e \u0430\u0440\u0435\u043d\u0434\u043d\u0443\u044e \u043f\u043b\u0430\u0442\u0443.",
-        "en": "Forget the hassle of finding tenants, contracts, and monthly payments \u2014 we handle everything, and you receive guaranteed rent every month.",
-    },
-    "sr1_title": {"uz": "Ijarachi biz tomondan", "ru": "\u0410\u0440\u0435\u043d\u0434\u0430\u0442\u043e\u0440\u043e\u0432 \u0438\u0449\u0435\u043c \u043c\u044b", "en": "We find the tenants"},
-    "sr1_desc": {"uz": "Sizga ijarachi izlashning hojati yo'q - buni to'liq biz bajaramiz", "ru": "\u0412\u0430\u043c \u043d\u0435 \u043d\u0443\u0436\u043d\u043e \u0438\u0441\u043a\u0430\u0442\u044c \u0430\u0440\u0435\u043d\u0434\u0430\u0442\u043e\u0440\u043e\u0432 \u2014 \u043c\u044b \u0434\u0435\u043b\u0430\u0435\u043c \u044d\u0442\u043e \u043f\u043e\u043b\u043d\u043e\u0441\u0442\u044c\u044e \u0441\u0430\u043c\u0438", "en": "You don't need to search for tenants \u2014 we handle it entirely"},
-    "sr2_title": {"uz": "Kafolatlangan to'lov", "ru": "\u0413\u0430\u0440\u0430\u043d\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u0430\u044f \u043e\u043f\u043b\u0430\u0442\u0430", "en": "Guaranteed payment"},
-    "sr2_desc": {"uz": "Uy bo'sh tursa ham, kelishilgan summa har oy sizga to'lanadi", "ru": "\u0414\u0430\u0436\u0435 \u0435\u0441\u043b\u0438 \u0436\u0438\u043b\u044c\u0451 \u043f\u0443\u0441\u0442\u0443\u0435\u0442, \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u043d\u0430\u044f \u0441\u0443\u043c\u043c\u0430 \u0432\u044b\u043f\u043b\u0430\u0447\u0438\u0432\u0430\u0435\u0442\u0441\u044f \u043a\u0430\u0436\u0434\u044b\u0439 \u043c\u0435\u0441\u044f\u0446", "en": "Even if the property is vacant, the agreed amount is paid every month"},
-    "sr3_title": {"uz": "Rasmiy shartnoma", "ru": "\u041e\u0444\u0438\u0446\u0438\u0430\u043b\u044c\u043d\u044b\u0439 \u0434\u043e\u0433\u043e\u0432\u043e\u0440", "en": "Official contract"},
-    "sr3_desc": {"uz": "Barcha jarayon yozma shartnoma asosida, qonuniy tartibda amalga oshiriladi", "ru": "\u0412\u0435\u0441\u044c \u043f\u0440\u043e\u0446\u0435\u0441\u0441 \u043e\u0444\u043e\u0440\u043c\u043b\u044f\u0435\u0442\u0441\u044f \u043f\u0438\u0441\u044c\u043c\u0435\u043d\u043d\u044b\u043c \u0434\u043e\u0433\u043e\u0432\u043e\u0440\u043e\u043c \u0432 \u0437\u0430\u043a\u043e\u043d\u043d\u043e\u043c \u043f\u043e\u0440\u044f\u0434\u043a\u0435", "en": "The whole process is governed by a written, legally sound contract"},
-    "sr4_title": {"uz": "Uy holatini nazorat", "ru": "\u041a\u043e\u043d\u0442\u0440\u043e\u043b\u044c \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u044f \u0436\u0438\u043b\u044c\u044f", "en": "Property condition monitoring"},
-    "sr4_desc": {"uz": "Uyingiz muntazam tekshiriladi, muammolar tezkor hal qilinadi", "ru": "\u0412\u0430\u0448\u0435 \u0436\u0438\u043b\u044c\u0451 \u0440\u0435\u0433\u0443\u043b\u044f\u0440\u043d\u043e \u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442\u0441\u044f, \u043f\u0440\u043e\u0431\u043b\u0435\u043c\u044b \u0440\u0435\u0448\u0430\u044e\u0442\u0441\u044f \u043e\u043f\u0435\u0440\u0430\u0442\u0438\u0432\u043d\u043e", "en": "Your property is checked regularly, and issues are resolved promptly"},
-    "sr_form_title": {"uz": "Ariza qoldiring", "ru": "\u041e\u0441\u0442\u0430\u0432\u044c\u0442\u0435 \u0437\u0430\u044f\u0432\u043a\u0443", "en": "Leave a request"},
-    "sr_form_sub": {"uz": "Mutaxassisimiz 24 soat ichida siz bilan bog'lanadi", "ru": "\u041d\u0430\u0448 \u0441\u043f\u0435\u0446\u0438\u0430\u043b\u0438\u0441\u0442 \u0441\u0432\u044f\u0436\u0435\u0442\u0441\u044f \u0441 \u0432\u0430\u043c\u0438 \u0432 \u0442\u0435\u0447\u0435\u043d\u0438\u0435 24 \u0447\u0430\u0441\u043e\u0432", "en": "Our specialist will contact you within 24 hours"},
-    "sr_name_ph": {"uz": "Ismingiz", "ru": "\u0412\u0430\u0448\u0435 \u0438\u043c\u044f", "en": "Your name"},
-    "sr_phone_ph": {"uz": "Telefon raqamingiz (+998...)", "ru": "\u0412\u0430\u0448 \u043d\u043e\u043c\u0435\u0440 \u0442\u0435\u043b\u0435\u0444\u043e\u043d\u0430 (+998...)", "en": "Your phone number (+998...)"},
-    "sr_manzil_ph": {"uz": "Uy manzili (tuman, mahalla)", "ru": "\u0410\u0434\u0440\u0435\u0441 \u0436\u0438\u043b\u044c\u044f (\u0440\u0430\u0439\u043e\u043d, \u043c\u0430\u0445\u0430\u043b\u043b\u044f)", "en": "Property address (district, neighborhood)"},
-    "sr_xona_ph": {"uz": "Xonalar soni", "ru": "\u041a\u043e\u043b\u0438\u0447\u0435\u0441\u0442\u0432\u043e \u043a\u043e\u043c\u043d\u0430\u0442", "en": "Number of rooms"},
-    "sr_narx_ph": {"uz": "Kutilayotgan oylik narx ($ yoki so'm)", "ru": "\u041e\u0436\u0438\u0434\u0430\u0435\u043c\u0430\u044f \u0435\u0436\u0435\u043c\u0435\u0441\u044f\u0447\u043d\u0430\u044f \u0446\u0435\u043d\u0430 ($ \u0438\u043b\u0438 \u0441\u0443\u043c)", "en": "Expected monthly price ($ or UZS)"},
-    "sr_submit_btn": {"uz": "Arizani yuborish", "ru": "\u041e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u044f\u0432\u043a\u0443", "en": "Submit request"},
-    "sr_success_title": {"uz": "Arizangiz qabul qilindi!", "ru": "\u0412\u0430\u0448\u0430 \u0437\u0430\u044f\u0432\u043a\u0430 \u043f\u0440\u0438\u043d\u044f\u0442\u0430!", "en": "Your request was received!"},
-    "sr_success_sub": {"uz": "Tez orada siz bilan bog'lanamiz.", "ru": "\u041c\u044b \u0441\u043a\u043e\u0440\u043e \u0441\u0432\u044f\u0436\u0435\u043c\u0441\u044f \u0441 \u0432\u0430\u043c\u0438.", "en": "We'll be in touch shortly."},
-    "sr_error": {"uz": "Xatolik yuz berdi, qaytadan urinib ko'ring.", "ru": "\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430, \u043f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0441\u043d\u043e\u0432\u0430.", "en": "Something went wrong, please try again."},
-
     # ---- Telegram orqali kirish / shaxsiy kabinet ----
     "nav_kabinet_title": {"uz": "Shaxsiy kabinet", "ru": "\u041b\u0438\u0447\u043d\u044b\u0439 \u043a\u0430\u0431\u0438\u043d\u0435\u0442", "en": "My account"},
     "login_title": {"uz": "Telegram orqali kirish", "ru": "\u0412\u0445\u043e\u0434 \u0447\u0435\u0440\u0435\u0437 Telegram", "en": "Log in with Telegram"},
@@ -409,7 +341,6 @@ TRANSLATIONS = {
     },
     "kb_request_viewing": {"uz": "Ko'rish vaqti so'rovi", "ru": "\u0417\u0430\u043f\u0440\u043e\u0441 \u043d\u0430 \u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440", "en": "Viewing request"},
     "kb_request_inquiry": {"uz": "Xabar yuborildi", "ru": "\u0421\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0435 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u043e", "en": "Message sent"},
-    "kb_request_subarenda": {"uz": "Subarenda so'rovi", "ru": "\u0417\u0430\u043f\u0440\u043e\u0441 \u043d\u0430 \u0441\u0443\u0431\u0430\u0440\u0435\u043d\u0434\u0443", "en": "Sublease request"},
     "kb_request_status_new": {"uz": "Yangi", "ru": "\u041d\u043e\u0432\u044b\u0439", "en": "New"},
     "kb_request_status_seen": {"uz": "Ko'rib chiqildi", "ru": "\u0420\u0430\u0441\u0441\u043c\u043e\u0442\u0440\u0435\u043d\u043e", "en": "Reviewed"},
     "kb_request_status_pending": {"uz": "Kutilmoqda", "ru": "\u041e\u0436\u0438\u0434\u0430\u0435\u0442", "en": "Pending"},
@@ -533,16 +464,6 @@ TRANSLATIONS = {
         "ru": "{xona}. \u0426\u0435\u043d\u0430: {price}. \u0410\u0440\u0435\u043d\u0434\u0430 \u0432 \u0422\u0430\u0448\u043a\u0435\u043d\u0442\u0435 \u0431\u0435\u0437 \u043f\u043e\u0441\u0440\u0435\u0434\u043d\u0438\u043a\u043e\u0432 \u2014 \u0441\u0432\u044f\u0436\u0438\u0442\u0435\u0441\u044c \u043d\u0430\u043f\u0440\u044f\u043c\u0443\u044e \u0441 \u0441\u043e\u0431\u0441\u0442\u0432\u0435\u043d\u043d\u0438\u043a\u043e\u043c, \u0431\u0435\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438.",
         "en": "{xona}. Price: {price}. Commission-free rental in Tashkent \u2014 connect directly with the owner, no agent fees.",
     },
-    "seo_subarenda_title": {
-        "uz": "Subarenda \u2014 uyingizni ishonchli boshqaruvga bering | Ijaraga Uylar",
-        "ru": "\u0421\u0443\u0431\u0430\u0440\u0435\u043d\u0434\u0430 \u2014 \u0434\u043e\u0432\u0435\u0440\u044c\u0442\u0435 \u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u0432\u0430\u0448\u0435\u0439 \u043d\u0435\u0434\u0432\u0438\u0436\u0438\u043c\u043e\u0441\u0442\u044c\u044e | Ijaraga Uylar",
-        "en": "Sublease Program \u2014 Trusted Property Management | Ijaraga Uylar",
-    },
-    "seo_subarenda_desc": {
-        "uz": "Uyingizni bizga uzoq muddatli ijaraga bering \u2014 biz ijarachini topamiz, boshqaramiz va har oy kafolatlangan to'lovni amalga oshiramiz.",
-        "ru": "\u0421\u0434\u0430\u0439\u0442\u0435 \u043d\u0435\u0434\u0432\u0438\u0436\u0438\u043c\u043e\u0441\u0442\u044c \u043d\u0430\u043c \u0432 \u0434\u043e\u043b\u0433\u043e\u0441\u0440\u043e\u0447\u043d\u0443\u044e \u0441\u0443\u0431\u0430\u0440\u0435\u043d\u0434\u0443 \u2014 \u043c\u044b \u043d\u0430\u0439\u0434\u0451\u043c \u0430\u0440\u0435\u043d\u0434\u0430\u0442\u043e\u0440\u0430, \u0432\u043e\u0437\u044c\u043c\u0451\u043c \u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u043d\u0430 \u0441\u0435\u0431\u044f \u0438 \u043e\u0431\u0435\u0441\u043f\u0435\u0447\u0438\u043c \u0433\u0430\u0440\u0430\u043d\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u0443\u044e \u0435\u0436\u0435\u043c\u0435\u0441\u044f\u0447\u043d\u0443\u044e \u043e\u043f\u043b\u0430\u0442\u0443.",
-        "en": "Lease your property to us long-term \u2014 we find the tenant, manage everything, and pay you a guaranteed monthly amount.",
-    },
     "seo_post_title": {
         "uz": "E'lon joylash \u2014 uyingizni bepul reklama qiling | Ijaraga Uylar",
         "ru": "\u0420\u0430\u0437\u043c\u0435\u0441\u0442\u0438\u0442\u044c \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0435 \u043e\u0431 \u0430\u0440\u0435\u043d\u0434\u0435 | Ijaraga Uylar",
@@ -643,9 +564,7 @@ def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
     <a href="/" class="brand"><img src="{logo}" alt="{SITE_NAME}"> {BRAND_SHORT}</a>
     <nav class="main-nav">
       <a href="/" class="nav-link">{t(lang,'nav_home')}</a>
-      <a href="/subarenda" class="nav-link">{t(lang,'nav_subarenda')}</a>
       <a href="/xarita" class="nav-link">{icon('map', 16)} {t(lang,'nav_map_title')}</a>
-      <a href="/baholash" class="nav-link">{icon('bolt', 16)} Uyni baholash</a>
       {switcher}
       <a href="/kabinet" class="nav-link nav-account-link" title="{t(lang,'nav_kabinet_title')}">{icon('user', 17)} {t(lang,'nav_account_label')}</a>
       <a href="/elon-joylash" class="btn-cta">{icon('sparkle', 14)} {t(lang,'nav_post_cta')}</a>
@@ -656,8 +575,6 @@ def render_header(lang: str = DEFAULT_LANG, current_path: str = "/") -> str:
     <a href="/">{icon('home', 17)} {t(lang,'nav_home')}</a>
     <a href="/elon-joylash">{icon('sparkle', 17)} {t(lang,'mobile_post')}</a>
     <a href="/xarita">{icon('map', 17)} {t(lang,'nav_map_title')}</a>
-    <a href="/baholash">{icon('bolt', 17)} Uyni baholash</a>
-    <a href="/subarenda">{icon('coin', 17)} {t(lang,'nav_subarenda')}</a>
     <a href="/kabinet">{icon('user', 17)} {t(lang,'nav_account_label')}</a>
     <div class="mobile-lang-label">{LANG_META[lang]}</div>
     {switcher}
@@ -721,9 +638,7 @@ def render_footer(lang: str = DEFAULT_LANG) -> str:
       <a href="/">{t(lang,'nav_home')}</a>
       <a href="/elon-joylash">{t(lang,'mobile_post')}</a>
       <a href="/xarita">{t(lang,'nav_map_title')}</a>
-      <a href="/baholash">Uyni baholash</a>
       <a href="/bozor-yangiliklari">Bozor yangiliklari</a>
-      <a href="/subarenda">{t(lang,'nav_subarenda')}</a>
       <a href="/kabinet">{t(lang,'nav_account_label')}</a>
     </nav>
   </div>
@@ -797,224 +712,6 @@ def render_footer(lang: str = DEFAULT_LANG) -> str:
     nums.forEach(function(el) {{ io2.observe(el); }});
   }} catch (err) {{}}
 }})();
-</script>
-{render_ai_chat_widget(lang)}"""
-
-
-def render_ai_chat_widget(lang: str = DEFAULT_LANG) -> str:
-    """Butun saytda (footer orqali) ko'rinadigan suzuvchi AI chat vidjeti.
-    Orqa tarafi (/api/ai-chat, web/api.py) common/ai_agent.py'dagi bot
-    Concierge bilan BIR XIL mantiqni ishlatadi. AI o'chirilgan bo'lsa ham
-    tugma ko'rinadi - ochilganda mos xabar ko'rsatiladi (botdagi bilan bir
-    xil "graceful degrade" tamoyili)."""
-    return f"""<div id="ai-chat-widget">
-  <button id="ai-chat-toggle" type="button" aria-label="{t(lang,'ai_chat_title')}">\U0001F916<span class="ai-toggle-dot"></span></button>
-  <div id="ai-chat-panel" class="ai-chat-hidden">
-    <div class="ai-chat-header">
-      <span>\U0001F916 <span>{t(lang,'ai_chat_title')}<span class="ai-status">\U0001F7E2 Onlayn - darhol javob beradi</span></span></span>
-      <button id="ai-chat-close" type="button" aria-label="close">&times;</button>
-    </div>
-    <div id="ai-chat-messages"></div>
-    <div class="ai-chat-typing ai-chat-hidden" id="ai-chat-typing"><span></span><span></span><span></span></div>
-    <div class="ai-chat-input-row">
-      <input id="ai-chat-input" type="text" placeholder="{t(lang,'ai_chat_placeholder')}" maxlength="500" autocomplete="off">
-      <button id="ai-chat-send" type="button" aria-label="send">\U0001F680</button>
-    </div>
-  </div>
-</div>
-<style>
-#ai-chat-widget {{ position: fixed; right: 20px; bottom: 20px; z-index: 200; }}
-#ai-chat-toggle {{
-  width: 60px; height: 60px; border-radius: 50%; border: none; cursor: pointer;
-  background: linear-gradient(135deg, var(--brand) 0%, #FF6B8B 100%); color: #fff; font-size: 25px;
-  box-shadow: 0 8px 24px rgba(255,59,92,.38), 0 2px 8px rgba(16,24,38,.12);
-  display: flex; align-items: center; justify-content: center;
-  transition: transform .22s cubic-bezier(.34,1.56,.64,1), box-shadow .22s ease;
-  position: relative;
-}}
-#ai-chat-toggle::before {{
-  content: ''; position: absolute; inset: -6px; border-radius: 50%;
-  border: 2px solid rgba(255,59,92,.35); animation: aiPulseRing 2.4s infinite;
-}}
-@keyframes aiPulseRing {{ 0% {{ transform: scale(.92); opacity: .9; }} 70% {{ transform: scale(1.22); opacity: 0; }} 100% {{ opacity: 0; }} }}
-#ai-chat-toggle:hover {{ transform: scale(1.08) rotate(-4deg); box-shadow: 0 10px 30px rgba(255,59,92,.45), 0 2px 8px rgba(16,24,38,.12); }}
-#ai-chat-toggle .ai-toggle-dot {{
-  position: absolute; top: 2px; right: 2px; width: 13px; height: 13px; border-radius: 50%;
-  background: #22C55E; border: 2.5px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.2);
-}}
-#ai-chat-panel {{
-  position: absolute; right: 0; bottom: 76px; width: 366px; max-width: calc(100vw - 32px);
-  height: 500px; max-height: calc(100vh - 130px); background: #fff; border-radius: 20px;
-  box-shadow: 0 24px 60px rgba(16,24,38,.22), 0 4px 16px rgba(16,24,38,.08);
-  border: 1px solid var(--line); display: flex; flex-direction: column;
-  overflow: hidden; transform-origin: bottom right;
-  animation: aiPanelIn .28s cubic-bezier(.2,.9,.25,1.2);
-}}
-@keyframes aiPanelIn {{ from {{ opacity: 0; transform: scale(.9) translateY(14px); }} to {{ opacity: 1; transform: scale(1) translateY(0); }} }}
-.ai-chat-hidden {{ display: none !important; }}
-.ai-chat-header {{
-  background: linear-gradient(120deg, var(--brand) 0%, #E01E45 55%, #C81640 100%); color: #fff;
-  padding: 16px 18px; font-weight: 800; font-size: 15px; letter-spacing: -.1px;
-  display: flex; align-items: center; justify-content: space-between; position: relative; overflow: hidden;
-}}
-.ai-chat-header::after {{
-  content: ''; position: absolute; top: -60%; right: -10%; width: 140px; height: 220%;
-  background: rgba(255,255,255,.08); transform: rotate(20deg);
-}}
-.ai-chat-header span {{ display: flex; align-items: center; gap: 8px; position: relative; z-index: 1; }}
-.ai-chat-header span .ai-status {{ font-size: 10.5px; font-weight: 600; opacity: .85; display: block; margin-top: 1px; }}
-.ai-chat-header button {{
-  background: rgba(255,255,255,.16); border: none; color: #fff; font-size: 18px; cursor: pointer; line-height: 1;
-  width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  transition: background .15s ease; position: relative; z-index: 1;
-}}
-.ai-chat-header button:hover {{ background: rgba(255,255,255,.28); }}
-#ai-chat-messages {{ flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 11px; background: #FAFBFD; }}
-.ai-chat-bubble {{
-  max-width: 84%; padding: 10px 14px; border-radius: 15px; font-size: 13.5px; line-height: 1.5;
-  white-space: pre-wrap; word-break: break-word; box-shadow: 0 1px 2px rgba(16,24,38,.05); animation: aiBubbleIn .18s ease;
-}}
-@keyframes aiBubbleIn {{ from {{ opacity: 0; transform: translateY(4px); }} to {{ opacity: 1; transform: translateY(0); }} }}
-.ai-chat-bubble.user {{ align-self: flex-end; background: linear-gradient(135deg, var(--brand), #E01E45); color: #fff; border-bottom-right-radius: 4px; }}
-.ai-chat-bubble.ai {{ align-self: flex-start; background: #fff; border: 1px solid var(--line); color: var(--ink); border-bottom-left-radius: 4px; }}
-.ai-chat-bubble.ai a {{ color: var(--brand-dark); font-weight: 600; }}
-.ai-chat-typing {{ padding: 0 16px 10px; display: flex; gap: 4px; }}
-.ai-chat-typing span {{ width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: aiTypingBlink 1.2s infinite ease-in-out; }}
-.ai-chat-typing span:nth-child(2) {{ animation-delay: .2s; }}
-.ai-chat-typing span:nth-child(3) {{ animation-delay: .4s; }}
-@keyframes aiTypingBlink {{ 0%, 80%, 100% {{ opacity: .25; }} 40% {{ opacity: 1; }} }}
-.ai-chat-input-row {{ display: flex; gap: 9px; padding: 12px; border-top: 1px solid var(--line); background: #fff; }}
-.ai-chat-input-row input {{
-  flex: 1; border: 1.5px solid var(--line); border-radius: var(--radius-pill); padding: 10px 15px;
-  font-size: 13.5px; outline: none; font-family: inherit; transition: border-color .15s ease, box-shadow .15s ease;
-}}
-.ai-chat-input-row input:focus {{ border-color: var(--brand); box-shadow: 0 0 0 3px rgba(255,59,92,.12); }}
-.ai-chat-input-row button {{
-  width: 40px; height: 40px; border-radius: 50%; border: none;
-  background: linear-gradient(135deg, var(--brand), #E01E45); color: #fff;
-  font-size: 15px; cursor: pointer; flex-shrink: 0; box-shadow: 0 4px 12px rgba(255,59,92,.32);
-  transition: transform .15s ease;
-}}
-.ai-chat-input-row button:hover {{ transform: scale(1.07); }}
-.ai-chat-input-row button:active {{ transform: scale(.96); }}
-@media (max-width: 640px) {{
-  #ai-chat-widget {{ right: 14px; bottom: 14px; }}
-  /* MUHIM: mobilda "bottom: 72px; height: calc(100vh - 150px)" bilan
-     hisoblangan balandlik yuqori chegarani ANIQ belgilamas edi - natijada
-     panel ko'pincha sticky header (z-index:500, vidjetning 200'dan
-     YUQORI) ORTIGA kirib ketib, yuqori qismi butunlay ko'rinmay qolardi.
-     Endi panel "position: fixed" bilan ANIQ top/bottom chegaralar orasiga
-     (header tagidan - taxminan 72px - tugma ustigacha) joylashtiriladi -
-     qaysi telefon/brauzer bo'lishidan qat'iy nazar hech qachon boshqa
-     element ortiga kirib ketmaydi. 100dvh (dynamic viewport height)
-     100vh'dan farqli, mobil brauzer manzil panelini hisobga oladi. */
-  #ai-chat-panel {{
-    position: fixed; left: 12px; right: 12px; bottom: 86px;
-    top: calc(env(safe-area-inset-top, 0px) + 72px);
-    width: auto; max-width: none; height: auto; max-height: none;
-  }}
-}}
-</style>
-<script>
-(function() {{
-  var LANG = {json.dumps(lang)};
-  var STR = {{
-    disabled: {json.dumps(t(lang, 'ai_chat_disabled'))},
-    error: {json.dumps(t(lang, 'ai_chat_error'))},
-    rateLimited: {json.dumps(t(lang, 'ai_chat_rate_limited'))},
-    welcome: {json.dumps(t(lang, 'ai_chat_welcome'))}
-  }};
-  var toggle = document.getElementById('ai-chat-toggle');
-  var panel = document.getElementById('ai-chat-panel');
-  var closeBtn = document.getElementById('ai-chat-close');
-  var messagesEl = document.getElementById('ai-chat-messages');
-  var typingEl = document.getElementById('ai-chat-typing');
-  var input = document.getElementById('ai-chat-input');
-  var sendBtn = document.getElementById('ai-chat-send');
-  var opened = false;
-  var sending = false;
-
-  function sessionId() {{
-    try {{
-      var id = localStorage.getItem('ai_chat_session');
-      if (!id) {{
-        id = (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2)));
-        localStorage.setItem('ai_chat_session', id);
-      }}
-      return id;
-    }} catch (e) {{
-      return 'anon-' + Math.random().toString(36).slice(2);
-    }}
-  }}
-
-  function escapeHtml(s) {{
-    var d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
-  }}
-
-  function linkify(escaped) {{
-    return escaped.replace(/(https?:\\/\\/[^\\s<]+)/g, function(url) {{
-      var trail = '';
-      while (url.length && /[*_.,!?:;)\\]]/.test(url.slice(-1))) {{
-        trail = url.slice(-1) + trail;
-        url = url.slice(0, -1);
-      }}
-      return '<a href="' + url + '" target="_blank" rel="noopener">' + url + '</a>' + trail;
-    }});
-  }}
-
-  function addBubble(text, who) {{
-    var b = document.createElement('div');
-    b.className = 'ai-chat-bubble ' + who;
-    b.innerHTML = linkify(escapeHtml(text));
-    messagesEl.appendChild(b);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-  }}
-
-  function open() {{
-    panel.classList.remove('ai-chat-hidden');
-    if (!opened) {{
-      opened = true;
-      addBubble(STR.welcome, 'ai');
-      input.focus();
-    }}
-  }}
-
-  toggle.addEventListener('click', function() {{
-    if (panel.classList.contains('ai-chat-hidden')) open();
-    else panel.classList.add('ai-chat-hidden');
-  }});
-  closeBtn.addEventListener('click', function() {{ panel.classList.add('ai-chat-hidden'); }});
-
-  async function send() {{
-    var msg = input.value.trim();
-    if (!msg || sending) return;
-    sending = true;
-    addBubble(msg, 'user');
-    input.value = '';
-    typingEl.classList.remove('ai-chat-hidden');
-    try {{
-      var res = await fetch('/api/ai-chat', {{
-        method: 'POST', headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{ session_id: sessionId(), message: msg, lang: LANG }})
-      }});
-      var data = await res.json();
-      typingEl.classList.add('ai-chat-hidden');
-      if (data.disabled) addBubble(STR.disabled, 'ai');
-      else if (data.rate_limited) addBubble(STR.rateLimited, 'ai');
-      else if (!data.reply) addBubble(STR.error, 'ai');
-      else addBubble(data.reply, 'ai');
-    }} catch (e) {{
-      typingEl.classList.add('ai-chat-hidden');
-      addBubble(STR.error, 'ai');
-    }}
-    sending = false;
-  }}
-
-  sendBtn.addEventListener('click', send);
-  input.addEventListener('keydown', function(e) {{ if (e.key === 'Enter') send(); }});
-}})();
 </script>"""
 
 
@@ -1083,19 +780,20 @@ def render_listing_card(l: dict, favorited_ids: frozenset = frozenset()) -> str:
 </a>"""
 
 
-def render_hero_stack_card(l: dict) -> str:
-    """Hero bo'limining o'ng tomonidagi, bir-birining ustiga "sochilgan"
-    (overlapping) uchta mo'jaz e'lon-kartasidan biri uchun - to'liq
-    .listing-card'dan farqli, faqat rasm+manzil+narx (badge/sevimli tugma
-    yo'q) - diqqatni asosiy matndan chalg'itmasligi uchun atayin soddalashtirilgan."""
+def render_top_carousel_card(l: dict) -> str:
+    """Bosh sahifadagi gorizontal "TOP e'lonlar" karuseli uchun - to'liq
+    rasm + pastida qorong'u gradient ustida narx/manzil (oq matn), yuqori
+    chapda TOP nishon. To'liq .listing-card'dan farqli, faqat eng muhim
+    narx/manzilni ta'kidlash uchun atayin soddalashtirilgan."""
     photos = l.get("photos") or []
     img = photo_url(photos[0]) if photos else ""
-    img_html = f'<img src="{img}" alt="{esc_html(display_address(l))}" loading="lazy">' if img else f'<div class="lc-placeholder">{icon("home", 30)}</div>'
-    return f"""<a href="/uy/{l['id']}" class="hero-stack-card">
-  <div class="hsc-photo">{img_html}</div>
-  <div class="hsc-body">
-    <div class="hsc-addr">{esc_html(display_address(l))}</div>
-    <div class="hsc-price">{esc_html(l.get('narx') or '')}</div>
+    img_html = f'<img src="{img}" alt="{esc_html(display_address(l))}" loading="lazy">' if img else f'<div class="lc-placeholder">{icon("home", 34)}</div>'
+    return f"""<a href="/uy/{l['id']}" class="top-carousel-card">
+  <div class="tcc-photo">{img_html}</div>
+  <span class="tcc-badge">{icon('bolt', 12)} TOP</span>
+  <div class="tcc-overlay">
+    <div class="tcc-price">{esc_html(l.get('narx') or '')}</div>
+    <div class="tcc-addr">{esc_html(display_address(l))}</div>
   </div>
 </a>"""
 

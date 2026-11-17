@@ -33,7 +33,6 @@ def sitemap():
         f"<url><loc>{base}/</loc>{_sitemap_alt_links(base, '/')}<changefreq>hourly</changefreq><priority>1.0</priority></url>",
         f"<url><loc>{base}/xarita</loc>{_sitemap_alt_links(base, '/xarita')}<changefreq>daily</changefreq><priority>0.7</priority></url>",
         f"<url><loc>{base}/elon-joylash</loc>{_sitemap_alt_links(base, '/elon-joylash')}<changefreq>weekly</changefreq><priority>0.6</priority></url>",
-        f"<url><loc>{base}/subarenda</loc>{_sitemap_alt_links(base, '/subarenda')}<changefreq>weekly</changefreq><priority>0.6</priority></url>",
     ]
     for district in TASHKENT_DISTRICTS:
         district_path = f"/toshkent/{DISTRICT_TO_SLUG[district]}"

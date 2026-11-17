@@ -59,7 +59,6 @@ from bot.flow_complaint import *  # noqa: F401,F403
 from bot.flow_edit import *  # noqa: F401,F403
 from bot.flow_viewing import *  # noqa: F401,F403
 from bot.jobs import *  # noqa: F401,F403
-from bot.flow_valuation import *  # noqa: F401,F403
 from bot.flow_lucky_wheel import *  # noqa: F401,F403
 from bot.flow_digest import *  # noqa: F401,F403
 from bot.flow_boost import *  # noqa: F401,F403
@@ -319,12 +318,6 @@ def main():
         text_menu_router,
     ))
     app.add_handler(CallbackQueryHandler(admin_approve, pattern=r"^admin_approve_(listing|sub)_\d+$"))
-    # MUHIM: botning o'z "Uyimni baholash (AI)" menyu-oqimi (valuation_conv)
-    # olib tashlandi, lekin veb-saytdagi /baholash sahifasidan kelgan pullik
-    # to'lovni admin shu YERDAN (Telegram inline tugma orqali) tasdiqlaydi -
-    # veb-sayt bosqichigacha bu ikkisi ishlab turishi SHART.
-    app.add_handler(CallbackQueryHandler(valpay_approve_router, pattern=r"^valpay_approve_\d+$"))
-    app.add_handler(CallbackQueryHandler(valpay_reject_router, pattern=r"^valpay_reject_\d+$"))
     app.add_handler(CallbackQueryHandler(boostpay_approve_router, pattern=r"^boostpay_approve_\d+$"))
     app.add_handler(CallbackQueryHandler(boostpay_reject_router, pattern=r"^boostpay_reject_\d+$"))
     app.add_handler(CallbackQueryHandler(digest_approve_router, pattern=r"^digest_approve_\d+$"))

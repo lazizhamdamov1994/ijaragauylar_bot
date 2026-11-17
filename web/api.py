@@ -34,8 +34,7 @@ from common.db import (
 )
 
 from common.districts import add_district_alias, list_district_aliases, remove_district_alias
-from common.ai import ai_analyze_market_trends, ai_features_enabled, ai_usage_summary
-from common.ai_agent import concierge_rate_limited, concierge_turn
+from common.ai import ai_analyze_market_trends, ai_usage_summary
 
 from web.auth import check_auth, get_current_tg_user
 from web.listings_data import get_active_listings, normalize_phone_web, post_listing_to_channel
@@ -96,43 +95,6 @@ from bot.helpers import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# ============================= AI CHAT (OMMAVIY, parolsiz - saytdagi suzuvchi vidjet) =============================
-# Suhbat tarixi SERVER tomonida (jarayon xotirasida) saqlanadi - brauzer
-# faqat tasodifiy session_id (localStorage) yuboradi. Sabab: Claude SDK
-# javob obyektlari (tool_use bloklari) to'g'ridan-to'g'ri JSON-seriyalash
-# mumkin emas - shuning uchun ular hech qachon brauzerga yuborilmaydi,
-# faqat matnli javob (reply) yuboriladi. common/ai_agent.py - bot
-# Concierge bilan BIR XIL mantiq.
-_web_chat_sessions: dict = {}
-_WEB_CHAT_MAX_SESSIONS = 500
-
-
-@router.post("/api/ai-chat")
-async def api_ai_chat(request: Request):
-    data = await request.json()
-    session_id = str(data.get("session_id") or "").strip()[:80]
-    message = str(data.get("message") or "").strip()
-    if not session_id or not message:
-        raise HTTPException(status_code=400, detail="invalid_request")
-    if len(message) > 500:
-        raise HTTPException(status_code=400, detail="message_too_long")
-
-    if not ai_features_enabled():
-        return {"reply": None, "disabled": True}
-    if concierge_rate_limited(session_id, "web"):
-        return {"reply": None, "rate_limited": True}
-
-    history = _web_chat_sessions.get(session_id, [])
-    reply, new_history = await concierge_turn(session_id, "web", history, message)
-    if reply is None:
-        return {"reply": None}
-
-    _web_chat_sessions[session_id] = new_history
-    if len(_web_chat_sessions) > _WEB_CHAT_MAX_SESSIONS:
-        _web_chat_sessions.pop(next(iter(_web_chat_sessions)), None)
-    return {"reply": reply}
-
-
 @router.get("/api/listing-inquiries")
 def get_listing_inquiries(user: str = Depends(check_auth)):
     conn = db()
@@ -159,58 +121,6 @@ def update_listing_inquiry(inquiry_id: int, status: str = Query(...), user: str 
 def delete_listing_inquiry(inquiry_id: int, user: str = Depends(check_auth)):
     conn = db()
     conn.execute("DELETE FROM listing_inquiries WHERE id = ?", (inquiry_id,))
-    conn.commit()
-    conn.close()
-    return {"ok": True}
-
-
-@router.post("/api/subarenda-lead")
-async def submit_subarenda_lead(request: Request):
-    data = await request.json()
-    full_name = (data.get("full_name") or "").strip()[:100]
-    phone = (data.get("phone") or "").strip()[:30]
-    manzil = (data.get("manzil") or "").strip()[:200]
-    xona = (data.get("xona") or "").strip()[:50]
-    narx_talab = (data.get("narx_talab") or "").strip()[:50]
-    if not full_name or not phone or not manzil:
-        raise HTTPException(status_code=400, detail="Majburiy maydonlar to'ldirilmagan")
-    # Kirgan foydalanuvchi bo'lsa, so'rov uning kabinetidagi "Mening
-    # so'rovlarim"da ko'rinishi uchun user_id yozib qo'yiladi.
-    tg_user = get_current_tg_user(request)
-    sender_uid = tg_user["uid"] if tg_user else None
-    conn = db()
-    conn.execute(
-        "INSERT INTO subarenda_requests (user_id, full_name, phone, manzil, xona, narx_talab, status, created_at) VALUES (?,?,?,?,?,?,'yangi',?)",
-        (sender_uid, full_name, phone, manzil, xona, narx_talab, now_str()),
-    )
-    conn.commit()
-    conn.close()
-    return {"ok": True}
-
-
-@router.get("/api/subarenda-requests")
-def get_subarenda_requests(user: str = Depends(check_auth)):
-    conn = db()
-    rows = conn.execute("SELECT * FROM subarenda_requests ORDER BY id DESC").fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-@router.post("/api/subarenda-requests/{req_id}")
-def update_subarenda_request(req_id: int, status: str = Query(...), user: str = Depends(check_auth)):
-    if status not in ("yangi", "bogl", "yopiq"):
-        raise HTTPException(status_code=400)
-    conn = db()
-    conn.execute("UPDATE subarenda_requests SET status = ? WHERE id = ?", (status, req_id))
-    conn.commit()
-    conn.close()
-    return {"ok": True}
-
-
-@router.post("/api/subarenda-requests/{req_id}/delete")
-def delete_subarenda_request(req_id: int, user: str = Depends(check_auth)):
-    conn = db()
-    conn.execute("DELETE FROM subarenda_requests WHERE id = ?", (req_id,))
     conn.commit()
     conn.close()
     return {"ok": True}
@@ -371,8 +281,6 @@ def api_stats(user: str = Depends(check_auth)):
     top_pages = conn.execute("SELECT path, COUNT(*) c FROM site_visits WHERE visited_at >= ? GROUP BY path ORDER BY c DESC LIMIT 8", (week_ago,)).fetchall()
     recent_visits = conn.execute("SELECT path, ip, country, city, device, browser, visited_at FROM site_visits ORDER BY id DESC LIMIT 30").fetchall()
 
-    pending_subarenda = conn.execute("SELECT COUNT(*) c FROM subarenda_requests WHERE status='yangi'").fetchone()["c"]
-
     # ---- Chuqurroq tahlil: ijara turi, tuman va toifa bo'yicha taqsimot (faol e'lonlar) ----
     rt_rows = conn.execute(
         "SELECT COALESCE(rental_type,'uzoq_muddat') rt, COUNT(*) c FROM listings "
@@ -426,7 +334,6 @@ def api_stats(user: str = Depends(check_auth)):
         "daily_revenue": daily_revenue,
         "daily_subs": daily_subs,
         "monthly_revenue": monthly_revenue,
-        "pending_subarenda": pending_subarenda,
         "rental_type_breakdown": rental_type_breakdown,
         "category_breakdown": category_breakdown,
         "district_breakdown": district_breakdown,

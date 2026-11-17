@@ -174,8 +174,6 @@ ADMIN_HTML = """<!DOCTYPE html>
   .bar-row .bt { flex: 1; height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
   .bar-row .bt .fill { height: 100%; background: var(--brand-grad); border-radius: 4px; transition: width .4s var(--ease); }
   .bar-row .bv { font-size: 12px; font-weight: 700; color: var(--muted); width: 30px; text-align: right; flex-shrink: 0; }
-  #subarenda-badge { background: var(--brand-grad); color: #fff; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: var(--radius-pill); margin-left: 4px; }
-  #subarenda-badge:empty { display: none; }
   .sr-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 18px; margin-bottom: 10px; box-shadow: var(--shadow-xs); transition: box-shadow .18s var(--ease); }
   .sr-card:hover { box-shadow: var(--shadow); }
   .sr-top { display: flex; justify-content: space-between; align-items: start; gap: 10px; margin-bottom: 8px; }
@@ -265,7 +263,6 @@ ADMIN_HTML = """<!DOCTYPE html>
 
     <div class="side-group-label">Moderatsiya</div>
     <a data-tab="pending"><span class="icon">\U0001F553</span> Kutilmoqda <span id="pending-badge" class="side-badge"></span></a>
-    <a data-tab="subarenda"><span class="icon">\U0001F3E2</span> Subarenda <span id="subarenda-badge" class="side-badge"></span></a>
     <a data-tab="inquiries"><span class="icon">\U0001F4E9</span> So'rovlar <span id="inquiries-badge" class="side-badge"></span></a>
     <a data-tab="support"><span class="icon">\U0001F4AC</span> Qo'llab-quvvatlash <span id="support-badge" class="side-badge"></span></a>
 
@@ -395,12 +392,6 @@ ADMIN_HTML = """<!DOCTYPE html>
       <h2>\U0001F4B3 Limit (obuna) so'rovlari</h2>
       <div id="pending-subs-list" style="margin-top:12px;"><div class="empty-note">Yuklanmoqda...</div></div>
     </div>
-  </div>
-
-  <div id="tab-subarenda" class="tab-page">
-    <div class="page-head"><h1>\U0001F3E2 Subarenda so\'rovlari</h1></div>
-    <div class="panel-sub" style="margin-bottom:16px;">Uy egalaridan kelgan, uyni platformaga boshqarishga topshirish so\'rovlari</div>
-    <div id="subarenda-list"><div class="empty-note">Yuklanmoqda...</div></div>
   </div>
 
   <div id="tab-inquiries" class="tab-page">
@@ -888,43 +879,6 @@ async function rejectPendingSub(id) {
   loadPending();
 }
 
-async function loadSubarenda() {
-  const res = await fetch('/api/subarenda-requests');
-  const items = await res.json();
-  const badge = document.getElementById('subarenda-badge');
-  const pending = items.filter(i => i.status === 'yangi').length;
-  badge.textContent = pending > 0 ? pending : '';
-  const listEl = document.getElementById('subarenda-list');
-  if (!items.length) { listEl.innerHTML = `<div class="empty-note">Hali so'rov yo'q</div>`; return; }
-  listEl.innerHTML = items.map(r => `
-    <div class="sr-card">
-      <div class="sr-top">
-        <div class="sr-name">${r.full_name || 'Nomsiz'}</div>
-        <span class="sr-status ${r.status}">${r.status}</span>
-      </div>
-      <div class="sr-meta">
-        \U0001F4CD ${r.manzil || '-'}<br>
-        \U0001F6CF ${r.xona || '-'} \u00b7 \U0001F4B0 So\'ragan narx: ${r.narx_talab || '-'}<br>
-        \U0001F4DE ${r.phone || '-'} \u00b7 \U0001F553 ${r.created_at}
-      </div>
-      <div class="sr-actions">
-        <button onclick="updateSubarenda(${r.id}, 'bogl')">\U0001F4DE Bog'lanildi</button>
-        <button class="approve" onclick="updateSubarenda(${r.id}, 'yopiq')">\u2705 Yakunlandi</button>
-        <button class="reject" onclick="deleteSubarenda(${r.id})">\U0001F5D1 O'chirish</button>
-      </div>
-    </div>
-  `).join('');
-}
-async function updateSubarenda(id, status) {
-  await fetch(`/api/subarenda-requests/${id}?status=${status}`, { method: 'POST' });
-  loadSubarenda();
-}
-async function deleteSubarenda(id) {
-  if (!confirm("So'rovni butunlay o'chirasizmi?")) return;
-  await fetch(`/api/subarenda-requests/${id}/delete`, { method: 'POST' });
-  loadSubarenda();
-}
-
 async function loadInquiries() {
   const res = await fetch('/api/listing-inquiries');
   const items = await res.json();
@@ -1336,7 +1290,6 @@ async function loadMap() {
 
 loadStats();
 loadPeriodStats('daily');
-loadSubarenda();
 loadInquiries();
 loadModerators();
 loadPending();
@@ -1348,7 +1301,6 @@ loadSupport();
 loadDistrictAliases();
 loadAiUsage();
 setInterval(loadStats, 60000);
-setInterval(loadSubarenda, 30000);
 setInterval(loadInquiries, 30000);
 setInterval(loadModerators, 60000);
 setInterval(loadPending, 30000);

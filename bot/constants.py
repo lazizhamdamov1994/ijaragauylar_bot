@@ -90,11 +90,6 @@ BTN_MODERATORS = "\U0001F46E Moderatorlar"
 BTN_FLAGGED = "\U0001F6A8 Shubhali faollik"
 BTN_USER_SEARCH = "\U0001F50E Qidirish"
 BTN_DISTRICT_ALIASES = "\U0001F5FA Tuman kalit so'zlari"
-# MUHIM: bot o'zining "Uyimni baholash (AI)" menyusi OLIB TASHLANDI, lekin bu
-# ikki tugma matni hali bot/flow_valuation.py'dagi (veb-saytdan kelgan to'lov
-# tasdiqlangandan keyingi) ichki klaviaturada ishlatiladi - shu sabab qolsin.
-BTN_VALUATION_SKIP_PHOTOS = "➡️ Rasmsiz davom etish"
-BTN_VALUATION_DONE_PHOTOS = "✅ Tayyor, baholang"
 
 STEPS = [
     {"state": MANZIL, "field": "manzil", "prompt": "\U0001F4CD <b>Manzil</b> (Адрес):", "kind": "text", "maxlen": 250},
@@ -155,11 +150,6 @@ SETTINGS_FIELDS = {
         "hint": "Yoqilsa, pullik e'lon uchun yuborilgan chek AI tomonidan summaga mos deb topilsa va boshqa foydalanuvchida ishlatilmagan bo'lsa - admin kutmasdan darhol kanalga joylanadi.",
         "kind": "bool",
     },
-    "ai_concierge_daily_limit": {
-        "label": "\U0001F4AC AI yordamchi (veb-sayt) - kunlik xabar chegarasi (bitta foydalanuvchi)",
-        "hint": "Veb-saytdagi AI chat vidjetida bitta mehmon bir kunda nechta xabar yozishi mumkinligini yozing. Masalan: 30",
-        "kind": "int",
-    },
     "ai_ops_report_enabled": {
         "label": "\U0001F4C8 Kunlik AI boshqaruv hisoboti",
         "hint": "Yoqilsa, har kuni kechqurun AI tahlili + tavsiyalar bilan qisqa hisobot adminlarga yuboriladi.",
@@ -170,20 +160,10 @@ SETTINGS_FIELDS = {
         "hint": "Haftalik \"AI aniqlik tahlili\" xabarida AI o'zi tavsiya bergan qo'shimcha ko'rsatmani shu yerga ko'chiring - darhol kuchga kiradi. Bo'sh qoldirish mumkin.",
         "kind": "text_long",
     },
-    "ai_valuation_extra_guidance": {
-        "label": "\U0001F9E0 AI uy baholashga (veb-sayt) qo'shimcha ko'rsatma",
-        "hint": "Veb-saytdagi /baholash sahifasida AI narxni noto'g'ri baholayotganini payqasangiz, shu yerga tuzatuvchi ko'rsatma yozing - darhol kuchga kiradi.",
-        "kind": "text_long",
-    },
     "ai_receipt_extra_guidance": {
         "label": "\U0001F9E0 AI chek tekshiruviga qo'shimcha ko'rsatma",
         "hint": "AI turli bank/ilova (Click, Payme, Uzcard, Humo, bank ilovalari) formatidagi cheklarni noto'g'ri \"mos emas\" deb belgilasa, shu yerga tushuntirish yozing. Admin AI shubha bildirgan chekni baribir tasdiqlasa - bu maydon AVTOMATIK ravishda to'ldiriladi (qo'lda o'chirish/tahrirlash mumkin).",
         "kind": "text_long",
-    },
-    "valuation_price": {
-        "label": "\U0001F3F7 Pullik uy baholash narxi (veb-sayt, so'm)",
-        "hint": "Veb-saytdagi /baholash sahifasida har bir foydalanuvchining BIRINCHI baholashi doim bepul. Keyingi baholashlar uchun narxni shu yerda belgilang. Masalan: 10000",
-        "kind": "int",
     },
     "listing_auto_delete_days": {
         "label": "\U0001F5D1 E'lonlarni avtomatik o'chirish muddati (kun)",

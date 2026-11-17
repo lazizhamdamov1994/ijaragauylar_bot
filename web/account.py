@@ -21,7 +21,6 @@ from common.db import (
     get_favorite_listings_full,
     get_price_history,
     get_sent_inquiries,
-    get_sent_subarenda_requests,
     get_sent_viewing_requests,
     get_user_notifications,
     get_user_support_requests,
@@ -256,8 +255,8 @@ def kabinet_page(request: Request):
     fav_html = f'<div class="kb-card"><div class="kb-card-title">{t(lang,"kb_favorites_title")}</div>{fav_body}</div>'
 
     # Mening so'rovlarim - foydalanuvchi o'zi yuborgan barcha so'rovlar
-    # (e'lon egasiga yozgan xabarlar, subarenda so'rovlari, ko'rish vaqti
-    # so'rovlari) - bittalashtirilib, sana bo'yicha saralanadi.
+    # (e'lon egasiga yozgan xabarlar, ko'rish vaqti so'rovlari) -
+    # bittalashtirilib, sana bo'yicha saralanadi.
     sent_requests = []
     for r in get_sent_inquiries(uid):
         replied = r["status"] == "javob_berildi"
@@ -266,14 +265,6 @@ def kabinet_page(request: Request):
             "detail": r.get("message"), "created_at": r.get("created_at"),
             "status_label": t(lang, "kb_request_status_seen") if replied else t(lang, "kb_request_status_new"),
             "status_cls": "st-approved" if replied else "st-pending",
-        })
-    for r in get_sent_subarenda_requests(uid):
-        seen = r["status"] != "yangi"
-        sent_requests.append({
-            "type": t(lang, "kb_request_subarenda"), "addr": r.get("manzil"),
-            "detail": r.get("narx_talab"), "created_at": r.get("created_at"),
-            "status_label": t(lang, "kb_request_status_seen") if seen else t(lang, "kb_request_status_new"),
-            "status_cls": "st-approved" if seen else "st-pending",
         })
     viewing_status_map = {
         "pending": (t(lang, "kb_request_status_pending"), "st-pending"),

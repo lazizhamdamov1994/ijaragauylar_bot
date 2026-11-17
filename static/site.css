@@ -175,151 +175,65 @@
     .mobile-menu-btn { display: flex; }
   }
 
-  /* ============ HERO + SEARCH ============
-     Assimetrik, ikki ustunli ("split") tarkib - oddiy markazlashgan matn
-     o'rniga: chap tomonda matn/qidiruv, o'ng tomonda haqiqiy e'lonlardan
-     "sochilgan" (overlapping) karta to'plami. To'q fon (--ink) saytning
-     qolgan yumshoq qismidan ANIQ ajralib, pastga - oq kontentga - tekis
-     o'tadi (Stripe/Linear uslubidagi "dark hero -> light content"). */
-  .hero {
-    position: relative; overflow: hidden; isolation: isolate;
-    background: linear-gradient(180deg, var(--ink) 0%, #182233 58%, #1f2a3d 82%, #fff 100%);
-    padding: 68px 20px 150px; text-align: left; color: #fff;
+  /* ============ CONTROL BAR (qidiruv + filtr) ============
+     joymee.uz'dan ilhomlangan: katta marketing-uslubidagi "hero" o'rniga
+     zich, amaliyotga yo'naltirilgan boshqaruv paneli - e'lonlar DARHOL,
+     bitta skroll ichida ko'rinadi. Ranglar/soyalar saytning o'z
+     --brand/--gold palitrasidan (joymee'ning asl #FF2D55 qizilidan farqi
+     deyarli sezilmaydi, shuning uchun "begona" ko'rinmaydi). */
+  .control-bar { background: var(--bg-soft); border-bottom: 1px solid var(--line); padding: 26px 0 22px; }
+  .control-bar-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+  .control-bar h1 { font-size: clamp(20px, 2.3vw, 25px); font-weight: 800; letter-spacing: -0.5px; color: var(--ink); line-height: 1.25; }
+  .map-link-btn {
+    display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; background: #fff; border: 1px solid var(--line);
+    border-radius: var(--radius-pill); padding: 9px 16px; font-size: 13px; font-weight: 700; color: var(--ink-soft);
+    box-shadow: var(--shadow-sm); transition: border-color .18s var(--ease), color .18s var(--ease), transform .18s var(--ease);
   }
-  .hero::before, .hero::after {
-    content: ""; position: absolute; border-radius: 50%; filter: blur(80px); z-index: -1;
-    animation: heroBlobDrift 18s ease-in-out infinite alternate;
-  }
-  .hero::before {
-    width: 620px; height: 620px; top: -260px; left: -160px;
-    background: radial-gradient(circle, rgba(255,59,92,.38), transparent 70%);
-  }
-  .hero::after {
-    width: 540px; height: 540px; top: 40px; right: -200px;
-    background: radial-gradient(circle, rgba(214,150,11,.3), transparent 70%);
-    animation-delay: -9s;
-  }
-  @keyframes heroBlobDrift { from { transform: translate(0,0) scale(1); } to { transform: translate(50px, 36px) scale(1.1); } }
-  @media (prefers-reduced-motion: reduce) { .hero::before, .hero::after { animation: none; } }
+  .map-link-btn:hover { border-color: var(--brand); color: var(--brand); transform: translateY(-1px); }
 
-  .hero-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 50px; align-items: center; position: relative; z-index: 1; }
-  .hero-grid.no-stack { grid-template-columns: minmax(0, 720px); justify-content: center; text-align: center; }
-  .hero-grid.no-stack .hero-left { margin: 0 auto; }
-  .hero-left { max-width: 560px; }
-
-  .hero-kicker {
-    display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 800;
-    color: #fff; background: rgba(255,255,255,.12); backdrop-filter: blur(6px); padding: 7px 16px;
-    border-radius: var(--radius-pill); margin-bottom: 20px; letter-spacing: .4px; text-transform: uppercase;
-    border: 1px solid rgba(255,255,255,.18);
+  /* ---- Ijara turi segmentlangan tab qatori - joymee.uz'dagi
+     Sotish/Ijara/Kunlik nazoratiga o'xshash, faol segment brend
+     rangida to'ldiriladi ---- */
+  .rt-tabs {
+    display: flex; gap: 3px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius-pill);
+    padding: 4px; margin: 0 0 14px; overflow-x: auto; -ms-overflow-style: none; scrollbar-width: none;
   }
-  .hero h1 { font-size: clamp(32px, 4.6vw, 52px); font-weight: 800; letter-spacing: -1.8px; line-height: 1.05; margin-bottom: 16px; color: #fff; }
-  .hero p.sub { font-size: clamp(14.5px, 1.3vw, 17px); color: rgba(255,255,255,.66); max-width: 480px; margin: 0 0 32px; line-height: 1.6; }
-  .hero-grid.no-stack p.sub { margin: 0 auto 32px; }
-  @media (max-width: 640px) { .hero { padding: 36px 16px 90px; } .hero p.sub { margin-bottom: 24px; } }
-  @media (max-width: 960px) {
-    .hero-grid { grid-template-columns: 1fr; text-align: center; }
-    .hero-left { max-width: 100%; margin: 0 auto; }
-    .hero-left p.sub { margin-left: auto; margin-right: auto; }
-    .hero-left .search-pill, .hero-left .hero-ai-cta { margin-left: auto; margin-right: auto; }
-    .hero-right { display: none; }
+  .rt-tabs::-webkit-scrollbar { display: none; }
+  .rt-tab {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 1 1 0; white-space: nowrap;
+    padding: 10px 16px; border-radius: var(--radius-pill); font-size: 13px; font-weight: 700; color: var(--ink-soft);
+    transition: background .18s var(--ease), color .18s var(--ease);
   }
-  .hero-grid.no-stack .hero-ai-cta { margin-left: auto; margin-right: auto; }
+  .rt-tab:hover { color: var(--ink); }
+  .rt-tab.active { background: var(--brand); color: #fff; box-shadow: 0 4px 12px rgba(255,59,92,.28); }
 
-  /* Chap ustundagi har bir element (kicker, sarlavha, matn, qidiruv,
-     tab'lar, AI taklifi) sahifa ochilganda ketma-ket (stagger) ozgina
-     pastdan chiqib, xiralikdan ravshanlashib kiradi. */
-  .hero-left > * { animation: heroIn .7s var(--ease) both; }
-  .hero-left > *:nth-child(1) { animation-delay: .02s; }
-  .hero-left > *:nth-child(2) { animation-delay: .08s; }
-  .hero-left > *:nth-child(3) { animation-delay: .15s; }
-  .hero-left > *:nth-child(4) { animation-delay: .22s; }
-  .hero-left > *:nth-child(5) { animation-delay: .29s; }
-  .hero-left > *:nth-child(6) { animation-delay: .36s; }
-
-  /* ---- O'ng ustun: haqiqiy e'lonlardan "sochilgan" karta to'plami ---- */
-  .hero-stack { position: relative; height: 440px; }
-  .hero-stack-card {
-    position: absolute; width: 240px; background: #fff; border-radius: var(--radius-lg);
-    overflow: hidden; box-shadow: var(--shadow-float); opacity: 0;
-    transition: box-shadow .3s var(--ease);
-    animation: heroStackIn .6s var(--ease) both;
+  .filter-chip-row { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; }
+  .chip-select {
+    background: #fff; border: 1px solid var(--line); border-radius: var(--radius-pill); padding: 9px 18px;
+    min-width: 160px; box-shadow: var(--shadow-sm); transition: border-color .18s var(--ease);
   }
-  .hero-stack-card:nth-child(1) { top: 4px; left: 0; z-index: 1; --rot: -7deg; animation-delay: .32s; }
-  .hero-stack-card:nth-child(2) { top: 92px; left: 160px; z-index: 3; --rot: 5deg; animation-delay: .46s; }
-  .hero-stack-card:nth-child(3) { top: 232px; left: 48px; z-index: 2; --rot: -3deg; animation-delay: .6s; }
-  @keyframes heroStackIn { from { opacity: 0; transform: translateY(28px) rotate(0deg) scale(.94); } to { opacity: 1; transform: translateY(0) rotate(var(--rot)) scale(1); } }
-  /* MUHIM: animatsiya tugagach ham ("fill-mode: both") CSS "animation"
-     qatlami oddiy ":hover" qoidasidan KUCHLIROQ turadi - shuning uchun
-     hover'da aylanishni bekor qilish uchun shu yerda (asosli ravishda)
-     !important ishlatilgan, aks holda hover umuman ko'rinmas edi. */
-  .hero-stack:hover .hero-stack-card { transform: translateY(-10px) rotate(0deg) scale(1) !important; box-shadow: var(--shadow-float), 0 0 0 1px rgba(16,24,38,.06); z-index: 5 !important; }
-  @media (prefers-reduced-motion: reduce) { .hero-stack-card { animation: none; opacity: 1; transform: translateY(0) rotate(var(--rot)); } }
-
-  .hsc-photo { aspect-ratio: 4/3; background: var(--bg-soft); overflow: hidden; }
-  .hsc-photo img { width: 100%; height: 100%; object-fit: cover; }
-  .hsc-photo .lc-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg,#FFEBEF,#FFF6F2); }
-  .hsc-body { padding: 13px 15px; }
-  .hsc-addr { font-size: 13px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .hsc-price { font-size: 14.5px; font-weight: 800; color: var(--brand); margin-top: 2px; }
-  @keyframes heroIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
-
-  .search-pill {
-    /* MUHIM (qatlamlanish/z-index xatosi): ".hero-left > *" kirish
-       animatsiyasi (heroIn) tugagandan keyin ham "transform: translateY(0)"
-       qiymatini saqlab qoladi - CSS qoidasiga ko'ra, "none"dan boshqa
-       HAR QANDAY transform qiymati (hatto vizual jihatdan 0 bo'lsa ham)
-       elementni alohida "stacking context"ga aylantiradi. Natijada
-       ".search-pill" o'zining DOM tartibida KEYIN keladigan birodarlari
-       (.rt-tabs, .hero-ai-cta - ular ham xuddi shunday alohida qatlamga
-       aylangan) bilan TENG z-index'da taqqoslanadi va ular KEYINROQ
-       chizilgani uchun ustidan bosib chiqadi - ichidagi ochiq
-       dropdown (.cs-menu, z-index:80) esa faqat shu ICHKI qatlam
-       doirasida ishlaydi, tashqariga "chiqa olmaydi". Aniq, tashqi
-       z-index bilan bu muammo butunlay bartaraf etiladi. */
-    position: relative; z-index: 5;
-    background: #fff; border-radius: var(--radius-pill); padding: 8px; max-width: 720px; margin: 0;
-    box-shadow: var(--shadow-float); border: 1px solid var(--line);
-    display: grid; grid-template-columns: 1fr 1fr auto; align-items: stretch; gap: 0;
-    transition: box-shadow .25s var(--ease);
-  }
-  .hero-grid.no-stack .search-pill { margin: 0 auto; }
-  .search-pill:hover, .search-pill:focus-within { box-shadow: var(--shadow-float), 0 0 0 4px rgba(255,59,92,.09); }
-  .search-pill .seg { padding: 10px 22px; border-right: 1px solid var(--line); text-align: left; }
-  .search-pill .seg:last-of-type { border-right: none; }
-  .search-pill label { display: block; font-size: 11px; font-weight: 700; color: var(--ink); margin-bottom: 2px; }
-  .search-pill select {
-    border: none; outline: none; font-size: 13.5px; font-weight: 500; color: var(--ink-soft);
-    background: transparent; width: 100%; cursor: pointer;
-  }
-  .search-pill button {
-    background: var(--brand); color: #fff; border: none; border-radius: var(--radius-pill); padding: 0 26px;
-    font-weight: 700; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+  .chip-select:hover, .chip-select:focus-within { border-color: var(--brand); }
+  .chip-select label { display: block; font-size: 10.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .3px; margin-bottom: 1px; }
+  .chip-select select { border: none; outline: none; font-size: 13.5px; font-weight: 600; color: var(--ink); background: transparent; width: 100%; cursor: pointer; }
+  .chip-search-btn {
+    display: inline-flex; align-items: center; gap: 8px; background: var(--brand); color: #fff; border: none;
+    border-radius: var(--radius-pill); padding: 0 24px; font-weight: 700; font-size: 13.5px; cursor: pointer;
     transition: background .18s var(--ease), transform .18s var(--ease);
   }
-  .search-pill button:hover { background: var(--brand-dark); transform: translateY(-1px); }
-  @media (max-width: 640px) {
-    .search-pill { grid-template-columns: 1fr 1fr; border-radius: var(--radius-lg); padding: 10px; gap: 8px; }
-    .search-pill .seg { border-right: none; border-bottom: 1px solid var(--line); padding: 8px 12px; }
-    .search-pill button { grid-column: 1 / -1; padding: 13px; border-radius: var(--radius); justify-content: center; margin-top: 4px; }
-  }
+  .chip-search-btn:hover { background: var(--brand-dark); transform: translateY(-1px); }
 
   /* ============ MOSLASHUVCHAN SELECT (native <select> ochilganda brauzer
      standart "arzon" dropdown ro'yxatini emas, sayt dizaynidagi ro'yxatni
      ko'rsatish uchun - JS bilan progressiv yaxshilanadi, enhanceSelect()
-     ga qarang) ============ */
+     ga qarang - .chip-select va .sort-select ikkalasi ham shu tizimdan
+     foydalanadi) ============ */
   .cs-wrap { position: relative; }
   .cs-wrap.cs-enhanced select { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
-  /* MUHIM: bu yerda oddiy ".cs-trigger" emas, ".cs-wrap .cs-trigger" ishlatiladi -
-     chunki trigger ham <button>, va masalan ".search-pill button" kabi joyning
-     o'zidagi umumiy tugma qoidalari (qizil fon va h.k.) aynan shu elementga ham
-     tegib, uni qidiruv tugmasidek qizil pillga aylantirib qo'yishi mumkin edi -
-     bu yerdagi ikki klassli selektor ko'proq aniq (specificity) bo'lgani uchun ustun chiqadi. */
   .cs-wrap .cs-trigger {
     display: none; align-items: center; justify-content: space-between; gap: 8px; width: 100%;
-    background: none !important; color: var(--ink-soft) !important; border: none !important; outline: none;
+    background: none !important; color: var(--ink) !important; border: none !important; outline: none;
     cursor: pointer; font: inherit; border-radius: 0 !important;
-    font-size: 13.5px; font-weight: 500; padding: 0 !important; text-align: left;
+    font-size: 13.5px; font-weight: 600; padding: 0 !important; text-align: left;
   }
   .cs-wrap.cs-enhanced .cs-trigger { display: flex; }
   .cs-arrow {
@@ -336,59 +250,63 @@
   .cs-option { padding: 9px 12px; border-radius: var(--radius-sm); font-size: 13.5px; color: var(--ink); cursor: pointer; white-space: nowrap; transition: background .12s var(--ease); }
   .cs-option:hover { background: var(--bg-soft); }
   .cs-option.selected { background: var(--brand-light); color: var(--brand-dark); font-weight: 700; }
-
-  /* ============ IJARA TURI TABLARI (kunlik/uzoq muddat/dacha/mehmonxona) ============ */
-  .rt-tabs { display: flex; gap: 8px; justify-content: flex-start; flex-wrap: wrap; margin-top: 20px; }
-  .hero-grid.no-stack .rt-tabs { justify-content: center; }
-  @media (max-width: 960px) { .rt-tabs { justify-content: center; } }
-  .rt-tab {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 8px 16px; border-radius: var(--radius-pill); background: #fff; font-size: 12.5px; font-weight: 700;
-    color: var(--ink-soft); box-shadow: var(--shadow-sm); border: 1px solid transparent; white-space: nowrap;
-    transition: background .18s var(--ease), color .18s var(--ease), border-color .18s var(--ease), transform .18s var(--ease);
-  }
-  .rt-tab:hover { border-color: var(--line); transform: translateY(-1px); }
-  .rt-tab.active { background: var(--ink); color: #fff; }
-  @media (max-width: 640px) { .rt-tabs { gap: 6px; margin-top: 14px; } .rt-tab { padding: 7px 12px; font-size: 12px; } }
-
-  .hero-ai-cta {
-    display: flex; align-items: center; gap: 12px; margin: 24px 0 0; max-width: 520px;
-    background: linear-gradient(135deg, var(--brand), var(--brand-dark)); color: #fff; border: none;
-    border-radius: var(--radius-lg); padding: 14px 20px; cursor: pointer; text-align: left;
-    box-shadow: 0 8px 24px rgba(255,59,92,.28); transition: transform .18s var(--ease), box-shadow .18s var(--ease);
-    animation: heroIn .7s var(--ease) both, heroAiPulse 2.6s ease-in-out .9s infinite;
-  }
-  .hero-ai-cta:hover { transform: translateY(-3px); box-shadow: 0 14px 30px rgba(255,59,92,.38); }
-  .hero-ai-cta-icon { flex: none; display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; background: rgba(255,255,255,.2); border-radius: 50%; }
-  .hero-ai-cta-title { display: block; font-size: 14.5px; font-weight: 800; }
-  .hero-ai-cta-sub { display: block; font-size: 12px; font-weight: 500; opacity: .92; margin-top: 2px; }
-  @keyframes heroAiPulse { 0%, 100% { box-shadow: 0 8px 24px rgba(255,59,92,.28); } 50% { box-shadow: 0 8px 28px rgba(255,59,92,.5); } }
   @media (max-width: 640px) {
-    .hero-ai-cta { margin-top: 16px; padding: 12px 16px; }
-    .hero-ai-cta-title { font-size: 13.5px; }
-    .hero-ai-cta-sub { font-size: 11.5px; }
+    .control-bar { padding: 18px 0 16px; }
+    .control-bar-head { margin-bottom: 12px; }
+    .rt-tab { padding: 9px 12px; font-size: 12px; }
+    .filter-chip-row { gap: 8px; }
+    .chip-select { min-width: 0; flex: 1 1 calc(50% - 4px); padding: 8px 14px; }
+    .chip-search-btn { flex: 1 1 100%; justify-content: center; padding: 12px; }
   }
 
-  /* ============ STATS STRIP ============ */
-  .stats-strip { margin-top: -60px; position: relative; z-index: 10; }
+  /* ============ TOP E'LONLAR KARUSELI ============
+     joymee.uz'dagi "VIP Announcements" karuseliga o'xshash - to'liq rasm,
+     pastida qorong'u gradient ustida oq matnda narx/manzil, yuqori chapda
+     oltin TOP nishon. */
+  .top-carousel-section { padding: 26px 0 4px; }
+  .top-carousel-section .section-head-mini { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; }
+  .top-carousel-section h2 { font-size: 18px; font-weight: 800; letter-spacing: -0.3px; display: flex; align-items: center; gap: 7px; color: var(--ink); }
+  .top-carousel {
+    display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 24px 10px;
+    margin: 0 -24px; -ms-overflow-style: none; scrollbar-width: none;
+  }
+  .top-carousel::-webkit-scrollbar { display: none; }
+  @media (max-width: 640px) { .top-carousel { margin: 0 -16px; padding-left: 16px; padding-right: 16px; } }
+  .top-carousel-card {
+    position: relative; flex: 0 0 220px; scroll-snap-align: start; aspect-ratio: 4/5; border-radius: var(--radius-lg);
+    overflow: hidden; box-shadow: var(--shadow-sm); transition: transform .22s var(--ease), box-shadow .22s var(--ease);
+  }
+  .top-carousel-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
+  .tcc-photo { position: absolute; inset: 0; background: var(--bg-soft); }
+  .tcc-photo img { width: 100%; height: 100%; object-fit: cover; }
+  .tcc-photo .lc-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg,#FFEBEF,#FFF6F2); }
+  .tcc-badge {
+    position: absolute; top: 12px; left: 12px; display: inline-flex; align-items: center; gap: 4px;
+    background: var(--gold); color: #1a1200; font-size: 10.5px; font-weight: 800; padding: 5px 10px;
+    border-radius: var(--radius-pill); box-shadow: 0 2px 6px rgba(0,0,0,.18);
+  }
+  .tcc-overlay {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 14px 14px;
+    background: linear-gradient(180deg, transparent, rgba(16,24,38,.82) 80%); color: #fff;
+  }
+  .tcc-price { font-size: 16px; font-weight: 800; letter-spacing: -0.3px; }
+  .tcc-addr { font-size: 12px; font-weight: 500; opacity: .88; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ============ STATS STRIP (yengil, kompakt) ============ */
+  .stats-strip { padding: 22px 0 2px; }
   .stats-strip .inner {
-    background: #fff; border-radius: var(--radius-lg); box-shadow: var(--shadow-float); border: 1px solid var(--line);
-    padding: 24px 32px; display: flex; justify-content: space-around; gap: 20px; flex-wrap: wrap; max-width: 720px; margin: 0 auto;
+    background: #fff; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); border: 1px solid var(--line);
+    padding: 20px 28px; display: flex; justify-content: space-around; gap: 20px; flex-wrap: wrap;
     transition: box-shadow .3s var(--ease);
   }
-  .stats-strip .inner:hover { box-shadow: var(--shadow-float), 0 0 0 4px rgba(255,59,92,.06); }
+  .stats-strip .inner:hover { box-shadow: var(--shadow); }
   .stat-item { text-align: center; }
-  .stat-item .num {
-    font-size: 27px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px;
-  }
+  .stat-item .num { font-size: 23px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px; }
   @supports (-webkit-background-clip: text) or (background-clip: text) {
-    .stat-item .num {
-      background: linear-gradient(135deg, var(--ink), var(--ink-soft));
-      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-    }
+    .stat-item .num { background: linear-gradient(135deg, var(--ink), var(--ink-soft)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
   }
   .stat-item .lbl { font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 2px; }
-  @media (max-width: 640px) { .stats-strip .inner { padding: 16px 12px; gap: 8px; } .stat-item .num { font-size: 19px; } }
+  @media (max-width: 640px) { .stats-strip .inner { padding: 14px 10px; gap: 8px; } .stat-item .num { font-size: 18px; } }
 
   /* ============ MAIN CONTENT ============ */
   main { padding: 64px 0 72px; }

@@ -356,20 +356,6 @@ def is_phone_blocked(phone: str) -> bool:
     return get_blocked_phone(phone) is not None
 
 
-def count_today_ai_chat_messages(user_key: str, platform: str) -> int:
-    """AI Concierge kuchlik xarajatni nazorat qilish uchun - bitta
-    foydalanuvchi/sessiya bir kunda nechta xabar yuborganini sanaydi
-    (bot uchun user_key=telegram user_id, veb uchun sessiya/IP kaliti)."""
-    since = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
-    conn = db()
-    n = conn.execute(
-        "SELECT COUNT(*) c FROM ai_chat_messages WHERE user_key = ? AND platform = ? AND created_at >= ?",
-        (str(user_key), platform, since),
-    ).fetchone()["c"]
-    conn.close()
-    return n
-
-
 def count_today_instagram_posts() -> int:
     """Instagram API'ning taxminiy kunlik post chegarasidan (~25/kun)
     o'tib ketmaslik uchun - common/instagram.py: is_instagram_posting_throttled."""
@@ -388,84 +374,6 @@ def log_instagram_post(listing_id: int, media_id: str | None) -> None:
         "INSERT INTO instagram_posts (listing_id, media_id, posted_at) VALUES (?, ?, ?)",
         (listing_id, media_id, now_str()),
     )
-    conn.commit()
-    conn.close()
-
-
-def log_ai_chat_message(user_key: str, platform: str) -> None:
-    conn = db()
-    conn.execute(
-        "INSERT INTO ai_chat_messages (user_key, platform, created_at) VALUES (?, ?, ?)",
-        (str(user_key), platform, now_str()),
-    )
-    conn.commit()
-    conn.close()
-
-
-def has_prior_valuation(user_key: str) -> bool:
-    """Foydalanuvchi ilgari (istalgan vaqtda, PLATFORMADAN QAT'IY NAZAR -
-    bot yoki veb, farqi yo'q) kamida bitta baholashdan foydalanganmi -
-    shu orqali "birinchi baholash BEPUL, keyingilari pullik" qoidasi
-    HAR IKKALA platformada BITTA umumiy hisobga asoslanadi (aks holda
-    foydalanuvchi botda bepul ishlatib, veb saytda yana bepul olishi
-    mumkin bo'lardi)."""
-    conn = db()
-    row = conn.execute("SELECT 1 FROM valuation_requests WHERE user_key = ? LIMIT 1", (str(user_key),)).fetchone()
-    conn.close()
-    return row is not None
-
-
-def count_today_valuations(user_key: str, platform: str) -> int:
-    """AI uy baholash - kunlik xarajatni nazorat qilish uchun."""
-    since = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
-    conn = db()
-    n = conn.execute(
-        "SELECT COUNT(*) c FROM valuation_requests WHERE user_key = ? AND platform = ? AND created_at >= ?",
-        (str(user_key), platform, since),
-    ).fetchone()["c"]
-    conn.close()
-    return n
-
-
-def save_valuation_payment(user_id: int, platform: str, district: str, xona: str, condition_text: str,
-                            photo_file_ids: list, receipt_file_id: str) -> int:
-    conn = db()
-    conn.execute(
-        """INSERT INTO valuation_payments
-           (user_id, platform, district, xona, condition_text, photo_file_ids, receipt_file_id, status, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)""",
-        (user_id, platform, district, xona, condition_text, json.dumps(photo_file_ids or []), receipt_file_id, now_str()),
-    )
-    payment_id = conn.execute("SELECT last_insert_rowid() id").fetchone()["id"]
-    conn.commit()
-    conn.close()
-    return payment_id
-
-
-def get_valuation_payment(payment_id: int):
-    conn = db()
-    row = conn.execute("SELECT * FROM valuation_payments WHERE id = ?", (payment_id,)).fetchone()
-    conn.close()
-    if not row:
-        return None
-    d = dict(row)
-    try:
-        d["photo_file_ids"] = json.loads(d.get("photo_file_ids") or "[]")
-    except (TypeError, ValueError):
-        d["photo_file_ids"] = []
-    return d
-
-
-def update_valuation_payment_status(payment_id: int, status: str) -> None:
-    conn = db()
-    conn.execute("UPDATE valuation_payments SET status = ? WHERE id = ?", (status, payment_id))
-    conn.commit()
-    conn.close()
-
-
-def set_valuation_payment_receipt_warning(payment_id: int, warning: str) -> None:
-    conn = db()
-    conn.execute("UPDATE valuation_payments SET receipt_warning = ? WHERE id = ?", (warning, payment_id))
     conn.commit()
     conn.close()
 
@@ -510,19 +418,6 @@ def boost_listing_to_top(listing_id: int, price: int) -> None:
     mezoni)."""
     conn = db()
     conn.execute("UPDATE listings SET price_charged = ? WHERE id = ?", (price, listing_id))
-    conn.commit()
-    conn.close()
-
-
-def save_valuation_request(user_key: str, platform: str, district: str, xona: str, condition_text: str, result: dict) -> None:
-    conn = db()
-    conn.execute(
-        """INSERT INTO valuation_requests
-           (user_key, platform, district, xona, condition_text, price_low, price_high, reasoning, confidence, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (str(user_key), platform, district, xona, condition_text,
-         result.get("price_low"), result.get("price_high"), result.get("reasoning"), result.get("confidence"), now_str()),
-    )
     conn.commit()
     conn.close()
 
@@ -813,15 +708,6 @@ def get_sent_inquiries(user_id: int) -> list:
            LEFT JOIN listings l ON l.id = li.listing_id
            WHERE li.sender_user_id = ? ORDER BY li.created_at DESC""",
         (user_id,),
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def get_sent_subarenda_requests(user_id: int) -> list:
-    conn = db()
-    rows = conn.execute(
-        "SELECT * FROM subarenda_requests WHERE user_id = ? ORDER BY created_at DESC", (user_id,)
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
