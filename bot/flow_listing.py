@@ -82,9 +82,9 @@ async def elon_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "\U0001F4E2 <b>E'lon turini tanlang</b>\n\n"
         "\U0001F193 <b>Bepul e'lon</b> joylasangiz \u2014 kanalga bir marta joylanadi.\n\n"
-        "\U0001F4B0 <b>Pullik e'lon</b> bersangiz \u2014 sizning eloningiz kanalda va veb-saytda "
-        "<b>uyingiz topshirilgunicha (kamida 7 kun)</b> doimiy TOP'da, avtomatik ravishda qayta-qayta joylab "
-        "turiladi \u2014 ko'proq odam ko'radi, tezroq topiladi."
+        "\U0001F4B0 <b>Pullik e'lon</b> bersangiz \u2014 sizning eloningiz kanalda va veb-saytda doimiy "
+        "TOP'da, <b>har 3 soatda avtomatik ravishda qayta joylab</b> turiladi \u2014 \u00abuyingiz "
+        "topshirildi\u00bb deb belgilamaguningizcha davom etadi, ko'proq odam ko'radi, tezroq topiladi."
     )
     await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
     return LISTING_TYPE_CHOICE
@@ -95,6 +95,11 @@ async def listing_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.answer()
     context.user_data["listing_is_paid"] = query.data == "listingtype_paid"
     context.user_data.setdefault("rasmlar", [])
+    # MUHIM: shu bayroq orqali ask_rental_type "Orqaga" tugmasini faqat
+    # shu yo'l bilan (bepul/pullik tanlovidan) kelganlarga ko'rsatadi -
+    # xodimlar (is_staff) uchun bu ekran to'g'ridan-to'g'ri elon_entry'dan
+    # ochiladi, ularda qaytib boradigan oldingi ekran YO'Q.
+    context.user_data["rt_can_go_back"] = True
     await query.edit_message_reply_markup(reply_markup=None)
     return await ask_rental_type(update, context)
 
@@ -109,9 +114,12 @@ RENTAL_TYPE_LABELS = dict(RENTAL_TYPE_OPTIONS)
 
 
 async def ask_rental_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    footer_row = [InlineKeyboardButton("\u274c Bekor qilish", callback_data="nav_cancel")]
+    if context.user_data.get("rt_can_go_back"):
+        footer_row.insert(0, InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="rentaltype_back"))
     keyboard = InlineKeyboardMarkup(
         [[InlineKeyboardButton(label, callback_data=f"rentaltype_{key}")] for key, label in RENTAL_TYPE_OPTIONS]
-        + [[InlineKeyboardButton("\u274c Bekor qilish", callback_data="nav_cancel")]]
+        + [footer_row]
     )
     text = "\U0001F3F7\ufe0f <b>Uy qanday turdagi ijaraga beriladi?</b>"
     if update.callback_query:
@@ -119,6 +127,28 @@ async def ask_rental_type(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     else:
         await update.effective_message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
     return RENTAL_TYPE_CHOICE
+
+
+async def rentaltype_back_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    context.user_data.pop("rt_can_go_back", None)
+    await query.edit_message_reply_markup(reply_markup=None)
+    price = listing_price()
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("\U0001F193 Bepul e'lon", callback_data="listingtype_free")],
+        [InlineKeyboardButton(f"\U0001F4B0 Pullik e'lon — {price:,} so'm", callback_data="listingtype_paid")],
+        [InlineKeyboardButton("❌ Bekor qilish", callback_data="nav_cancel")],
+    ])
+    text = (
+        "\U0001F4E2 <b>E'lon turini tanlang</b>\n\n"
+        "\U0001F193 <b>Bepul e'lon</b> joylasangiz — kanalga bir marta joylanadi.\n\n"
+        "\U0001F4B0 <b>Pullik e'lon</b> bersangiz — sizning eloningiz kanalda va veb-saytda doimiy "
+        "TOP'da, <b>har 3 soatda avtomatik ravishda qayta joylab</b> turiladi — «uyingiz "
+        "topshirildi» deb belgilamaguningizcha davom etadi, ko'proq odam ko'radi, tezroq topiladi."
+    )
+    await query.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    return LISTING_TYPE_CHOICE
 
 
 async def rental_type_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -192,9 +222,9 @@ async def channel_elon_button(update: Update, context: ContextTypes.DEFAULT_TYPE
             text = (
                 "\U0001F4E2 <b>E'lon turini tanlang</b>\n\n"
                 "\U0001F193 <b>Bepul e'lon</b> joylasangiz \u2014 kanalga bir marta joylanadi.\n\n"
-                "\U0001F4B0 <b>Pullik e'lon</b> bersangiz \u2014 sizning eloningiz kanalda va veb-saytda "
-                "<b>uyingiz topshirilgunicha (kamida 7 kun)</b> doimiy TOP'da, avtomatik ravishda qayta-qayta joylab "
-                "turiladi \u2014 ko'proq odam ko'radi, tezroq topiladi."
+                "\U0001F4B0 <b>Pullik e'lon</b> bersangiz \u2014 sizning eloningiz kanalda va veb-saytda doimiy "
+                "TOP'da, <b>har 3 soatda avtomatik ravishda qayta joylab</b> turiladi \u2014 \u00abuyingiz "
+                "topshirildi\u00bb deb belgilamaguningizcha davom etadi, ko'proq odam ko'radi, tezroq topiladi."
             )
             await context.bot.send_message(user.id, text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
         await query.answer(url=f"https://t.me/{context.bot.username}")
@@ -459,7 +489,7 @@ async def _show_tasdiqlash_keyboard(update: Update, context: ContextTypes.DEFAUL
     keyboard = InlineKeyboardMarkup(
         [
             [InlineKeyboardButton(confirm_label, callback_data="tasdiqlash_ok")],
-            [InlineKeyboardButton("\u25c0\ufe0f Orqaga", callback_data="nav_back")],
+            [InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="nav_back")],
             [InlineKeyboardButton("\u274c Bekor qilish", callback_data="nav_cancel")],
         ]
     )

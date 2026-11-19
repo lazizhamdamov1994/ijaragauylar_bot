@@ -112,7 +112,7 @@ def main():
         ],
         states={
             LISTING_TYPE_CHOICE: [nav_cb, CallbackQueryHandler(listing_type_chosen, pattern="^listingtype_(free|paid)$"), MessageHandler(~filters.COMMAND, make_reminder(LISTING_TYPE_CHOICE))],
-            RENTAL_TYPE_CHOICE: [nav_cb, CallbackQueryHandler(rental_type_chosen, pattern="^rentaltype_(uzoq_muddat|kunlik|dacha|mehmonxona)$"), MessageHandler(~filters.COMMAND, make_reminder(RENTAL_TYPE_CHOICE))],
+            RENTAL_TYPE_CHOICE: [nav_cb, CallbackQueryHandler(rental_type_chosen, pattern="^rentaltype_(uzoq_muddat|kunlik|dacha|mehmonxona)$"), CallbackQueryHandler(rentaltype_back_router, pattern="^rentaltype_back$"), MessageHandler(~filters.COMMAND, make_reminder(RENTAL_TYPE_CHOICE))],
             MANZIL: text_state(MANZIL),
             MOLJAL: text_state(MOLJAL),
             KIMLARGA: text_state(KIMLARGA),
@@ -262,7 +262,13 @@ def main():
 
     viewing_conv = ConversationHandler(
         entry_points=[CommandHandler("start", viewing_deeplink_entry, filters=filters.Regex(r"^/start viewing_\d+$"))],
-        states={VIEWING_TIME_WAIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, viewing_time_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(VIEWING_TIME_WAIT))]},
+        states={
+            VIEWING_TIME_WAIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, viewing_time_received), MessageHandler(~filters.TEXT & ~filters.COMMAND, make_reminder(VIEWING_TIME_WAIT))],
+            VIEWING_TIME_CONFIRM: [
+                CallbackQueryHandler(viewing_time_confirm, pattern="^viewingtime_confirm$"),
+                CallbackQueryHandler(viewing_time_retry, pattern="^viewingtime_retry$"),
+            ],
+        },
         fallbacks=[CommandHandler("bekor", viewing_time_cancel)],
         name="viewing_conv",
         persistent=False,

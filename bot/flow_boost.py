@@ -24,6 +24,7 @@ from common.telegram_media import download_photo_bytes
 from bot.constants import *  # noqa: F401,F403
 from bot.db import *  # noqa: F401,F403
 from bot.helpers import *  # noqa: F401,F403
+from bot.fraud_detection import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,9 @@ async def boost_cancel_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def boost_receipt_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not update.message.photo:
+        if await try_escape_to_menu(update, context):
+            context.user_data.pop("boost_pending_listing_id", None)
+            return ConversationHandler.END
         await update.message.reply_text("⚠️ Iltimos, to'lov chekining skrinshotini RASM sifatida yuboring.")
         return BOOST_RECEIPT_WAIT
 

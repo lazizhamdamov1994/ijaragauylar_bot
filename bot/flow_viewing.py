@@ -109,15 +109,49 @@ async def viewing_time_received(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("⚠️ Juda uzun. 200 belgidan qisqaroq yozing:")
         return VIEWING_TIME_WAIT
 
-    user = update.effective_user
+    # MUHIM: boshqa barcha oqimlar (e'lon, obuna, TOP) kabi - uy egasiga
+    # YUBORISHDAN OLDIN tasdiqlash bosqichi qo'yildi, chunki bu matn
+    # to'g'ridan-to'g'ri begona odamga (uy egasiga) ketadi - xato/g'alat
+    # yozilgan vaqtni qayta ko'rib chiqish imkoni bo'lishi kerak.
+    context.user_data["viewing_time_text"] = raw
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Tasdiqlash, yuborish", callback_data="viewingtime_confirm")],
+        [InlineKeyboardButton("✏️ Qayta yozish", callback_data="viewingtime_retry")],
+    ])
+    await update.message.reply_text(
+        f"\U0001F553 Siz yozgan vaqt: <b>{esc(raw)}</b>\n\nShuni uy egasiga yuboraymi?",
+        parse_mode=ParseMode.HTML, reply_markup=keyboard,
+    )
+    return VIEWING_TIME_CONFIRM
+
+
+async def viewing_time_retry(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data.pop("viewing_time_text", None)
+    await query.edit_message_reply_markup(reply_markup=None)
+    await query.message.reply_text("\U0001F5D3 Qaysi kun/soatda ko'rmoqchisiz? Qaytadan yozing (masalan: «Ertaga soat 15:00»):")
+    return VIEWING_TIME_WAIT
+
+
+async def viewing_time_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    raw = context.user_data.pop("viewing_time_text", None)
+    listing_id = context.user_data.pop("viewing_listing_id", None)
+    await query.edit_message_reply_markup(reply_markup=None)
+    if not raw or not listing_id:
+        await query.message.reply_text("⚠️ So'rov muddati tugagan. Qaytadan urinib ko'ring.", reply_markup=main_menu_keyboard(query.from_user.id))
+        return ConversationHandler.END
+
+    user = query.from_user
     listing = get_listing(listing_id)
-    context.user_data.pop("viewing_listing_id", None)
     if not listing:
-        await update.message.reply_text("⚠️ Bu e'lon endi topilmadi.", reply_markup=main_menu_keyboard(user.id))
+        await query.message.reply_text("⚠️ Bu e'lon endi topilmadi.", reply_markup=main_menu_keyboard(user.id))
         return ConversationHandler.END
 
     request_id = create_viewing_request(listing_id, user.id, raw)
-    await update.message.reply_text(
+    await query.message.reply_text(
         "✅ So'rovingiz uy egasiga yuborildi. U tasdiqlasa yoki rad etsa, sizga xabar beramiz.",
         reply_markup=main_menu_keyboard(user.id),
     )

@@ -180,13 +180,20 @@ def channel_link_button():
 
 
 def main_menu_keyboard(user_id: int) -> ReplyKeyboardMarkup:
-    rows = [[BTN_ELON], [BTN_LISTINGS, BTN_SUBSCRIPTION], [BTN_CHECK_PHONE, BTN_HELP], [BTN_LOCATION_ALERT, BTN_MY_LOCATIONS], [BTN_CHANNEL]]
+    # MUHIM (tartib ataylab shunday): birinchi qator - "E'lon berish" (uy
+    # egasining asosiy maqsadi), ikkinchi/uchinchi qator - e'lonlarni
+    # KO'RISH yo'llari (kanal + xarita - ijarachining asosiy maqsadi).
+    # "Mening e'lonlarim"/"Limit sotib olish" ATAYIN pastroqqa tushirildi -
+    # yangi foydalanuvchi uchun ular hali daxldor emas (birinchisi bo'sh,
+    # ikkinchisi to'lov devoriga yetmaguncha kerak emas).
+    rows = [[BTN_ELON], [BTN_CHANNEL]]
     # MUHIM: Telegram WebApp tugmalari FAQAT https:// havolalarni qabul qiladi -
     # http:// bo'lsa, butun klaviaturani yuborishda XATOLIK chiqadi va bot
     # ISHLAMAY QOLADI. Shuning uchun bu yerda ALBATTA tekshiramiz.
     dashboard_https_ready = DASHBOARD_URL.startswith("https://")
     if dashboard_https_ready:
         rows.append([KeyboardButton(BTN_PUBLIC_MAP, web_app=WebAppInfo(url=f"{DASHBOARD_URL}/xarita"))])
+    rows += [[BTN_LISTINGS, BTN_SUBSCRIPTION], [BTN_CHECK_PHONE, BTN_HELP], [BTN_LOCATION_ALERT, BTN_MY_LOCATIONS]]
     if is_admin(user_id):
         rows.append([BTN_STATS, BTN_SUBSCRIBERS])
         rows.append([BTN_SETTINGS, BTN_MODERATORS])
@@ -205,7 +212,7 @@ def main_menu_keyboard(user_id: int) -> ReplyKeyboardMarkup:
 def nav_keyboard(idx: int) -> InlineKeyboardMarkup:
     nav = []
     if idx > 0:
-        nav.append(InlineKeyboardButton("\u25c0\ufe0f Orqaga", callback_data="nav_back"))
+        nav.append(InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="nav_back"))
     nav.append(InlineKeyboardButton("\u274c Bekor qilish", callback_data="nav_cancel"))
     return InlineKeyboardMarkup([nav])
 
@@ -236,7 +243,7 @@ async def update_photo_status(update: Update, context: ContextTypes.DEFAULT_TYPE
     rows = []
     if n > 0:
         rows.append([InlineKeyboardButton(f"\u2705 Tayyor ({n} ta) \u2014 Davom etish", callback_data="rasm_tayyor")])
-    nav = [InlineKeyboardButton("\u25c0\ufe0f Orqaga", callback_data="nav_back_to_location"), InlineKeyboardButton("\u274c Bekor qilish", callback_data="nav_cancel")]
+    nav = [InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="nav_back_to_location"), InlineKeyboardButton("\u274c Bekor qilish", callback_data="nav_cancel")]
     rows.append(nav)
     markup = InlineKeyboardMarkup(rows)
 

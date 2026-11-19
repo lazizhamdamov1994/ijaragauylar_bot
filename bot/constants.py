@@ -67,7 +67,8 @@ logger = logging.getLogger(__name__)
     DISTALIAS_ADD_WAIT,
     BOOST_RECEIPT_WAIT,
     QUICK_SLIDESHOW_CONFIRM,
-) = range(40)
+    VIEWING_TIME_CONFIRM,
+) = range(41)
 
 BTN_ELON = "\U0001F4DD E'lon berish"
 BTN_LISTINGS = "\U0001F4CB Mening e'lonlarim"
@@ -92,8 +93,16 @@ BTN_USER_SEARCH = "\U0001F50E Qidirish"
 BTN_DISTRICT_ALIASES = "\U0001F5FA Tuman kalit so'zlari"
 
 STEPS = [
-    {"state": MANZIL, "field": "manzil", "prompt": "\U0001F4CD <b>Manzil</b> (Адрес):", "kind": "text", "maxlen": 250},
-    {"state": MOLJAL, "field": "moljal", "prompt": "\U0001F3AF <b>Mo'ljal</b> (Ориентир):", "kind": "text", "maxlen": 250},
+    {
+        "state": MANZIL, "field": "manzil",
+        "prompt": "\U0001F4CD <b>Manzil</b> qaysi tuman/mahalla?\n<i>Masalan: Chilonzor tumani, 19-kvartal</i>",
+        "kind": "text", "maxlen": 250,
+    },
+    {
+        "state": MOLJAL, "field": "moljal",
+        "prompt": "\U0001F3AF <b>Mo'ljal</b> — topish uchun qaysi bino/joy yaqinida?\n<i>Masalan: metro bekati yonida, «Maksim» do'koni qarshisida</i>",
+        "kind": "text", "maxlen": 250,
+    },
     {
         "state": KIMLARGA, "field": "kimlarga",
         "prompt": "\U0001F465 <b>Kimlarga beriladi?</b> (Кому сдаётся?)\n<i>Masalan: oilaga, talabalarga, ishlaydiganlarga</i>",
