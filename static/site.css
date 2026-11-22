@@ -177,8 +177,12 @@
      --brand/--gold palitrasidan (joymee'ning asl #FF2D55 qizilidan farqi
      deyarli sezilmaydi, shuning uchun "begona" ko'rinmaydi). */
   /* ============ BANNER KARUSELI (admin panel orqali boshqariladi) ============ */
-  .hbc-wrap { padding: 16px 16px 0; max-width: 1400px; margin: 0 auto; }
-  .hbc { position: relative; border-radius: var(--radius-lg); overflow: hidden; aspect-ratio: 16/5; background: var(--bg-soft); box-shadow: var(--shadow-sm); }
+  /* MUHIM: endi .wrap'ning O'ZI ICHIDA (hero-vivid-inner'da) joylashadi -
+     shuning uchun bu yerda qo'shimcha max-width/padding/margin SHART
+     EMAS (aks holda ikki marta "wrap" qo'llanib, g'alati chekinish
+     hosil bo'lardi). Faqat tepadan bo'sh joy qoladi. */
+  .hbc-wrap { margin-top: 26px; }
+  .hbc { position: relative; border-radius: var(--radius-lg); overflow: hidden; aspect-ratio: 16/5; background: rgba(255,255,255,.5); box-shadow: var(--shadow-lg); }
   .hbc-track { position: relative; width: 100%; height: 100%; }
   .hbc-slide {
     position: absolute; inset: 0; display: block; opacity: 0; visibility: hidden;
@@ -208,7 +212,7 @@
        (odatda bannerning matni shu yerda) kesilib qolardi. Endi rasm
        HECH QACHON kesilmaydi, faqat torroq ekranga mos ravishda
        pastroq bo'lib ko'rinadi. */
-    .hbc-wrap { padding: 10px 10px 0; }
+    .hbc-wrap { margin-top: 18px; }
     .hbc { border-radius: var(--radius); }
     .hbc-text { padding: 14px 16px 16px; }
     .hbc-title { font-size: 15px; }
@@ -219,8 +223,12 @@
   /* ---- Bosh sahifa "jonli" (vivid) qahramon bo'limi: organik blob
      shakllar + gradient matn + muallaq chip'lar + oynasimon qidiruv
      kartasi - rang-barang, zamonaviy fintech/startup uslubi. ---- */
-  .hero-vivid { position: relative; overflow: hidden; padding: 56px 0 44px; }
-  .hero-blobs { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+  /* MUHIM: overflow:hidden SHU YERDA EMAS, .hero-blobs'ning o'zida -
+     aks holda qidiruv kartasidagi (hudud/xona) pastga ochiladigan
+     dropdown ro'yxati ham shu yerda kesilib, pastki bo'limlar
+     "tepasiga chiqib qolgandek" ko'rinardi. */
+  .hero-vivid { position: relative; padding: 56px 0 44px; }
+  .hero-blobs { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
   .blob { position: absolute; width: 480px; height: 480px; filter: blur(70px); opacity: .38; animation: blobFloat 18s ease-in-out infinite; }
   .blob-1 { color: var(--brand); top: -210px; left: -160px; }
   .blob-2 { color: var(--violet); top: -260px; right: -200px; width: 540px; height: 540px; animation-delay: -6s; }

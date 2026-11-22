@@ -262,8 +262,6 @@ def _listings_page(
 <body>
 {render_header(lang, canonical_path)}
 
-{banner_html}
-
 <section class="hero-vivid">
   <div class="hero-blobs" aria-hidden="true">
     <svg class="blob blob-1" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M44.7,-59.4C56.9,-50.7,65,-35.9,69.8,-19.9C74.6,-3.9,76.2,13.3,70.6,27.7C65,42.1,52.2,53.7,37.5,62.3C22.8,70.9,6.1,76.5,-11.1,76.9C-28.3,77.3,-46,72.5,-58.2,61.5C-70.4,50.5,-77.1,33.3,-79.1,15.4C-81.1,-2.5,-78.4,-21.1,-69.2,-35.8C-60,-50.5,-44.3,-61.3,-28.4,-69C-12.5,-76.7,3.6,-81.3,19.1,-78.3C34.6,-75.3,44.7,-59.4,44.7,-59.4Z" transform="translate(100 100)"/></svg>
@@ -303,6 +301,8 @@ def _listings_page(
       <button type="submit" class="chip-search-btn">{icon('search', 15)} {t(lang,'search_btn')}</button>
       </form>
     </div>
+
+    {banner_html}
   </div>
 </section>
 
