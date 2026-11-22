@@ -2,6 +2,18 @@
     /* Premium mulk-brend palitrasi: iliq korall (ishonch/harakat) + issiq oltin (premium/TOP urg'u) */
     --brand: #FF3B5C; --brand-dark: #E01E45; --brand-light: #FFEBEF;
     --gold: #D6960B; --gold-light: #FDF3DE;
+    /* Rang-barang/"jonli" aksent palitrasi - bento-kartalar, blob fonlar
+       va gradient urg'ular uchun (asosiy brend qizil/oltin bilan birga
+       ishlatiladi, uni ALMASHTIRMAYDI). */
+    --violet: #7C3AED; --violet-light: #F1E9FE;
+    --blue: #2563EB; --blue-light: #E8F0FE;
+    --teal: #0D9488; --teal-light: #E3F8F5;
+    --grad-warm: linear-gradient(135deg, #FF3B5C 0%, #FF7A59 55%, #D6960B 100%);
+    --grad-cool: linear-gradient(135deg, #7C3AED 0%, #2563EB 100%);
+    --grad-mesh:
+      radial-gradient(ellipse 820px 520px at 6% -8%, rgba(255,59,92,.16), transparent 60%),
+      radial-gradient(ellipse 680px 480px at 92% 4%, rgba(124,58,237,.14), transparent 60%),
+      radial-gradient(ellipse 620px 420px at 50% 100%, rgba(214,150,11,.10), transparent 60%);
     --ink: #101826; --ink-soft: #47526B; --muted: #6B7690; --line: #ECEEF3;
     --bg: #ffffff; --bg-soft: #F6F8FA;
     --radius-sm: 10px; --radius: 14px; --radius-lg: 24px; --radius-pill: 999px;
@@ -204,33 +216,48 @@
     .hbc-arrow { width: 28px; height: 28px; }
   }
 
-  /* ---- Bosh sahifa qidiruv bo'limi: yumshoq rangli "mesh" fon ustida
-     muallaq (floating) oq qidiruv kartasi - Airbnb/Zillow darajasidagi
-     zamonaviy uy-joy platformalarida keng tarqalgan naqsh, tekis kulrang
-     paneldan farqli chuqurlik va "premium" taassurot beradi. ---- */
-  .hero-search {
-    position: relative; overflow: hidden; padding: 48px 0 40px;
-    background:
-      radial-gradient(ellipse 900px 480px at 8% -10%, rgba(255,59,92,.10), transparent 60%),
-      radial-gradient(ellipse 700px 420px at 95% 0%, rgba(214,150,11,.12), transparent 60%),
-      var(--bg);
-    border-bottom: 1px solid var(--line);
+  /* ---- Bosh sahifa "jonli" (vivid) qahramon bo'limi: organik blob
+     shakllar + gradient matn + muallaq chip'lar + oynasimon qidiruv
+     kartasi - rang-barang, zamonaviy fintech/startup uslubi. ---- */
+  .hero-vivid { position: relative; overflow: hidden; padding: 56px 0 44px; }
+  .hero-blobs { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+  .blob { position: absolute; width: 480px; height: 480px; filter: blur(70px); opacity: .38; animation: blobFloat 18s ease-in-out infinite; }
+  .blob-1 { color: var(--brand); top: -210px; left: -160px; }
+  .blob-2 { color: var(--violet); top: -260px; right: -200px; width: 540px; height: 540px; animation-delay: -6s; }
+  .blob-3 { color: var(--gold); bottom: -280px; left: 30%; width: 460px; height: 460px; animation-delay: -11s; opacity: .35; }
+  @keyframes blobFloat {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(18px, -14px) scale(1.04); }
+    66% { transform: translate(-14px, 10px) scale(0.98); }
   }
-  .hero-search-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
-  .hero-search h1 {
-    font-family: var(--font-display); font-size: clamp(26px, 3.4vw, 40px); font-weight: 800; letter-spacing: -1px;
-    color: var(--ink); line-height: 1.12; max-width: 640px;
+  @media (prefers-reduced-motion: reduce) { .blob { animation: none; } }
+  .hero-vivid-inner { position: relative; z-index: 1; }
+  .hero-eyebrow {
+    display: inline-flex; align-items: center; gap: 7px; background: #fff; border: 1px solid var(--line);
+    border-radius: var(--radius-pill); padding: 7px 16px; font-size: 12.5px; font-weight: 700; color: var(--brand-dark);
+    box-shadow: var(--shadow-xs); margin-bottom: 18px;
   }
-  .map-link-btn {
-    display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; background: #fff; border: 1px solid var(--line);
-    border-radius: var(--radius-pill); padding: 9px 16px; font-size: 13px; font-weight: 700; color: var(--ink-soft);
-    box-shadow: var(--shadow-sm); transition: border-color .18s var(--ease), color .18s var(--ease), transform .18s var(--ease);
+  .hero-vivid-title {
+    font-family: var(--font-display); font-size: clamp(30px, 4.6vw, 52px); font-weight: 800; letter-spacing: -1.4px;
+    line-height: 1.08; max-width: 760px; margin-bottom: 20px;
+    background: var(--grad-warm); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
   }
-  .map-link-btn:hover { border-color: var(--brand); color: var(--brand); transform: translateY(-1px); }
+  @supports not (background-clip: text) { .hero-vivid-title { color: var(--brand); } }
+  .hero-floating-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 30px; }
+  .float-chip {
+    display: inline-flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: var(--radius-pill);
+    font-size: 12.5px; font-weight: 700; box-shadow: var(--shadow-sm); transition: transform .18s var(--ease);
+  }
+  .float-chip:hover { transform: translateY(-2px); }
+  .float-chip-warm { background: var(--brand-light); color: var(--brand-dark); }
+  .float-chip-cool { background: var(--violet-light); color: var(--violet); }
+  .float-chip-ghost { background: #fff; color: var(--ink-soft); border: 1px solid var(--line); }
 
   .search-card {
-    position: relative; background: #fff; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
-    border: 1px solid rgba(16,24,38,.04); padding: 18px 20px 20px;
+    position: relative; background: rgba(255,255,255,.82); backdrop-filter: saturate(180%) blur(16px);
+    -webkit-backdrop-filter: saturate(180%) blur(16px);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+    border: 1px solid rgba(255,255,255,.6); padding: 18px 20px 20px;
   }
 
   /* ---- Ijara turi segmentlangan tab qatori ---- */
@@ -293,8 +320,13 @@
   .cs-option:hover { background: var(--bg-soft); }
   .cs-option.selected { background: var(--brand-light); color: var(--brand-dark); font-weight: 700; }
   @media (max-width: 640px) {
-    .hero-search { padding: 28px 0 24px; }
-    .hero-search-top { margin-bottom: 14px; }
+    .hero-vivid { padding: 32px 0 26px; }
+    .blob { width: 300px; height: 300px; opacity: .35; }
+    .blob-2 { width: 320px; height: 320px; }
+    .hero-eyebrow { font-size: 11.5px; padding: 6px 13px; margin-bottom: 14px; }
+    .hero-vivid-title { margin-bottom: 14px; }
+    .hero-floating-row { margin-bottom: 20px; gap: 8px; }
+    .float-chip { padding: 7px 12px; font-size: 11.5px; }
     .search-card { padding: 14px 14px 16px; border-radius: var(--radius); }
     .rt-tab { padding: 9px 12px; font-size: 12px; }
     .search-card-row { border-radius: var(--radius-sm); }
@@ -335,21 +367,30 @@
   .tcc-price { font-size: 16px; font-weight: 800; letter-spacing: -0.3px; }
   .tcc-addr { font-size: 12px; font-weight: 500; opacity: .88; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  /* ============ STATS STRIP (yengil, kompakt) ============ */
-  .stats-strip { padding: 22px 0 2px; }
-  .stats-strip .inner {
-    background: #fff; border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); border: 1px solid var(--line);
-    padding: 20px 28px; display: flex; justify-content: space-around; gap: 20px; flex-wrap: wrap;
-    transition: box-shadow .3s var(--ease);
+  /* ============ BENTO STATISTIKA (3 ta rang-barang gradient karta) ============ */
+  .bento-stats { padding: 26px 0 4px; }
+  .bento-stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .bento-card {
+    position: relative; overflow: hidden; border-radius: var(--radius-lg); padding: 22px 20px;
+    color: #fff; transition: transform .25s var(--ease), box-shadow .25s var(--ease);
   }
-  .stats-strip .inner:hover { box-shadow: var(--shadow); }
-  .stat-item { text-align: center; }
-  .stat-item .num { font-size: 23px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px; }
-  @supports (-webkit-background-clip: text) or (background-clip: text) {
-    .stat-item .num { background: linear-gradient(135deg, var(--ink), var(--ink-soft)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .bento-card:hover { transform: translateY(-4px); }
+  .bento-card.bento-warm { background: var(--grad-warm); box-shadow: 0 14px 30px rgba(255,59,92,.22); }
+  .bento-card.bento-cool { background: var(--grad-cool); box-shadow: 0 14px 30px rgba(37,99,235,.22); }
+  .bento-card.bento-gold { background: linear-gradient(135deg, #D6960B, #F2B705); box-shadow: 0 14px 30px rgba(214,150,11,.22); }
+  .bento-icon {
+    width: 40px; height: 40px; border-radius: 12px; background: rgba(255,255,255,.22);
+    display: flex; align-items: center; justify-content: center; margin-bottom: 14px;
   }
-  .stat-item .lbl { font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 2px; }
-  @media (max-width: 640px) { .stats-strip .inner { padding: 14px 10px; gap: 8px; } .stat-item .num { font-size: 18px; } }
+  .bento-card .num { font-size: 27px; font-weight: 800; letter-spacing: -0.5px; }
+  .bento-card .lbl { font-size: 12.5px; font-weight: 600; opacity: .92; margin-top: 2px; }
+  @media (max-width: 640px) {
+    .bento-stats-grid { grid-template-columns: 1fr 1fr; }
+    .bento-card { padding: 16px 14px; }
+    .bento-card:nth-child(3) { grid-column: span 2; }
+    .bento-icon { width: 34px; height: 34px; margin-bottom: 10px; }
+    .bento-card .num { font-size: 21px; }
+  }
 
   /* ============ INSTAGRAM BANNER ============ */
   .insta-banner {

@@ -264,12 +264,21 @@ def _listings_page(
 
 {banner_html}
 
-<section class="hero-search">
-  <div class="wrap">
-    <div class="hero-search-top">
-      <h1>{hero_title_text}</h1>
-      <a href="/xarita" class="map-link-btn">{icon('map', 15)} {t(lang,'nav_map_title')}</a>
+<section class="hero-vivid">
+  <div class="hero-blobs" aria-hidden="true">
+    <svg class="blob blob-1" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M44.7,-59.4C56.9,-50.7,65,-35.9,69.8,-19.9C74.6,-3.9,76.2,13.3,70.6,27.7C65,42.1,52.2,53.7,37.5,62.3C22.8,70.9,6.1,76.5,-11.1,76.9C-28.3,77.3,-46,72.5,-58.2,61.5C-70.4,50.5,-77.1,33.3,-79.1,15.4C-81.1,-2.5,-78.4,-21.1,-69.2,-35.8C-60,-50.5,-44.3,-61.3,-28.4,-69C-12.5,-76.7,3.6,-81.3,19.1,-78.3C34.6,-75.3,44.7,-59.4,44.7,-59.4Z" transform="translate(100 100)"/></svg>
+    <svg class="blob blob-2" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M39.6,-51.2C50.5,-42.6,57.6,-28.9,61.8,-13.8C66,1.3,67.3,17.8,61,31.5C54.7,45.2,40.8,56.1,25.2,61.8C9.6,67.5,-7.7,68,-23.9,63.1C-40.1,58.2,-55.2,47.9,-63.5,33.4C-71.8,18.9,-73.3,0.2,-68.8,-16.2C-64.3,-32.6,-53.8,-46.7,-40.3,-55.2C-26.8,-63.7,-10.3,-66.6,3.9,-71.3C18.1,-76,28.7,-59.8,39.6,-51.2Z" transform="translate(100 100)"/></svg>
+    <svg class="blob blob-3" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M35.9,-48.2C46.1,-40.6,53.5,-28.6,58.1,-14.8C62.7,-1,64.5,14.6,59.1,27.6C53.7,40.6,41.1,51,26.8,58.1C12.5,65.2,-3.5,69,-18.8,65.9C-34.1,62.8,-48.7,52.8,-58.2,39.1C-67.7,25.4,-72.1,8,-69.8,-8.2C-67.5,-24.4,-58.5,-39.4,-45.8,-47.1C-33.1,-54.8,-16.6,-55.2,-1.2,-53.5C14.2,-51.8,25.7,-55.8,35.9,-48.2Z" transform="translate(100 100)"/></svg>
+  </div>
+  <div class="wrap hero-vivid-inner">
+    <div class="hero-eyebrow">{icon('sparkle', 14)} {t(lang,'hero_eyebrow')}</div>
+    <h1 class="hero-vivid-title">{hero_title_text}</h1>
+    <div class="hero-floating-row">
+      <div class="float-chip float-chip-warm">{icon('bolt', 14)} {stats['active']}+ {t(lang,'stat_active')}</div>
+      <div class="float-chip float-chip-cool">{icon('shield', 14)} {t(lang,'stat_nofee')}</div>
+      <a href="/xarita" class="float-chip float-chip-ghost">{icon('map', 14)} {t(lang,'nav_map_title')}</a>
     </div>
+
     <div class="search-card">
       <div class="rt-tabs">{rt_tabs_html}</div>
       <form class="search-card-row" method="get" action="/">
@@ -299,12 +308,22 @@ def _listings_page(
 
 {top_carousel_html}
 
-<div class="stats-strip">
-  <div class="wrap">
-    <div class="inner">
-      <div class="stat-item"><div class="num" data-count="{stats['active']}" data-suffix="+">{stats['active']}+</div><div class="lbl">{t(lang,'stat_active')}</div></div>
-      <div class="stat-item"><div class="num" data-count="{stats['users']}" data-suffix="+">{stats['users']}+</div><div class="lbl">{t(lang,'stat_users')}</div></div>
-      <div class="stat-item"><div class="num" data-count="100" data-suffix="%">100%</div><div class="lbl">{t(lang,'stat_nofee')}</div></div>
+<div class="bento-stats">
+  <div class="wrap bento-stats-grid">
+    <div class="bento-card bento-warm">
+      <div class="bento-icon">{icon('home', 22)}</div>
+      <div class="num" data-count="{stats['active']}" data-suffix="+">{stats['active']}+</div>
+      <div class="lbl">{t(lang,'stat_active')}</div>
+    </div>
+    <div class="bento-card bento-cool">
+      <div class="bento-icon">{icon('users', 22)}</div>
+      <div class="num" data-count="{stats['users']}" data-suffix="+">{stats['users']}+</div>
+      <div class="lbl">{t(lang,'stat_users')}</div>
+    </div>
+    <div class="bento-card bento-gold">
+      <div class="bento-icon">{icon('shield', 22)}</div>
+      <div class="num" data-count="100" data-suffix="%">100%</div>
+      <div class="lbl">{t(lang,'stat_nofee')}</div>
     </div>
   </div>
 </div>
