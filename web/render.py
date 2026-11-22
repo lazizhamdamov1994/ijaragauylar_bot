@@ -98,17 +98,6 @@ def display_address(l: dict) -> str:
 
 SUPPORTED_LANGS = ("uz", "ru", "en")
 DEFAULT_LANG = "uz"
-# MUHIM: Unicode emoji bayroqlar (masalan "U+1F1FA U+1F1FF") ko'plab
-# tizimlarda (ayniqsa Windows'ning eski versiyalari) HAQIQIY bayroq
-# sifatida EMAS, balki ikki harfli mamlakat kodi qutichasi sifatida
-# ko'rinadi - operatsion tizim shrifti bayroq glifini o'zida saqlamagan
-# bo'lsa shunday bo'ladi. Shuning uchun haqiqiy, platformadan mustaqil
-# vektor (SVG) bayroqlar ishlatiladi - barcha qurilmada bir xil ko'rinadi.
-LANG_FLAGS = {
-    "uz": """<svg viewBox="0 0 24 16" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="16" fill="#1EB53A"/><rect width="24" height="7.2" fill="#0099B5"/><rect y="6.8" width="24" height="0.6" fill="#CE1126"/><rect y="7.4" width="24" height="1.2" fill="#fff"/><rect y="8.6" width="24" height="0.6" fill="#CE1126"/><circle cx="5.2" cy="3.4" r="2.1" fill="#fff"/><circle cx="6" cy="2.9" r="1.8" fill="#0099B5"/><g fill="#fff"><circle cx="9" cy="1.6" r="0.35"/><circle cx="10.4" cy="1.6" r="0.35"/><circle cx="11.8" cy="1.6" r="0.35"/><circle cx="9" cy="3" r="0.35"/><circle cx="10.4" cy="3" r="0.35"/><circle cx="11.8" cy="3" r="0.35"/><circle cx="9" cy="4.4" r="0.35"/><circle cx="10.4" cy="4.4" r="0.35"/></g></svg>""",
-    "ru": """<svg viewBox="0 0 24 16" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="16" fill="#D52B1E"/><rect width="24" height="5.33" fill="#fff"/><rect y="5.33" width="24" height="5.33" fill="#0039A6"/></svg>""",
-    "en": """<svg viewBox="0 0 24 16" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="16" fill="#012169"/><path d="M0,0 L24,16 M24,0 L0,16" stroke="#fff" stroke-width="3.2"/><path d="M0,0 L24,16 M24,0 L0,16" stroke="#C8102E" stroke-width="1.3"/><path d="M12,0 V16 M0,8 H24" stroke="#fff" stroke-width="5.3"/><path d="M12,0 V16 M0,8 H24" stroke="#C8102E" stroke-width="3.2"/></svg>""",
-}
 LANG_META = {"uz": "O'zbekcha", "ru": "\u0420\u0443\u0441\u0441\u043a\u0438\u0439", "en": "English"}
 
 TRANSLATIONS = {
@@ -493,19 +482,20 @@ def t(lang: str, key: str, **kwargs) -> str:
     return text.format(**kwargs) if kwargs else text
 
 
+LANG_CODES = {"uz": "UZ", "ru": "RU", "en": "EN"}
+
+
 def lang_switcher_html(current_path: str, lang: str) -> str:
-    """Bayroqli til tanlash: joriy til bayrog'i tugma sifatida ko'rinadi,
-    bosilganda faqat QOLGAN tillar (bayroq + nom bilan) ochiladi."""
-    current_flag = LANG_FLAGS.get(lang, LANG_FLAGS[DEFAULT_LANG])
+    """Toza, matnga asoslangan til almashtirgich (segmented control) -
+    bayroq grafikalari ATAYIN ishlatilmaydi: kichik o'lchamda hatto
+    qo'lda chizilgan SVG bayroqlar ham xira/"arzon" ko'rinadi, uchta aniq
+    harf kodi esa har qanday o'lchamda keskin va professional chiqadi."""
     options = "".join(
-        f'<a href="/set-lang/{code}?next={urllib.parse.quote(current_path)}" class="lang-option">'
-        f'<span class="lang-flag">{LANG_FLAGS[code]}</span>{LANG_META[code]}</a>'
-        for code in SUPPORTED_LANGS if code != lang
+        f'<a href="/set-lang/{code}?next={urllib.parse.quote(current_path)}" '
+        f'class="lang-pill{" active" if code == lang else ""}">{LANG_CODES[code]}</a>'
+        for code in SUPPORTED_LANGS
     )
-    return f"""<div class="lang-switcher">
-  <button type="button" class="lang-current" onclick="event.stopPropagation();this.closest('.lang-switcher').classList.toggle('open')" aria-label="Til / Language">{current_flag}</button>
-  <div class="lang-menu">{options}</div>
-</div>"""
+    return f'<div class="lang-switcher">{options}</div>'
 
 
 @router.get("/set-lang/{lang}")
@@ -602,9 +592,6 @@ async function toggleFavorite(listingId, btn) {{
     btn.classList.toggle('active', !!data.favorited);
   }} catch (err) {{ /* jimgina e'tiborsiz qoldiriladi - tarmoq muammosi */ }}
 }}
-document.addEventListener('click', function() {{
-  document.querySelectorAll('.lang-switcher.open').forEach(function(el) {{ el.classList.remove('open'); }});
-}});
 // MUHIM: brauzerning "orqaga" tugmasi bosilganda sahifa bfcache'dan
 // (avvalgi holatida "muzlatilgan" holda) tiklanishi mumkin - bu holda
 // mobil menyu ochiq qolib ketishi yoki body scroll qulflangan holda
@@ -616,7 +603,6 @@ window.addEventListener('pageshow', function(event) {{
   document.documentElement.style.overflow = '';
   const lb = document.getElementById('lightbox');
   if (lb) lb.classList.remove('open');
-  document.querySelectorAll('.lang-switcher.open').forEach(function(el) {{ el.classList.remove('open'); }});
 }});
 </script>"""
 

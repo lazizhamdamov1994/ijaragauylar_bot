@@ -264,14 +264,15 @@ def _listings_page(
 
 {banner_html}
 
-<section class="control-bar">
+<section class="hero-search">
   <div class="wrap">
-    <div class="control-bar-head">
+    <div class="hero-search-top">
       <h1>{hero_title_text}</h1>
       <a href="/xarita" class="map-link-btn">{icon('map', 15)} {t(lang,'nav_map_title')}</a>
     </div>
-    <div class="rt-tabs">{rt_tabs_html}</div>
-    <form class="filter-chip-row" method="get" action="/">
+    <div class="search-card">
+      <div class="rt-tabs">{rt_tabs_html}</div>
+      <form class="search-card-row" method="get" action="/">
       <input type="hidden" name="lang" value="{lang}">
       <div class="cs-wrap chip-select">
         <label>{t(lang,'search_district_label')}</label>
@@ -291,7 +292,8 @@ def _listings_page(
         </select>
       </div>
       <button type="submit" class="chip-search-btn">{icon('search', 15)} {t(lang,'search_btn')}</button>
-    </form>
+      </form>
+    </div>
   </div>
 </section>
 
