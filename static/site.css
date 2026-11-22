@@ -308,6 +308,35 @@
   .stat-item .lbl { font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 2px; }
   @media (max-width: 640px) { .stats-strip .inner { padding: 14px 10px; gap: 8px; } .stat-item .num { font-size: 18px; } }
 
+  /* ============ INSTAGRAM BANNER ============ */
+  .insta-banner {
+    display: flex; align-items: center; gap: 14px; margin-top: 14px; padding: 16px 20px;
+    border-radius: var(--radius-lg); text-decoration: none; color: #fff;
+    background: linear-gradient(135deg, #4f5bd5, #962fbf, #d62976, #fa7e1e, #feda75);
+    box-shadow: var(--shadow-sm); transition: transform .2s var(--ease), box-shadow .2s var(--ease);
+  }
+  .insta-banner:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .insta-banner-icon {
+    flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.22);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .insta-banner-icon .ico svg { stroke: #fff; }
+  .insta-banner-text { flex: 1 1 auto; min-width: 0; }
+  .insta-banner-title { font-size: 15px; font-weight: 800; letter-spacing: -0.2px; }
+  .insta-banner-sub { font-size: 12.5px; opacity: .92; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .insta-banner-cta {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700;
+    padding: 8px 14px; border-radius: var(--radius-pill); background: rgba(255,255,255,.22); white-space: nowrap;
+  }
+  .insta-banner-cta .ico svg { stroke: #fff; }
+  @media (max-width: 640px) {
+    .insta-banner { padding: 12px 14px; gap: 10px; }
+    .insta-banner-icon { width: 36px; height: 36px; }
+    .insta-banner-title { font-size: 13.5px; }
+    .insta-banner-sub { font-size: 11px; }
+    .insta-banner-cta { padding: 8px 10px; font-size: 12px; }
+  }
+
   /* ============ MAIN CONTENT ============ */
   main { padding: 64px 0 72px; }
   @media (max-width: 640px) { main { padding: 40px 0 48px; } }
@@ -376,6 +405,10 @@
   .lc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
   .lc-title { font-size: 14.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
   .lc-meta { font-size: 13px; color: var(--muted); margin-top: 3px; }
+  .lc-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .lc-chip { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: var(--radius-pill); }
+  .lc-chip-student { background: #EEF2FF; color: #4338CA; }
+  .lc-chip-family { background: #ECFDF5; color: #047857; }
   .lc-price { font-size: 15px; font-weight: 800; margin-top: 5px; letter-spacing: -0.2px; }
   .lc-price-approx { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 6px; }
   @media (max-width: 640px) { .lc-title { font-size: 13px; } .lc-meta { font-size: 11.5px; } .lc-price { font-size: 13.5px; } .lc-price-approx { font-size: 11px; } }

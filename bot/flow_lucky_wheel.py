@@ -10,9 +10,10 @@ MUHIM: yutuq - mavjud `subscriptions` (Limit) jadvalidan foydalanadi
 (grant_bonus_subscription_days), shuning uchun bot/sayt/admin panelning
 BARCHA joylarida darhol, qo'shimcha kod yozmasdan ishlay boshlaydi.
 """
+import asyncio
 import logging
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
@@ -56,6 +57,27 @@ def _pick_prize_days() -> int:
 
 def _today_tashkent() -> str:
     return datetime.now(TASHKENT_TZ).strftime("%Y-%m-%d")
+
+
+# Ketma-ket necha kun o'ynagani uchun BUGUNGI qo'shimcha urinish soni
+# (streak - kecha va undan oldingi kunlarga qarab hisoblanadi, bugungi
+# birinchi urinishdan oldin). Doimiy qatnashuvchilarni rag'batlantirish
+# uchun - yangi jadval shart emas, mavjud lucky_wheel_spins'dan hisoblanadi.
+_STREAK_BONUS_TIERS = [(7, 2), (3, 1)]  # (kamida N kun ketma-ket, +M urinish)
+
+_LOSE_MESSAGES = [
+    "\U0001F3B0 Afsus, bu safar yutqazdingiz. \U0001F614",
+    "\U0001F3B0 Deyarli chiqdi! Keyingi urinishda omad tilaymiz. \U0001F340",
+    "\U0001F3B0 Bu safar bo'lmadi, lekin g'ildirak yana aylanadi! \U0001F504",
+]
+
+
+def _streak_bonus_attempts(user_id: int, today: str) -> int:
+    streak = get_lucky_wheel_streak_days(user_id, today)
+    for min_days, bonus in _STREAK_BONUS_TIERS:
+        if streak >= min_days:
+            return bonus
+    return 0
 
 
 async def omadpost_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -140,6 +162,48 @@ async def job_announce_lucky_wheel_winners(context: ContextTypes.DEFAULT_TYPE) -
         logger.exception("G'oliblar postini kanalga joylashda xatolik")
 
 
+async def omadreyting_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin buyrug'i: /omadreyting - haftalik g'oliblar reytingi postini
+    rejadagi vaqtni kutmasdan, HOZIR kanalga joylaydi (sinov uchun)."""
+    if not is_admin(update.effective_user.id):
+        return
+    if not CHANNEL_ID:
+        await update.message.reply_text("⚠️ CHANNEL_ID sozlanmagan.")
+        return
+    since = (datetime.now(TASHKENT_TZ) - timedelta(days=7)).strftime("%Y-%m-%d")
+    board = get_lucky_wheel_leaderboard(since)
+    if not board:
+        await update.message.reply_text("ℹ️ So'nggi 7 kunda hali g'olib yo'q - reyting posti uchun ma'lumot yetarli emas.")
+        return
+    await job_post_lucky_wheel_leaderboard(context, force=True)
+    await update.message.reply_text(f"✅ Haftalik reyting posti kanalga joylandi ({len(board)} ta foydalanuvchi).")
+
+
+async def job_post_lucky_wheel_leaderboard(context: ContextTypes.DEFAULT_TYPE, force: bool = False) -> None:
+    """Har hafta DUSHANBA kuni kanalga so'nggi 7 kunlik ENG KO'P yutgan
+    foydalanuvchilar reytingini joylaydi - ijtimoiy isbot (social proof)
+    yaratib, o'yinga qaytib kelishni rag'batlantiradi."""
+    if not CHANNEL_ID:
+        return
+    if not force and (get_setting("lucky_wheel_enabled", "1") or "1") != "1":
+        return
+    since = (datetime.now(TASHKENT_TZ) - timedelta(days=7)).strftime("%Y-%m-%d")
+    board = get_lucky_wheel_leaderboard(since)
+    if not board:
+        return
+    medals = ["\U0001F947", "\U0001F948", "\U0001F949"]
+    lines = ["\U0001F3C6 <b>Haftalik Omad g'ildiragi reytingi!</b>\n", "So'nggi 7 kunda eng ko'p yutgan foydalanuvchilar:\n"]
+    for i, row in enumerate(board):
+        name = esc((row.get("full_name") or "").strip() or (f"@{row['username']}" if row.get("username") else "Foydalanuvchi"))
+        mark = medals[i] if i < len(medals) else f"{i + 1}."
+        lines.append(f"{mark} {name} — <b>{row['total_days']} kun</b> ({row['wins']} marta yutgan)")
+    lines.append("\nSIZ ham shu reytingga tushishingiz mumkin — har kuni kanaldagi postdan omadingizni sinab ko'ring! \U0001F3B0")
+    try:
+        await context.bot.send_message(CHANNEL_ID, "\n".join(lines), parse_mode=ParseMode.HTML)
+    except Exception:
+        logger.exception("Haftalik reyting postini kanalga joylashda xatolik")
+
+
 async def lucky_wheel_spin(update: Update, context: ContextTypes.DEFAULT_TYPE, payload: str) -> None:
     """`/start wheel_<sana>` chuqur-havolasi orqali chaqiriladi - bitta
     urinishni hisoblaydi, yutuq chiqsa darhol Limit beradi."""
@@ -161,7 +225,9 @@ async def lucky_wheel_spin(update: Update, context: ContextTypes.DEFAULT_TYPE, p
         )
         return
 
-    max_attempts = int(get_setting("lucky_wheel_attempts_per_day", "3") or "3")
+    base_attempts = int(get_setting("lucky_wheel_attempts_per_day", "3") or "3")
+    streak_bonus = _streak_bonus_attempts(user.id, today)
+    max_attempts = base_attempts + streak_bonus
     used = count_today_lucky_wheel_spins(user.id, today)
     if used >= max_attempts:
         await update.message.reply_text(
@@ -170,24 +236,44 @@ async def lucky_wheel_spin(update: Update, context: ContextTypes.DEFAULT_TYPE, p
         )
         return
 
+    spin_msg = await update.message.reply_text("\U0001F3B0 G'ildirak aylanmoqda" + "." * 1)
+    try:
+        for dots in (2, 3):
+            await asyncio.sleep(0.4)
+            await context.bot.edit_message_text(
+                chat_id=spin_msg.chat_id, message_id=spin_msg.message_id,
+                text="\U0001F3B0 G'ildirak aylanmoqda" + "." * dots,
+            )
+        await asyncio.sleep(0.4)
+    except Exception:
+        pass
+
     prize_days = _pick_prize_days()
     record_lucky_wheel_spin(user.id, user.full_name, user.username, today, prize_days)
     remaining = max_attempts - used - 1
+    streak_line = (
+        f"\n\U0001F525 {streak_bonus} ta bonus urinish — ketma-ket o'ynaganingiz uchun!"
+        if streak_bonus and used == 0 else ""
+    )
 
     if prize_days <= 0:
-        await update.message.reply_text(
-            "\U0001F3B0 Afsus, bu safar yutqazdingiz. \U0001F614\n\n"
-            f"Qolgan urinishlaringiz: <b>{remaining}/{max_attempts}</b>.",
+        await context.bot.edit_message_text(
+            chat_id=spin_msg.chat_id, message_id=spin_msg.message_id,
+            text=(
+                f"{random.choice(_LOSE_MESSAGES)}\n\n"
+                f"Qolgan urinishlaringiz: <b>{remaining}/{max_attempts}</b>.{streak_line}"
+            ),
             parse_mode=ParseMode.HTML,
-            reply_markup=main_menu_keyboard(user.id),
         )
         return
 
     expire_at = grant_bonus_subscription_days(user.id, prize_days)
-    await update.message.reply_text(
-        f"\U0001F389 <b>Tabriklaymiz!</b> Siz <b>{prize_days} kunlik BEPUL Limit</b> yutib oldingiz!\n\n"
-        f"Limitingiz endi <b>{expire_at[:10]}</b> gacha amal qiladi.\n\n"
-        f"Qolgan urinishlaringiz: <b>{remaining}/{max_attempts}</b>.",
+    await context.bot.edit_message_text(
+        chat_id=spin_msg.chat_id, message_id=spin_msg.message_id,
+        text=(
+            f"\U0001F389 <b>Tabriklaymiz!</b> Siz <b>{prize_days} kunlik BEPUL Limit</b> yutib oldingiz!\n\n"
+            f"Limitingiz endi <b>{expire_at[:10]}</b> gacha amal qiladi.\n\n"
+            f"Qolgan urinishlaringiz: <b>{remaining}/{max_attempts}</b>.{streak_line}"
+        ),
         parse_mode=ParseMode.HTML,
-        reply_markup=main_menu_keyboard(user.id),
     )

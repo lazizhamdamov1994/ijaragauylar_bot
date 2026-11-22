@@ -39,6 +39,12 @@ from common.db import (  # noqa: E402
     record_lucky_wheel_spin,
     grant_bonus_subscription_days,
     get_lucky_wheel_winners,
+    get_lucky_wheel_streak_days,
+    get_lucky_wheel_leaderboard,
+    save_testimonial,
+    get_testimonial,
+    update_testimonial_status,
+    set_testimonial_channel_post,
 )
 
 
@@ -126,13 +132,14 @@ def save_listing(data: dict, price_charged: int) -> int:
     cur = conn.execute(
         """INSERT INTO listings
             (user_id, username, full_name, sender_phone, manzil, moljal, kimlarga, xona,
-             qulaylik, narx, telefon, photos, payment_receipt, price_charged, status, created_at,
+             qulaylik, narx, telefon, photos, videos, payment_receipt, price_charged, status, created_at,
              latitude, longitude, rental_type)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)""",
         (
             data["user_id"], data.get("username"), data.get("full_name"), data.get("sender_phone"),
             data["manzil"], data["moljal"], data["kimlarga"], data["xona"], data["qulaylik"], data["narx"],
-            data["telefon"], json.dumps(data["rasmlar"]), data.get("payment_receipt"), price_charged, now_str(),
+            data["telefon"], json.dumps(data["rasmlar"]), json.dumps(data.get("videolar") or []),
+            data.get("payment_receipt"), price_charged, now_str(),
             data.get("latitude"), data.get("longitude"), data.get("rental_type") or "uzoq_muddat",
         ),
     )
@@ -170,6 +177,10 @@ def get_listing(listing_id: int):
         return None
     d = dict(row)
     d["photos"] = json.loads(d["photos"] or "[]")
+    try:
+        d["videos"] = json.loads(d.get("videos") or "[]")
+    except (TypeError, ValueError):
+        d["videos"] = []
     return d
 
 

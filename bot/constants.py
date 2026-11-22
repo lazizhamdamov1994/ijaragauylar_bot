@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 TASHKENT_TZ = ZoneInfo("Asia/Tashkent")  # Barcha rejalashtirilgan vazifalar shu vaqt mintaqasida ishlaydi (server UTCda bo'lsa ham)
 MAX_PHOTOS = 10
+MAX_VIDEOS = 1  # e'longa bitta qisqa video (masalan uy bo'ylab aylanib ko'rsatish) biriktirish mumkin
+MAX_VIDEO_SIZE_BYTES = 50 * 1024 * 1024  # Telegram bot API orqali yuklab olish uchun amaliy xavfsiz chegara
 PAGE_SIZE = 10
 
 logging.basicConfig(
@@ -68,7 +70,8 @@ logger = logging.getLogger(__name__)
     BOOST_RECEIPT_WAIT,
     QUICK_SLIDESHOW_CONFIRM,
     VIEWING_TIME_CONFIRM,
-) = range(41)
+    FEEDBACK_TEXT,
+) = range(42)
 
 BTN_ELON = "\U0001F4DD E'lon berish"
 BTN_LISTINGS = "\U0001F4CB Mening e'lonlarim"
@@ -91,6 +94,7 @@ BTN_MODERATORS = "\U0001F46E Moderatorlar"
 BTN_FLAGGED = "\U0001F6A8 Shubhali faollik"
 BTN_USER_SEARCH = "\U0001F50E Qidirish"
 BTN_DISTRICT_ALIASES = "\U0001F5FA Tuman kalit so'zlari"
+BTN_FEEDBACK = "\U0001F4AC Fikr qoldirish"
 
 STEPS = [
     {

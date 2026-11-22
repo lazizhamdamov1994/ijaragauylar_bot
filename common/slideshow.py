@@ -303,12 +303,13 @@ def _draw_intro_frame(canvas: Image.Image, manzil: str, narx: str, xona: str = "
     return Image.alpha_composite(canvas, overlay).convert("RGB")
 
 
-def _zoompan_filter(idx: int, duration: float, zoom_in: bool) -> str:
-    """Bitta kadr uchun sekin "Ken Burns" zum filtri - toq/juft indeksларда
-    yo'nalish almashtiriladi (ichkariga/tashqariga), shu orqali barcha
-    kadrlar bir xil effektni takrorlamaydi. Manba avval PRESCALE marta
-    kattalashtiriladi - aks holda zoompan kichik manbadan kesganda harakat
-    "sakrab-sakrab" (jitter) chiqadi."""
+def _zoompan_filter_single(duration: float, zoom_in: bool) -> str:
+    """Bitta kadr uchun sekin "Ken Burns" zum filtri (ONE input, ONE
+    output - `-vf` bilan ishlatish uchun, `[idx:v]`/`[vN]` yorliqlarisiz).
+    Toq/juft kadrlarda yo'nalish almashtiriladi (ichkariga/tashqariga), shu
+    orqali barcha kadrlar bir xil effektni takrorlamaydi. Manba avval
+    PRESCALE marta kattalashtiriladi - aks holda zoompan kichik manbadan
+    kesganda harakat "sakrab-sakrab" (jitter) chiqadi."""
     d_frames = max(int(round(duration * FPS)), 1)
     rate = ZOOM_RANGE / d_frames
     zmax = 1 + ZOOM_RANGE
@@ -318,7 +319,7 @@ def _zoompan_filter(idx: int, duration: float, zoom_in: bool) -> str:
         z_expr = f"if(eq(on,0),{zmax:.4f},max(zoom-{rate:.6f},1.0))"
     pw, ph = int(CANVAS_W * PRESCALE), int(CANVAS_H * PRESCALE)
     return (
-        f"[{idx}:v]scale={pw}:{ph}:flags=lanczos,setsar=1,"
+        f"scale={pw}:{ph}:flags=lanczos,setsar=1,"
         f"zoompan=z='{z_expr}':d={d_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
         f"s={CANVAS_W}x{CANVAS_H}:fps={FPS},"
         # MUHIM: "-loop 1 -i rasm.jpg" standart 25 fps bilan cheksiz "kadr"
@@ -326,30 +327,48 @@ def _zoompan_filter(idx: int, duration: float, zoom_in: bool) -> str:
         # qo'shadi - shu sabab trim BO'LMASA video kutilganidan O'NLAB
         # MARTA uzun chiqadi (haqiqiy videoda sinovdan o'tkazib topilgan
         # xato). trim orqali chiqish ANIQ d ta kadr bilan cheklanadi.
-        f"trim=start_frame=0:end_frame={d_frames},setpts=PTS-STARTPTS,format=yuv420p[v{idx}]"
+        f"trim=start_frame=0:end_frame={d_frames},setpts=PTS-STARTPTS,format=yuv420p"
     )
 
 
-def _build_video_filter_complex(frame_paths: list[tuple[str, float]]) -> tuple[str, str]:
-    """Har bir kadrga Ken Burns zum filtrini qo'llaydi, keyin ularni
-    ketma-ket yumshoq eritib o'tish (xfade) bilan bog'laydi. Statik
-    rasmlar ketma-ketligi o'rniga haqiqiy, professional harakatli video
-    hosil qiladi - HAMMASI ffmpeg'ning o'zida, tashqi AI/GPU xizmatisiz.
-    (filter_complex_matni, oxirgi_oqim_nomi) qaytaradi."""
-    filters = [_zoompan_filter(idx, dur, zoom_in=(idx % 2 == 0)) for idx, (_, dur) in enumerate(frame_paths)]
-    n = len(frame_paths)
-    if n == 1:
-        return ";".join(filters), "v0"
+_ENCODE_ARGS = ["-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-an", "-pix_fmt", "yuv420p"]
 
-    prev_label = "v0"
-    cum = 0.0
-    for j in range(1, n):
-        cum += frame_paths[j - 1][1]
-        offset = cum - j * XFADE_SECONDS
-        out_label = f"vx{j}" if j < n - 1 else "vout"
-        filters.append(f"[{prev_label}][v{j}]xfade=transition=fade:duration={XFADE_SECONDS}:offset={offset:.3f}[{out_label}]")
-        prev_label = out_label
-    return ";".join(filters), prev_label
+
+async def _run_ffmpeg(cmd: list[str]) -> bool:
+    proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    _, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        logger.error("ffmpeg xatolik (kod %s): %s", proc.returncode, stderr.decode(errors="ignore")[-800:])
+        return False
+    return True
+
+
+async def _render_single_clip(frame_path: str, duration: float, zoom_in: bool, output_path: str) -> bool:
+    """Bitta kadrni (Ken Burns zum bilan) o'zining mustaqil, qisqa MP4
+    klipiga aylantiradi - faqat BITTA manba ochiladi, shuning uchun
+    xotira sarfi rasmlar sonidan QAT'IY NAZAR doimiy bo'ladi."""
+    cmd = [
+        "ffmpeg", "-y", "-loop", "1", "-t", f"{duration}", "-i", frame_path,
+        "-vf", _zoompan_filter_single(duration, zoom_in),
+        *_ENCODE_ARGS, output_path,
+    ]
+    return await _run_ffmpeg(cmd)
+
+
+async def _xfade_merge(running_path: str, running_duration: float, next_clip_path: str, output_path: str, is_final: bool) -> bool:
+    """Ikkita TAYYOR (allaqachon kodlangan) klipni - "hozirgacha yig'ilgan
+    video" va "keyingi kadr" - bitta yumshoq eritib o'tish bilan qo'shadi.
+    MUHIM: bu yerda ham FAQAT ikkita manba ochiladi (avvalgi N-input
+    filter_complex'dan farqli o'laroq, u yerda BARCHA rasmlar bir vaqtning
+    o'zida ochilardi - aynan shu narsa kichik VPS'da 5+ rasmda xotirani
+    tugatib, video yasalmay qolishiga sabab bo'lgan)."""
+    offset = max(running_duration - XFADE_SECONDS, 0.0)
+    filter_str = f"[0:v][1:v]xfade=transition=fade:duration={XFADE_SECONDS}:offset={offset:.3f}[vout]"
+    cmd = ["ffmpeg", "-y", "-i", running_path, "-i", next_clip_path, "-filter_complex", filter_str, "-map", "[vout]", *_ENCODE_ARGS]
+    if is_final:
+        cmd += ["-movflags", "+faststart"]
+    cmd.append(output_path)
+    return await _run_ffmpeg(cmd)
 
 
 def _prepare_frames(photos: list[bytes], manzil: str, narx: str, xona: str, tmpdir: str) -> list[tuple[str, float]]:
@@ -405,29 +424,36 @@ async def build_slideshow_video(photos: list[bytes], manzil: str, narx: str, xon
                 if not frame_paths:
                     return None
 
-                filter_complex, final_label = _build_video_filter_complex(frame_paths)
+                # MUHIM (kichik VPS uchun resurs tejash): avval BARCHA kadrlar
+                # bitta N-input filter_complex'ga ochilardi - bu kam rasmda
+                # (~5 tagacha) ishlardi, lekin ko'proq rasmda kichik VPS'ning
+                # xotirasi yetmay, video UMUMAN yasalmay qolardi. Endi har bir
+                # kadr ALOHIDA, mustaqil klip sifatida render qilinadi, keyin
+                # ketma-ket (har safar FAQAT 2 ta manba bilan) bir-biriga
+                # yumshoq qo'shiladi - xotira sarfi endi 10 ta ham, 20 ta ham
+                # rasmda BIR XIL (doimiy) bo'ladi.
+                clip_paths = []
+                for idx, (frame_path, duration) in enumerate(frame_paths):
+                    clip_path = os.path.join(tmpdir, f"clip_{idx:02d}.mp4")
+                    if not await _render_single_clip(frame_path, duration, zoom_in=(idx % 2 == 0), output_path=clip_path):
+                        return None
+                    clip_paths.append(clip_path)
 
-                output_path = os.path.join(tmpdir, "output.mp4")
-                cmd = ["ffmpeg", "-y"]
-                for path, duration in frame_paths:
-                    cmd += ["-loop", "1", "-t", f"{duration}", "-i", path]
-                cmd += [
-                    "-filter_complex", filter_complex,
-                    "-map", f"[{final_label}]",
-                    "-r", str(FPS),
-                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-                    "-an", "-movflags", "+faststart", "-pix_fmt", "yuv420p",
-                    output_path,
-                ]
-                proc = await asyncio.create_subprocess_exec(
-                    *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-                )
-                _, stderr = await proc.communicate()
-                if proc.returncode != 0:
-                    logger.error("ffmpeg slaydshov yasashda xatolik: %s", stderr.decode(errors="ignore")[-800:])
-                    return None
+                if len(clip_paths) == 1:
+                    with open(clip_paths[0], "rb") as f:
+                        return f.read()
 
-                with open(output_path, "rb") as f:
+                running_path = clip_paths[0]
+                running_duration = frame_paths[0][1]
+                for i in range(1, len(clip_paths)):
+                    is_final = i == len(clip_paths) - 1
+                    merged_path = os.path.join(tmpdir, f"merged_{i:02d}.mp4")
+                    if not await _xfade_merge(running_path, running_duration, clip_paths[i], merged_path, is_final):
+                        return None
+                    running_duration = running_duration + frame_paths[i][1] - XFADE_SECONDS
+                    running_path = merged_path
+
+                with open(running_path, "rb") as f:
                     return f.read()
         except FileNotFoundError:
             logger.error("ffmpeg serverda o'rnatilmagan - slaydshov video yasab bo'lmadi ('apt install ffmpeg' kerak)")

@@ -302,6 +302,17 @@ def _listings_page(
   </div>
 </div>
 
+<div class="wrap">
+  <a href="{INSTAGRAM_URL}" target="_blank" rel="noopener" class="insta-banner">
+    <div class="insta-banner-icon">{icon('instagram', 26)}</div>
+    <div class="insta-banner-text">
+      <div class="insta-banner-title">{t(lang,'insta_banner_title')}</div>
+      <div class="insta-banner-sub">{t(lang,'insta_banner_sub')}</div>
+    </div>
+    <div class="insta-banner-cta">{t(lang,'insta_banner_cta')} {icon('chevron_right', 14)}</div>
+  </a>
+</div>
+
 <main class="wrap">
   <div class="section-head">
     <div class="section-head-title">

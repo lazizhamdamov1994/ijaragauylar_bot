@@ -198,6 +198,12 @@ def init_schema() -> None:
     conn.execute("""CREATE TABLE IF NOT EXISTS lucky_wheel_spins (
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, full_name TEXT, username TEXT,
         spin_date TEXT NOT NULL, prize_days INTEGER NOT NULL DEFAULT 0, created_at TEXT)""")
+    # Mijozlar fikri (testimonial) - foydalanuvchi yuborgan fikr, admin
+    # tasdiqlasa kanalga post sifatida joylash imkoni bilan.
+    conn.execute("""CREATE TABLE IF NOT EXISTS testimonials (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, full_name TEXT, username TEXT,
+        text TEXT, photo_file_id TEXT, status TEXT NOT NULL DEFAULT 'pending',
+        channel_message_id INTEGER, created_at TEXT, reviewed_at TEXT)""")
     conn.commit()
     conn.close()
 
@@ -215,7 +221,7 @@ def migrate_schema() -> None:
             "ai_scam_warning": "TEXT", "receipt_phash": "TEXT",
             "buttons_fixed": "INTEGER DEFAULT 0", "latitude": "REAL", "longitude": "REAL",
             "category": "TEXT DEFAULT 'egadan'", "rental_type": "TEXT DEFAULT 'uzoq_muddat'",
-            "source": "TEXT DEFAULT 'bot'",
+            "source": "TEXT DEFAULT 'bot'", "videos": "TEXT",
         }),
         ("subscriptions", {"months": "INTEGER DEFAULT 1", "price_charged": "INTEGER", "target_listing_id": "INTEGER", "receipt_warning": "TEXT", "receipt_phash": "TEXT"}),
         ("valuation_payments", {"receipt_warning": "TEXT", "receipt_phash": "TEXT"}),
@@ -312,6 +318,78 @@ def get_lucky_wheel_winners(spin_date: str) -> list:
         "SELECT user_id, full_name, username, prize_days FROM lucky_wheel_spins "
         "WHERE spin_date = ? AND prize_days > 0 ORDER BY prize_days DESC, id ASC",
         (spin_date,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_lucky_wheel_streak_days(user_id: int, today: str) -> int:
+    """Foydalanuvchi BUGUNGI kundan OLDIN nechta kun ketma-ket o'yinda
+    qatnashganini hisoblaydi (bugungi kun hisobga olinmaydi - bu funksiya
+    birinchi urinishdan oldin chaqiriladi, shuning uchun "bugun" hali
+    hisobga kirmaydi). Natija - bugun qo'shimcha urinish berish uchun
+    ishlatiladi (streak bonus)."""
+    conn = db()
+    rows = conn.execute(
+        "SELECT DISTINCT spin_date FROM lucky_wheel_spins WHERE user_id = ? ORDER BY spin_date DESC LIMIT 60",
+        (user_id,),
+    ).fetchall()
+    conn.close()
+    dates = {r["spin_date"] for r in rows}
+    streak = 0
+    cursor = datetime.strptime(today, "%Y-%m-%d") - timedelta(days=1)
+    while cursor.strftime("%Y-%m-%d") in dates:
+        streak += 1
+        cursor -= timedelta(days=1)
+    return streak
+
+
+def save_testimonial(user_id: int, full_name: str, username: str, text: str, photo_file_id: str = None) -> int:
+    conn = db()
+    cur = conn.execute(
+        "INSERT INTO testimonials (user_id, full_name, username, text, photo_file_id, status, created_at) "
+        "VALUES (?, ?, ?, ?, ?, 'pending', ?)",
+        (user_id, full_name, username, text, photo_file_id, now_str()),
+    )
+    conn.commit()
+    testimonial_id = cur.lastrowid
+    conn.close()
+    return testimonial_id
+
+
+def get_testimonial(testimonial_id: int):
+    conn = db()
+    row = conn.execute("SELECT * FROM testimonials WHERE id = ?", (testimonial_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_testimonial_status(testimonial_id: int, status: str) -> None:
+    conn = db()
+    conn.execute(
+        "UPDATE testimonials SET status = ?, reviewed_at = ? WHERE id = ?",
+        (status, now_str(), testimonial_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def set_testimonial_channel_post(testimonial_id: int, message_id: int) -> None:
+    conn = db()
+    conn.execute("UPDATE testimonials SET channel_message_id = ? WHERE id = ?", (message_id, testimonial_id))
+    conn.commit()
+    conn.close()
+
+
+def get_lucky_wheel_leaderboard(since_date: str, limit: int = 5) -> list:
+    """Berilgan sanadan buyon ENG KO'P yutgan foydalanuvchilar (umumiy
+    yutilgan kun soni bo'yicha) - haftalik/oylik reyting posti uchun."""
+    conn = db()
+    rows = conn.execute(
+        "SELECT user_id, full_name, username, COUNT(*) wins, SUM(prize_days) total_days "
+        "FROM lucky_wheel_spins WHERE spin_date >= ? AND prize_days > 0 "
+        "GROUP BY user_id ORDER BY total_days DESC, wins DESC LIMIT ?",
+        (since_date, limit),
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]

@@ -417,10 +417,26 @@ async def rasm_qabul(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update_photo_status(update, context)
         return RASMLAR
 
+    if update.message.video:
+        videolar = context.user_data.setdefault("videolar", [])
+        if len(videolar) >= MAX_VIDEOS:
+            await update.message.reply_text(f"\u26a0\ufe0f Maksimal {MAX_VIDEOS} ta video yuborish mumkin.")
+            return RASMLAR
+        video = update.message.video
+        if video.file_size and video.file_size > MAX_VIDEO_SIZE_BYTES:
+            await update.message.reply_text(
+                f"\u26a0\ufe0f Video juda katta ({video.file_size // (1024*1024)}MB). "
+                f"{MAX_VIDEO_SIZE_BYTES // (1024*1024)}MB dan kichik video yuboring."
+            )
+            return RASMLAR
+        videolar.append(video.file_id)
+        await update_photo_status(update, context)
+        return RASMLAR
+
     if await try_escape_to_menu(update, context):
         return ConversationHandler.END
 
-    await update.message.reply_text("\u26a0\ufe0f Iltimos, RASM yuboring yoki yuqoridagi tugmalardan foydalaning.")
+    await update.message.reply_text("\u26a0\ufe0f Iltimos, RASM yoki VIDEO yuboring, yoki yuqoridagi tugmalardan foydalaning.")
     return RASMLAR
 
 

@@ -95,6 +95,23 @@ def is_trusted_poster(user_id) -> bool:
     return count_reports_received(user_id) == 0
 
 
+# MUHIM: "Kimlarga" matnida shu kalit so'zlar uchrasa, alohida, ko'zga
+# yaqqol tashlanadigan belgi (badge) sifatida ham ko'rsatiladi - foydalanuvchi
+# erkin yozgan matnni o'qib o'tirmasdan, BIR QARASHDA "bu menga mosmi"
+# degan savolga javob topishi uchun.
+_KIMLARGA_BADGES = [
+    (("talaba",), "\U0001F393 <b>Talabalar uchun qulay</b>"),
+    (("oila", "oilaviy"), "\U0001F46A <b>Oila uchun mos</b>"),
+    (("ishlaydigan",), "\U0001F4BC <b>Ishlaydiganlar uchun</b>"),
+]
+
+
+def _kimlarga_badge_line(kimlarga: str) -> str:
+    low = (kimlarga or "").lower()
+    badges = [label for keywords, label in _KIMLARGA_BADGES if any(k in low for k in keywords)]
+    return ("\n" + "\n".join(badges)) if badges else ""
+
+
 def build_caption(data: dict, bot_username: str = None) -> str:
     bugun = datetime.now().strftime("%d.%m.%Y")
     trust_badge = "\n\u2705 <b>Ishonchli e'lon beruvchi</b>" if is_trusted_poster(data.get("user_id")) else ""
@@ -121,13 +138,14 @@ def build_caption(data: dict, bot_username: str = None) -> str:
             f"\U0001F4C5 {bugun}\n\n"
             f"@{CHANNEL_USERNAME} \u2014 uyingizni maklersiz bering va oling!"
         )
+    kimlarga_badge = _kimlarga_badge_line(data.get("kimlarga"))
     return (
-        f"\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>{trust_badge}{category_badge}{rental_type_badge}{location_badge}\n\n"
+        f"\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>{trust_badge}{category_badge}{rental_type_badge}{kimlarga_badge}{location_badge}\n\n"
         f"\U0001F4CD <b>Manzil:</b> {esc(data['manzil'])}\n"
         f"\U0001F3AF <b>Mo'ljal:</b> {esc(data['moljal'])}\n"
         f"\U0001F465 <b>Kimlarga:</b> {esc(data['kimlarga'])}\n"
         f"\U0001F6CF <b>Xonalar soni:</b> {esc(data['xona'])}\n\n"
-        f"\u2705 <b>Qulayliklar:</b>\n{esc(data['qulaylik'])}\n\n"
+        f"\u2705 <b>Qulayliklar:</b>\n<blockquote expandable>{esc(data['qulaylik'])}</blockquote>\n\n"
         f"\U0001F4B0 <b>Narxi:</b> {esc(data['narx'])}\n\n"
         f"\U0001F4C5 {bugun}\n\n"
         f"@{CHANNEL_USERNAME} \u2014 uyingizni maklersiz bering va oling!"
@@ -193,7 +211,7 @@ def main_menu_keyboard(user_id: int) -> ReplyKeyboardMarkup:
     dashboard_https_ready = DASHBOARD_URL.startswith("https://")
     if dashboard_https_ready:
         rows.append([KeyboardButton(BTN_PUBLIC_MAP, web_app=WebAppInfo(url=f"{DASHBOARD_URL}/xarita"))])
-    rows += [[BTN_LISTINGS, BTN_SUBSCRIPTION], [BTN_CHECK_PHONE, BTN_HELP], [BTN_LOCATION_ALERT, BTN_MY_LOCATIONS]]
+    rows += [[BTN_LISTINGS, BTN_SUBSCRIPTION], [BTN_CHECK_PHONE, BTN_HELP], [BTN_LOCATION_ALERT, BTN_MY_LOCATIONS], [BTN_FEEDBACK]]
     if is_admin(user_id):
         rows.append([BTN_STATS, BTN_SUBSCRIBERS])
         rows.append([BTN_SETTINGS, BTN_MODERATORS])
@@ -236,13 +254,17 @@ async def render_step(update: Update, context: ContextTypes.DEFAULT_TYPE, idx: i
 async def update_photo_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     photos = context.user_data.setdefault("rasmlar", [])
-    n = len(photos)
-    lines = ["\U0001F4F8 Uyning rasmlarini yuboring (1\u201310 ta)."]
+    videos = context.user_data.setdefault("videolar", [])
+    n, nv = len(photos), len(videos)
+    lines = [f"\U0001F4F8 Uyning rasmlarini (1\u2013{MAX_PHOTOS} ta) va xohlasangiz bitta qisqa videosini yuboring."]
     lines.append(f"\n{n}/{MAX_PHOTOS} rasm qabul qilindi." if n > 0 else "\nKamida 1 ta rasm yuboring.")
+    if nv > 0:
+        lines.append(f"\n\U0001F3A5 Video qabul qilindi.")
     text = f"{''.join(lines)}\n\n<i>Bosqich 9/{TOTAL_DISPLAY_STEPS}</i>"
     rows = []
     if n > 0:
-        rows.append([InlineKeyboardButton(f"\u2705 Tayyor ({n} ta) \u2014 Davom etish", callback_data="rasm_tayyor")])
+        ready_label = f"\u2705 Tayyor ({n} ta rasm" + (" + video" if nv > 0 else "") + ") \u2014 Davom etish"
+        rows.append([InlineKeyboardButton(ready_label, callback_data="rasm_tayyor")])
     nav = [InlineKeyboardButton("\u2b05\ufe0f Orqaga", callback_data="nav_back_to_location"), InlineKeyboardButton("\u274c Bekor qilish", callback_data="nav_cancel")]
     rows.append(nav)
     markup = InlineKeyboardMarkup(rows)

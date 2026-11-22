@@ -62,6 +62,7 @@ from bot.jobs import *  # noqa: F401,F403
 from bot.flow_lucky_wheel import *  # noqa: F401,F403
 from bot.flow_digest import *  # noqa: F401,F403
 from bot.flow_boost import *  # noqa: F401,F403
+from bot.flow_testimonial import *  # noqa: F401,F403
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,19 @@ def main():
         states={CHECK_PHONE_WAIT: [CallbackQueryHandler(check_phone_cancel, pattern="^nav_cancel$"), MessageHandler(filters.TEXT & ~filters.COMMAND, check_phone_receive)]},
         fallbacks=[CallbackQueryHandler(check_phone_cancel, pattern="^nav_cancel$")],
         name="check_phone_conv",
+        persistent=False,
+    )
+
+    feedback_conv = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex(f"^{re.escape(BTN_FEEDBACK)}$"), feedback_entry)],
+        states={
+            FEEDBACK_TEXT: [
+                CallbackQueryHandler(feedback_cancel, pattern="^nav_cancel$"),
+                MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, feedback_received),
+            ],
+        },
+        fallbacks=[CallbackQueryHandler(feedback_cancel, pattern="^nav_cancel$")],
+        name="feedback_conv",
         persistent=False,
     )
 
@@ -293,6 +307,8 @@ def main():
     register_conv("sub_conv", sub_conv)
     app.add_handler(check_phone_conv)
     register_conv("check_phone_conv", check_phone_conv)
+    app.add_handler(feedback_conv)
+    register_conv("feedback_conv", feedback_conv)
     # MUHIM: viewing_conv o'zining "/start viewing_<id>" kirish nuqtasiga ega
     # (elon_conv/sub_conv/check_phone_conv kabi) - shuning uchun bu yerda,
     # GENERIK "start" handleridan (pastroqda) OLDIN ro'yxatdan o'tkazilishi
@@ -304,6 +320,7 @@ def main():
     app.add_handler(CommandHandler("setcategory", setcategory_command))
     app.add_handler(CommandHandler("omadpost", omadpost_command))
     app.add_handler(CommandHandler("omadgoliblar", omadgoliblar_command))
+    app.add_handler(CommandHandler("omadreyting", omadreyting_command))
     app.add_handler(CommandHandler("postmap", postmap_command))
     app.add_handler(CommandHandler("desktop_token", desktop_token_command))
     app.add_handler(CommandHandler("desktop_token_revoke", desktop_token_revoke_command))
@@ -326,6 +343,9 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_approve, pattern=r"^admin_approve_(listing|sub)_\d+$"))
     app.add_handler(CallbackQueryHandler(boostpay_approve_router, pattern=r"^boostpay_approve_\d+$"))
     app.add_handler(CallbackQueryHandler(boostpay_reject_router, pattern=r"^boostpay_reject_\d+$"))
+    app.add_handler(CallbackQueryHandler(testimonial_approve_post_router, pattern=r"^fbapprovepost_\d+$"))
+    app.add_handler(CallbackQueryHandler(testimonial_approve_router, pattern=r"^fbapprove_\d+$"))
+    app.add_handler(CallbackQueryHandler(testimonial_reject_router, pattern=r"^fbreject_\d+$"))
     app.add_handler(CallbackQueryHandler(digest_approve_router, pattern=r"^digest_approve_\d+$"))
     app.add_handler(CallbackQueryHandler(digest_reject_router, pattern=r"^digest_reject_\d+$"))
     app.add_handler(CallbackQueryHandler(subpage_router, pattern=r"^subpage_\d+$"))
@@ -385,6 +405,9 @@ def main():
         lucky_wheel_hour = int(get_setting("lucky_wheel_post_hour", "19") or "19")
         app.job_queue.run_daily(job_post_lucky_wheel, time=dtime(hour=lucky_wheel_hour, minute=0, tzinfo=TASHKENT_TZ))
         app.job_queue.run_daily(job_announce_lucky_wheel_winners, time=dtime(hour=23, minute=45, tzinfo=TASHKENT_TZ))
+        # Haftalik g'oliblar reytingi - DUSHANBA kuni (PTB'da 0-6 = yakshanba-shanba,
+        # demak dushanba = 1).
+        app.job_queue.run_daily(job_post_lucky_wheel_leaderboard, time=dtime(hour=20, minute=0, tzinfo=TASHKENT_TZ), days=(1,))
         # job_promote_limit va job_repost_paid_listings o'zlari admin
         # sozlagan oraliqni (promote_limit_interval_hours /
         # paid_repost_interval_hours, Sozlamalar) hisobga olib ishlaydi -

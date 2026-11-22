@@ -142,6 +142,9 @@ TRANSLATIONS = {
     "stat_active": {"uz": "Faol e'lon", "ru": "\u0410\u043a\u0442\u0438\u0432\u043d\u044b\u0445 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u0439", "en": "Active listings"},
     "stat_users": {"uz": "Foydalanuvchi", "ru": "\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0435\u0439", "en": "Users"},
     "stat_nofee": {"uz": "Maklersiz", "ru": "\u0411\u0435\u0437 \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u0438", "en": "Commission-free"},
+    "insta_banner_title": {"uz": "Bizni Instagramda kuzatib boring", "ru": "\u0421\u043b\u0435\u0434\u0438\u0442\u0435 \u0437\u0430 \u043d\u0430\u043c\u0438 \u0432 Instagram", "en": "Follow us on Instagram"},
+    "insta_banner_sub": {"uz": "Yangi e'lonlar, ijara maslahatlari va omadli g'ildirak natijalari \u2014 har kuni stories'da", "ru": "\u041d\u043e\u0432\u044b\u0435 \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d\u0438\u044f \u0438 \u0441\u043e\u0432\u0435\u0442\u044b \u043f\u043e \u0430\u0440\u0435\u043d\u0434\u0435 \u043a\u0430\u0436\u0434\u044b\u0439 \u0434\u0435\u043d\u044c \u0432 stories", "en": "New listings and rental tips every day in stories"},
+    "insta_banner_cta": {"uz": "Obuna bo'lish", "ru": "\u041f\u043e\u0434\u043f\u0438\u0441\u0430\u0442\u044c\u0441\u044f", "en": "Follow"},
     "rt_all": {"uz": "Barchasi", "ru": "\u0412\u0441\u0435", "en": "All"},
     "rt_uzoq_muddat": {"uz": "Uzoq muddat", "ru": "\u0414\u043e\u043b\u0433\u043e\u0441\u0440\u043e\u0447\u043d\u043e", "en": "Long-term"},
     "rt_kunlik": {"uz": "Kunlik", "ru": "\u041f\u043e\u0441\u0443\u0442\u043e\u0447\u043d\u043e", "en": "Daily"},
@@ -747,6 +750,17 @@ def render_listing_card(l: dict, favorited_ids: frozenset = frozenset()) -> str:
         cat_badge = f'<span class="lc-badge {css_cls}" style="{"left:auto;right:10px;" if paid_badge else ""}">{label}</span>'
     xona = (l.get("xona") or "").strip()
     kimlarga = (l.get("kimlarga") or "").strip()
+    # MUHIM: bot/helpers.py'dagi _kimlarga_badge_line BILAN BIR XIL kalit
+    # so'zlar - lekin bu yerda web karta uchun KICHIK, alohida rangli
+    # "chip" sifatida (photo ustidagi TOP/kategoriya belgilari bilan
+    # bir joyga sig'ib ketmasligi uchun, matn qismida ko'rsatiladi).
+    kimlarga_low = kimlarga.lower()
+    audience_chips = []
+    if "talaba" in kimlarga_low:
+        audience_chips.append('<span class="lc-chip lc-chip-student">🎓 Talabalar</span>')
+    if "oila" in kimlarga_low:
+        audience_chips.append('<span class="lc-chip lc-chip-family">👪 Oila</span>')
+    audience_html = f'<div class="lc-chips">{"".join(audience_chips)}</div>' if audience_chips else ""
     meta_parts = []
     if l.get("is_quick"):
         meta_parts.append('⚡ Tezkor e\'lon')
@@ -774,6 +788,7 @@ def render_listing_card(l: dict, favorited_ids: frozenset = frozenset()) -> str:
     <div class="lc-top">
       <div class="lc-title">{esc_html(display_address(l))}</div>
     </div>
+    {audience_html}
     {meta_html}
     <div class="lc-price">{esc_html(l.get('narx') or '')}{f'<span class="lc-price-approx">{esc_html(l["narx_approx"])}</span>' if l.get('narx_approx') else ''}</div>
   </div>
