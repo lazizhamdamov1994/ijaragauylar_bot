@@ -15,7 +15,6 @@ from datetime import time as dtime
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    InputMediaPhoto,
     KeyboardButton,
     MessageOriginHiddenUser,
     MessageOriginUser,
@@ -78,47 +77,32 @@ async def notify_admin_of_moderator_listing(context: ContextTypes.DEFAULT_TYPE, 
 
 
 async def send_listing_to_channel(context: ContextTypes.DEFAULT_TYPE, listing: dict):
-    """MUHIM (dizayn): avval rasmlar/video ALOHIDA, caption+tugmalar esa
-    HAR DOIM alohida, keyingi matn xabarida yuborilardi (hatto bitta rasm
-    bo'lsa ham) - bu kanalda ikkita ajralgan post bo'lib ko'rinardi. Endi
-    HAR DOIM mumkin qadar BITTA postga birlashtiriladi: agar video bo'lsa -
-    video ASOSIY (caption+tugmalar bilan) post, qolgan rasmlar unga
-    qo'shimcha albom; agar FAQAT bitta rasm bo'lsa - caption+tugmalar
-    to'g'ridan-to'g'ri o'sha rasmga biriktiriladi; faqat ikki va undan ortiq
-    rasm (videosiz) holatidagina - Telegram Bot API cheklovi tufayli
-    (sendMediaGroup reply_markup QABUL QILMAYDI) - albom + alohida qisqa
-    tugmali xabar ishlatiladi."""
+    """MUHIM (dizayn, ATAYIN eski uslub): avval rasmlar (va video bo'lsa -
+    video ham) ALOHIDA captionsiz joylanadi, SO'NGRA caption+tugmalar
+    BUTUNLAY alohida matn xabarida yuboriladi - kanalda rasm katta/aniq
+    ko'rinadi, matn esa to'liq o'qiladigan holda alohida chiqadi (admin
+    ATAYIN shu tartibni xohlagan - caption'ni rasmga "siqib" yuborish
+    noqulay ko'rinadi)."""
     caption = build_caption(listing, context.bot.username)
     keyboard = channel_keyboard(listing["id"], context.bot.username, listing.get("latitude"), listing.get("longitude"))
     photos = listing.get("photos") or []
     videos = listing.get("videos") or []
 
+    if videos:
+        try:
+            await send_with_retry(context.bot.send_video, CHANNEL_ID, videos[0], supports_streaming=True)
+        except Exception:
+            logger.exception("Kanalga videoni yuborishda xatolik")
+
+    ok = await send_photos(context, CHANNEL_ID, photos)
+    if not ok:
+        return None
     try:
-        if videos:
-            main_msg = await send_with_retry(
-                context.bot.send_video, CHANNEL_ID, videos[0], caption=caption,
-                parse_mode=ParseMode.HTML, reply_markup=keyboard, supports_streaming=True,
-            )
-            if photos:
-                await send_photos(context, CHANNEL_ID, photos)
-        elif len(photos) == 1:
-            main_msg = await send_with_retry(
-                context.bot.send_photo, CHANNEL_ID, photos[0], caption=caption,
-                parse_mode=ParseMode.HTML, reply_markup=keyboard,
-            )
-        elif photos:
-            media = [InputMediaPhoto(photos[0], caption=caption, parse_mode=ParseMode.HTML)] + [InputMediaPhoto(p) for p in photos[1:]]
-            await send_with_retry(context.bot.send_media_group, CHANNEL_ID, media)
-            main_msg = await send_with_retry(
-                context.bot.send_message, CHANNEL_ID,
-                "\U0001F4DE Bog'lanish uchun pastdagi tugmalardan foydalaning:", reply_markup=keyboard,
-            )
-        else:
-            return None
+        main_msg = await send_with_retry(context.bot.send_message, CHANNEL_ID, caption, parse_mode=ParseMode.HTML, reply_markup=keyboard)
         log_channel_post(listing["id"], main_msg.message_id)
         return main_msg.message_id
     except Exception:
-        logger.exception("Kanalga e'lon postini yuborishda xatolik")
+        logger.exception("Kanalga matn+tugma xabarini yuborishda xatolik")
         return None
 
 

@@ -130,11 +130,15 @@ def build_caption(data: dict, bot_username: str = None) -> str:
     }
     rental_type_badge = f"\n{rental_type_labels[data['rental_type']]}" if data.get("rental_type") in rental_type_labels else ""
     if data.get("is_quick"):
-        # Tezkor rejim: matnning o'zi o'zgartirilmaydi, lekin brend
-        # sarlavha + sana + footer HAR DOIM qo'shiladi (izchillik uchun).
+        # Tezkor rejim: alohida "kimlarga"/"qulaylik" maydoni yo'q - erkin
+        # matn (raw_text) ichida kelishi mumkin, shuning uchun BOSQICHLI
+        # e'londagi BILAN BIR XIL yangi Telegram formatlash (auditoriya
+        # belgisi + <blockquote expandable>) shu yerda ham qo'llanadi -
+        # ikki rejim orasida vizual farq bo'lmasligi uchun.
+        quick_kimlarga_badge = _kimlarga_badge_line(data.get("raw_text"))
         return (
-            f"\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>{trust_badge}{category_badge}{location_badge}\n\n"
-            f"{esc(data.get('raw_text') or '')}\n\n"
+            f"\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>{trust_badge}{category_badge}{quick_kimlarga_badge}{location_badge}\n\n"
+            f"<blockquote expandable>{esc(data.get('raw_text') or '')}</blockquote>\n\n"
             f"\U0001F4C5 {bugun}\n\n"
             f"@{CHANNEL_USERNAME} \u2014 uyingizni maklersiz bering va oling!"
         )
