@@ -204,6 +204,14 @@ def init_schema() -> None:
         id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, full_name TEXT, username TEXT,
         text TEXT, photo_file_id TEXT, status TEXT NOT NULL DEFAULT 'pending',
         channel_message_id INTEGER, created_at TEXT, reviewed_at TEXT)""")
+    # Veb-sayt bosh sahifasidagi banner karuseli - admin panel orqali
+    # boshqariladi (rasm Telegram'ga yuklanib file_id sifatida saqlanadi,
+    # /photo/{file_id} orqali ko'rsatiladi - alohida fayl saqlash shart emas).
+    conn.execute("""CREATE TABLE IF NOT EXISTS banners (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, photo_file_id TEXT NOT NULL,
+        title TEXT, subtitle TEXT, link_url TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0, is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT)""")
     conn.commit()
     conn.close()
 
@@ -342,6 +350,71 @@ def get_lucky_wheel_streak_days(user_id: int, today: str) -> int:
         streak += 1
         cursor -= timedelta(days=1)
     return streak
+
+
+def create_banner(photo_file_id: str, title: str, subtitle: str, link_url: str) -> int:
+    conn = db()
+    next_order = conn.execute("SELECT COALESCE(MAX(sort_order), -1) + 1 n FROM banners").fetchone()["n"]
+    cur = conn.execute(
+        "INSERT INTO banners (photo_file_id, title, subtitle, link_url, sort_order, is_active, created_at) "
+        "VALUES (?, ?, ?, ?, ?, 1, ?)",
+        (photo_file_id, title, subtitle, link_url, next_order, now_str()),
+    )
+    conn.commit()
+    banner_id = cur.lastrowid
+    conn.close()
+    return banner_id
+
+
+def list_banners(active_only: bool = False) -> list:
+    conn = db()
+    query = "SELECT * FROM banners"
+    if active_only:
+        query += " WHERE is_active = 1"
+    query += " ORDER BY sort_order ASC, id ASC"
+    rows = conn.execute(query).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_banner(banner_id: int):
+    conn = db()
+    row = conn.execute("SELECT * FROM banners WHERE id = ?", (banner_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_banner(banner_id: int, **fields) -> None:
+    if not fields:
+        return
+    allowed = {"photo_file_id", "title", "subtitle", "link_url", "is_active"}
+    cols = [k for k in fields if k in allowed]
+    if not cols:
+        return
+    conn = db()
+    conn.execute(
+        f"UPDATE banners SET {', '.join(f'{c} = ?' for c in cols)} WHERE id = ?",
+        [fields[c] for c in cols] + [banner_id],
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_banner(banner_id: int) -> None:
+    conn = db()
+    conn.execute("DELETE FROM banners WHERE id = ?", (banner_id,))
+    conn.commit()
+    conn.close()
+
+
+def reorder_banners(ordered_ids: list) -> None:
+    conn = db()
+    conn.executemany(
+        "UPDATE banners SET sort_order = ? WHERE id = ?",
+        [(i, banner_id) for i, banner_id in enumerate(ordered_ids)],
+    )
+    conn.commit()
+    conn.close()
 
 
 def save_testimonial(user_id: int, full_name: str, username: str, text: str, photo_file_id: str = None) -> int:

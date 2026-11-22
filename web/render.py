@@ -813,6 +813,70 @@ def render_top_carousel_card(l: dict) -> str:
 </a>"""
 
 
+def render_banner_carousel(banners: list) -> str:
+    """Bosh sahifa yuqorisidagi, admin panel orqali boshqariladigan banner
+    karuseli - avtomatik aylanadi, barmoq bilan suring (swipe) ham
+    qo'llanadi, pastda nuqta-indikatorlar bilan. Banner yo'q bo'lsa -
+    bo'sh satr qaytaradi (sahifa bo'sh joy qoldirmaydi)."""
+    if not banners:
+        return ""
+    slides = []
+    for i, b in enumerate(banners):
+        img = photo_url(b["photo_file_id"])
+        title = esc_html(b.get("title") or "")
+        subtitle = esc_html(b.get("subtitle") or "")
+        title_html = f'<div class="hbc-title">{title}</div>' if title else ""
+        subtitle_html = f'<div class="hbc-subtitle">{subtitle}</div>' if subtitle else ""
+        text_html = f'<div class="hbc-text">{title_html}{subtitle_html}</div>' if (title or subtitle) else ""
+        tag, href_attr = ("a", f' href="{esc_html(b["link_url"])}"') if b.get("link_url") else ("div", "")
+        slides.append(
+            f'<{tag} class="hbc-slide{" active" if i == 0 else ""}" data-i="{i}"{href_attr}>'
+            f'<img src="{img}" alt="{title or "banner"}" loading="{"eager" if i == 0 else "lazy"}">'
+            f'{text_html}</{tag}>'
+        )
+    dots = "".join(f'<button type="button" class="hbc-dot{" active" if i == 0 else ""}" data-i="{i}" aria-label="Banner {i + 1}"></button>' for i in range(len(banners))) if len(banners) > 1 else ""
+    arrows = (
+        f'<button type="button" class="hbc-arrow hbc-prev" aria-label="Oldingi">{icon("chevron_left", 20)}</button>'
+        f'<button type="button" class="hbc-arrow hbc-next" aria-label="Keyingi">{icon("chevron_right", 20)}</button>'
+    ) if len(banners) > 1 else ""
+    return f"""<section class="hbc-wrap">
+  <div class="hbc" id="heroBannerCarousel">
+    <div class="hbc-track">{"".join(slides)}</div>
+    {arrows}
+    <div class="hbc-dots">{dots}</div>
+  </div>
+</section>
+<script>
+(function() {{
+  var root = document.getElementById('heroBannerCarousel');
+  if (!root) return;
+  var slides = root.querySelectorAll('.hbc-slide');
+  var dots = root.querySelectorAll('.hbc-dot');
+  if (slides.length < 2) return;
+  var cur = 0, timer = null;
+  function show(i) {{
+    slides[cur].classList.remove('active'); dots.length && dots[cur].classList.remove('active');
+    cur = (i + slides.length) % slides.length;
+    slides[cur].classList.add('active'); dots.length && dots[cur].classList.add('active');
+  }}
+  function next() {{ show(cur + 1); }}
+  function restart() {{ clearInterval(timer); timer = setInterval(next, 5000); }}
+  root.querySelector('.hbc-next')?.addEventListener('click', function() {{ next(); restart(); }});
+  root.querySelector('.hbc-prev')?.addEventListener('click', function() {{ show(cur - 1); restart(); }});
+  dots.forEach(function(d) {{ d.addEventListener('click', function() {{ show(parseInt(d.dataset.i, 10)); restart(); }}); }});
+  var sx = 0;
+  root.addEventListener('touchstart', function(e) {{ sx = e.touches[0].clientX; }}, {{passive: true}});
+  root.addEventListener('touchend', function(e) {{
+    var dx = e.changedTouches[0].clientX - sx;
+    if (Math.abs(dx) > 40) {{ dx < 0 ? next() : show(cur - 1); restart(); }}
+  }}, {{passive: true}});
+  root.addEventListener('mouseenter', function() {{ clearInterval(timer); }});
+  root.addEventListener('mouseleave', restart);
+  restart();
+}})();
+</script>"""
+
+
 ICONS = {
     "bed": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6"/><path d="M3 18h18"/><path d="M7 10V7a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v3"/><path d="M3 14v4"/><path d="M21 14v4"/></svg>',
     "users": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1"/><circle cx="10" cy="8" r="3.5"/><path d="M21 20v-1a4 4 0 0 0-2.5-3.7"/><path d="M15.5 4.3a3.5 3.5 0 0 1 0 6.9"/></svg>',

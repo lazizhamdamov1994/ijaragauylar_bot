@@ -19,18 +19,24 @@ from common.config import ADMIN_IDS, BOT_TOKEN, BOT_USERNAME, CHANNEL_ID, CHANNE
 from common.db import (
     ai_accuracy_summary,
     broadcast_notification,
+    create_banner,
     create_support_request,
     db,
+    delete_banner,
+    get_banner,
     get_blocked_phone,
     get_district_price_history,
     get_pending_support_requests,
     get_usd_rate_history,
     get_setting,
     is_subscribed,
+    list_banners,
     now_str,
+    reorder_banners,
     reply_support_request,
     set_setting,
     toggle_favorite,
+    update_banner,
 )
 
 from common.districts import add_district_alias, list_district_aliases, remove_district_alias
@@ -38,7 +44,7 @@ from common.ai import ai_analyze_market_trends, ai_usage_summary
 
 from web.auth import check_auth, get_current_tg_user
 from web.listings_data import get_active_listings, normalize_phone_web, post_listing_to_channel
-from web.pages import notify_telegram
+from web.pages import notify_telegram, telegram_upload_photos
 from web.render import TASHKENT_DISTRICTS
 
 # MUHIM: quyidagilar bot/ paketidan import qilinadi - odatda web/ hech qachon
@@ -647,6 +653,87 @@ def api_admin_add_district_alias(district: str = Query(...), alias: str = Query(
 @router.post("/api/admin/district-aliases/{alias_id}/remove")
 def api_admin_remove_district_alias(alias_id: int, user: str = Depends(check_auth)):
     remove_district_alias(alias_id)
+    return {"ok": True}
+
+
+# ============================= ADMIN: BOSH SAHIFA BANNERLARI =============================
+# Bosh sahifadagi karusel banner(lar)i - rasm Telegram'ga yuklanib file_id
+# sifatida saqlanadi (boshqa barcha rasm kabi - alohida fayl serveri shart
+# emas), /photo/{file_id} orqali ko'rsatiladi.
+
+@router.get("/api/admin/banners")
+def api_admin_list_banners(user: str = Depends(check_auth)):
+    return {"banners": list_banners()}
+
+
+@router.post("/api/admin/banners/add")
+async def api_admin_add_banner(
+    title: str = Form(""), subtitle: str = Form(""), link_url: str = Form(""),
+    photo: UploadFile = File(...), user: str = Depends(check_auth),
+):
+    if not photo or not photo.filename:
+        raise HTTPException(status_code=400, detail="Rasm tanlanmagan.")
+    content = await photo.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Rasm 10MB dan oshmasligi kerak.")
+    if not ADMIN_IDS or not BOT_TOKEN:
+        raise HTTPException(status_code=503, detail="Tizim vaqtincha sozlanmoqda.")
+    try:
+        file_ids = await telegram_upload_photos(ADMIN_IDS[0], [content], [photo.filename or "banner.jpg"])
+    except Exception:
+        logger.exception("Banner rasmini yuklashda xatolik")
+        raise HTTPException(status_code=502, detail="Rasmni yuklashda xatolik yuz berdi.")
+    if not file_ids:
+        raise HTTPException(status_code=502, detail="Rasmni yuklab bo'lmadi.")
+    banner_id = create_banner(file_ids[0], title.strip()[:150], subtitle.strip()[:250], link_url.strip()[:500])
+    return {"ok": True, "id": banner_id}
+
+
+@router.post("/api/admin/banners/{banner_id}/update")
+async def api_admin_update_banner(
+    banner_id: int, title: str = Form(""), subtitle: str = Form(""), link_url: str = Form(""),
+    photo: UploadFile = File(None), user: str = Depends(check_auth),
+):
+    if not get_banner(banner_id):
+        raise HTTPException(status_code=404, detail="Banner topilmadi.")
+    fields = {"title": title.strip()[:150], "subtitle": subtitle.strip()[:250], "link_url": link_url.strip()[:500]}
+    if photo and photo.filename:
+        content = await photo.read()
+        if len(content) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Rasm 10MB dan oshmasligi kerak.")
+        try:
+            file_ids = await telegram_upload_photos(ADMIN_IDS[0], [content], [photo.filename or "banner.jpg"])
+        except Exception:
+            logger.exception("Banner rasmini yangilashda xatolik")
+            raise HTTPException(status_code=502, detail="Rasmni yuklashda xatolik yuz berdi.")
+        if file_ids:
+            fields["photo_file_id"] = file_ids[0]
+    update_banner(banner_id, **fields)
+    return {"ok": True}
+
+
+@router.post("/api/admin/banners/{banner_id}/toggle")
+def api_admin_toggle_banner(banner_id: int, user: str = Depends(check_auth)):
+    banner = get_banner(banner_id)
+    if not banner:
+        raise HTTPException(status_code=404, detail="Banner topilmadi.")
+    update_banner(banner_id, is_active=0 if banner["is_active"] else 1)
+    return {"ok": True}
+
+
+@router.post("/api/admin/banners/{banner_id}/delete")
+def api_admin_delete_banner(banner_id: int, user: str = Depends(check_auth)):
+    delete_banner(banner_id)
+    return {"ok": True}
+
+
+@router.post("/api/admin/banners/reorder")
+def api_admin_reorder_banners(ordered_ids: str = Form(...), user: str = Depends(check_auth)):
+    try:
+        ids = [int(x) for x in ordered_ids.split(",") if x.strip()]
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Noto'g'ri format.")
+    reorder_banners(ids)
     return {"ok": True}
 
 

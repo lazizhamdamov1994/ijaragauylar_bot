@@ -31,6 +31,7 @@ from common.db import (
     get_setting,
     has_prior_rejected_listing,
     is_phone_blocked,
+    list_banners,
     list_posted_market_digests,
     now_str,
 )
@@ -70,6 +71,7 @@ from web.render import (
     icon,
     mask_card_holder,
     photo_url,
+    render_banner_carousel,
     render_footer,
     render_head,
     render_header,
@@ -127,6 +129,7 @@ def _listings_page(
         sort = ""
     listings, total = get_site_listings(hudud=hudud, xona=xona, page=page, rental_type=rental_type, sort=sort)
     stats = site_stats_summary()
+    banner_html = render_banner_carousel(list_banners(active_only=True)) if page == 1 and not sort else ""
     total_pages = max(1, (total + PER_PAGE - 1) // PER_PAGE)
 
     tg_user = get_current_tg_user(request)
@@ -258,6 +261,8 @@ def _listings_page(
 </head>
 <body>
 {render_header(lang, canonical_path)}
+
+{banner_html}
 
 <section class="control-bar">
   <div class="wrap">

@@ -203,6 +203,16 @@ ADMIN_HTML = """<!DOCTYPE html>
   }
   .inline-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
   .inline-form .form-row { margin-bottom: 0; flex: 1; min-width: 140px; }
+  .banner-admin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  .banner-admin-card { border: 1.5px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; }
+  .banner-admin-card.banner-inactive { opacity: .55; }
+  .banner-admin-card img { width: 100%; height: 130px; object-fit: cover; display: block; background: var(--bg); }
+  .banner-admin-body { padding: 12px; display: flex; flex-direction: column; gap: 7px; }
+  .banner-admin-body input {
+    padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 8px; font-size: 12.5px;
+    font-family: inherit; background: #fff; color: var(--ink);
+  }
+  .banner-admin-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
   .btn {
     padding: 10px 18px; border-radius: var(--radius-pill); border: none; font-weight: 700; font-size: 13px;
     cursor: pointer; white-space: nowrap; transition: transform .13s var(--ease), box-shadow .13s var(--ease), background .15s var(--ease), opacity .13s var(--ease);
@@ -275,6 +285,7 @@ ADMIN_HTML = """<!DOCTYPE html>
     <div class="side-group-label">Tizim</div>
     <a data-tab="blocked"><span class="icon">\U0001F6AB</span> Bloklangan</a>
     <a data-tab="districts"><span class="icon">\U0001F5FA</span> Tuman kalit so'zlari</a>
+    <a data-tab="banners"><span class="icon">\U0001F5BC</span> Bannerlar</a>
     <a data-tab="settings"><span class="icon">⚙️</span> Sozlamalar</a>
   </nav>
   <div class="side-live"><span class="pulse-dot"></span> Jonli holat</div>
@@ -505,6 +516,32 @@ ADMIN_HTML = """<!DOCTYPE html>
     </div>
   </div>
 
+  <div id="tab-banners" class="tab-page">
+    <div class="page-head"><h1>\U0001F5BC Bosh sahifa bannerlari</h1></div>
+    <div class="panel-sub" style="margin-bottom:16px;">Veb-sayt bosh sahifasi yuqorisida aylanadigan karusel banner(lar)i - rasm, sarlavha, izoh va havola kiritasiz, tartibini o'q tugmalari bilan boshqarasiz.</div>
+    <div class="panel" style="margin-bottom:16px;">
+      <h2>\U00002795 Yangi banner qo'shish</h2>
+      <form id="banner-add-form" class="inline-form" style="margin-top:12px;" enctype="multipart/form-data">
+        <div class="form-row"><label>Rasm (tavsiya: 1600x500px)</label>
+          <input type="file" id="banner-add-photo" accept="image/*" required>
+        </div>
+        <div class="form-row"><label>Sarlavha (ixtiyoriy)</label>
+          <input type="text" id="banner-add-title" placeholder="Masalan: Yangi yil aksiyasi!">
+        </div>
+        <div class="form-row"><label>Izoh (ixtiyoriy)</label>
+          <input type="text" id="banner-add-subtitle" placeholder="Masalan: 30% chegirma bilan Limit sotib oling">
+        </div>
+        <div class="form-row"><label>Havola (ixtiyoriy)</label>
+          <input type="text" id="banner-add-link" placeholder="https://t.me/... yoki /kabinet/limit">
+        </div>
+        <button type="button" class="btn btn-primary" onclick="addBannerAction()">Qo'shish</button>
+      </form>
+    </div>
+    <div class="panel">
+      <div id="banners-list" class="empty-note">Yuklanmoqda...</div>
+    </div>
+  </div>
+
   <div id="tab-settings" class="tab-page">
     <div class="page-head"><h1>⚙️ Sozlamalar</h1></div>
     <div class="panel-sub" style="margin-bottom:16px;">O'zgarish darhol, botni qayta ishga tushirmasdan, hamma joyda kuchga kiradi</div>
@@ -592,6 +629,7 @@ document.querySelectorAll('.side-nav a').forEach(a => {
     document.getElementById('tab-' + a.dataset.tab).classList.add('active');
     if (a.dataset.tab === 'mapview' && !window._mapLoaded) { loadMap(); window._mapLoaded = true; }
     if (a.dataset.tab === 'market' && !window._marketLoaded) { loadMarketTab(); window._marketLoaded = true; }
+    if (a.dataset.tab === 'banners' && !window._bannersLoaded) { loadBanners(); window._bannersLoaded = true; }
   });
 });
 
@@ -975,6 +1013,78 @@ async function removeDistrictAliasAction(aliasId) {
   if (!confirm("Bu kalit so'zni o'chirasizmi?")) return;
   await fetch(`/api/admin/district-aliases/${aliasId}/remove`, { method: 'POST' });
   loadDistrictAliases();
+}
+
+let _bannersCache = [];
+async function loadBanners() {
+  const res = await fetch('/api/admin/banners');
+  const data = await res.json();
+  _bannersCache = data.banners || [];
+  renderBannersList();
+}
+function renderBannersList() {
+  const el = document.getElementById('banners-list');
+  if (!_bannersCache.length) { el.innerHTML = `<div class="empty-note">Hozircha banner yo'q - yuqoridagi formadan qo'shing.</div>`; return; }
+  el.innerHTML = `<div class="banner-admin-grid">` + _bannersCache.map((b, idx) => `
+    <div class="banner-admin-card${b.is_active ? '' : ' banner-inactive'}">
+      <img src="/photo/${b.photo_file_id}" alt="">
+      <div class="banner-admin-body">
+        <input type="text" value="${(b.title || '').replace(/"/g, '&quot;')}" placeholder="Sarlavha" id="banner-title-${b.id}">
+        <input type="text" value="${(b.subtitle || '').replace(/"/g, '&quot;')}" placeholder="Izoh" id="banner-subtitle-${b.id}">
+        <input type="text" value="${(b.link_url || '').replace(/"/g, '&quot;')}" placeholder="Havola" id="banner-link-${b.id}">
+        <input type="file" accept="image/*" id="banner-photo-${b.id}">
+        <div class="banner-admin-actions">
+          <button class="btn btn-secondary" style="padding:6px 10px;font-size:11.5px;" onclick="moveBannerAction(${b.id}, -1)" ${idx === 0 ? 'disabled' : ''}>↑</button>
+          <button class="btn btn-secondary" style="padding:6px 10px;font-size:11.5px;" onclick="moveBannerAction(${b.id}, 1)" ${idx === _bannersCache.length - 1 ? 'disabled' : ''}>↓</button>
+          <button class="btn btn-primary" style="padding:6px 10px;font-size:11.5px;" onclick="saveBannerAction(${b.id})">Saqlash</button>
+          <button class="btn btn-secondary" style="padding:6px 10px;font-size:11.5px;" onclick="toggleBannerAction(${b.id})">${b.is_active ? "O'chirish (vaqtincha)" : "Yoqish"}</button>
+          <button class="btn btn-danger" style="padding:6px 10px;font-size:11.5px;" onclick="deleteBannerAction(${b.id})">O'chirish</button>
+        </div>
+      </div>
+    </div>
+  `).join('') + `</div>`;
+}
+async function addBannerAction() {
+  const photoInput = document.getElementById('banner-add-photo');
+  if (!photoInput.files.length) { alert('Rasm tanlang.'); return; }
+  const fd = new FormData();
+  fd.append('photo', photoInput.files[0]);
+  fd.append('title', document.getElementById('banner-add-title').value.trim());
+  fd.append('subtitle', document.getElementById('banner-add-subtitle').value.trim());
+  fd.append('link_url', document.getElementById('banner-add-link').value.trim());
+  const res = await fetch('/api/admin/banners/add', { method: 'POST', body: fd });
+  if (!res.ok) { alert("Xatolik yuz berdi. Qaytadan urinib ko'ring."); return; }
+  document.getElementById('banner-add-form').reset();
+  loadBanners();
+}
+async function saveBannerAction(id) {
+  const fd = new FormData();
+  fd.append('title', document.getElementById(`banner-title-${id}`).value.trim());
+  fd.append('subtitle', document.getElementById(`banner-subtitle-${id}`).value.trim());
+  fd.append('link_url', document.getElementById(`banner-link-${id}`).value.trim());
+  const photoInput = document.getElementById(`banner-photo-${id}`);
+  if (photoInput.files.length) fd.append('photo', photoInput.files[0]);
+  await fetch(`/api/admin/banners/${id}/update`, { method: 'POST', body: fd });
+  loadBanners();
+}
+async function toggleBannerAction(id) {
+  await fetch(`/api/admin/banners/${id}/toggle`, { method: 'POST' });
+  loadBanners();
+}
+async function deleteBannerAction(id) {
+  if (!confirm("Bu bannerni butunlay o'chirasizmi?")) return;
+  await fetch(`/api/admin/banners/${id}/delete`, { method: 'POST' });
+  loadBanners();
+}
+async function moveBannerAction(id, dir) {
+  const idx = _bannersCache.findIndex(b => b.id === id);
+  const swapWith = idx + dir;
+  if (swapWith < 0 || swapWith >= _bannersCache.length) return;
+  [_bannersCache[idx], _bannersCache[swapWith]] = [_bannersCache[swapWith], _bannersCache[idx]];
+  renderBannersList();
+  const fd = new FormData();
+  fd.append('ordered_ids', _bannersCache.map(b => b.id).join(','));
+  await fetch('/api/admin/banners/reorder', { method: 'POST', body: fd });
 }
 
 async function loadAiUsage() {

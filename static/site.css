@@ -181,6 +181,40 @@
      bitta skroll ichida ko'rinadi. Ranglar/soyalar saytning o'z
      --brand/--gold palitrasidan (joymee'ning asl #FF2D55 qizilidan farqi
      deyarli sezilmaydi, shuning uchun "begona" ko'rinmaydi). */
+  /* ============ BANNER KARUSELI (admin panel orqali boshqariladi) ============ */
+  .hbc-wrap { padding: 16px 16px 0; max-width: 1400px; margin: 0 auto; }
+  .hbc { position: relative; border-radius: var(--radius-lg); overflow: hidden; aspect-ratio: 16/5; background: var(--bg-soft); box-shadow: var(--shadow-sm); }
+  .hbc-track { position: relative; width: 100%; height: 100%; }
+  .hbc-slide {
+    position: absolute; inset: 0; display: block; opacity: 0; visibility: hidden;
+    transition: opacity .6s var(--ease); z-index: 1;
+  }
+  .hbc-slide.active { opacity: 1; visibility: visible; z-index: 2; }
+  .hbc-slide img { width: 100%; height: 100%; object-fit: cover; }
+  .hbc-text {
+    position: absolute; left: 0; bottom: 0; right: 0; padding: 20px 28px 22px;
+    background: linear-gradient(180deg, transparent, rgba(16,24,38,.78) 85%); color: #fff;
+  }
+  .hbc-title { font-family: var(--font-display); font-size: clamp(16px, 2.6vw, 26px); font-weight: 800; letter-spacing: -0.3px; }
+  .hbc-subtitle { font-size: clamp(11px, 1.3vw, 14px); font-weight: 500; opacity: .92; margin-top: 4px; max-width: 70%; }
+  .hbc-arrow {
+    position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; width: 36px; height: 36px;
+    border-radius: 50%; border: none; background: rgba(16,24,38,.42); color: #fff; display: flex;
+    align-items: center; justify-content: center; cursor: pointer; transition: background .2s var(--ease);
+  }
+  .hbc-arrow:hover { background: rgba(16,24,38,.65); }
+  .hbc-prev { left: 12px; } .hbc-next { right: 12px; }
+  .hbc-dots { position: absolute; z-index: 3; left: 0; right: 0; bottom: 10px; display: flex; justify-content: center; gap: 6px; }
+  .hbc-dot { width: 7px; height: 7px; border-radius: 50%; border: none; background: rgba(255,255,255,.55); cursor: pointer; padding: 0; transition: all .2s var(--ease); }
+  .hbc-dot.active { background: #fff; width: 18px; border-radius: 4px; }
+  @media (max-width: 640px) {
+    .hbc-wrap { padding: 10px 10px 0; }
+    .hbc { aspect-ratio: 4/3; border-radius: var(--radius); }
+    .hbc-text { padding: 14px 16px 16px; }
+    .hbc-subtitle { max-width: 100%; }
+    .hbc-arrow { width: 30px; height: 30px; }
+  }
+
   .control-bar { background: var(--bg-soft); border-bottom: 1px solid var(--line); padding: 26px 0 22px; }
   .control-bar-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
   .control-bar h1 { font-size: clamp(20px, 2.3vw, 25px); font-weight: 800; letter-spacing: -0.5px; color: var(--ink); line-height: 1.25; }
