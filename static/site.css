@@ -191,11 +191,17 @@
   .hbc-dot { width: 7px; height: 7px; border-radius: 50%; border: none; background: rgba(255,255,255,.55); cursor: pointer; padding: 0; transition: all .2s var(--ease); }
   .hbc-dot.active { background: #fff; width: 18px; border-radius: 4px; }
   @media (max-width: 640px) {
+    /* MUHIM: aspect-ratio DESKTOP bilan BIR XIL (16/5) qoldirilgan -
+       oldin mobilda 4/3'ga siqilgani uchun rasmning chap/o'ng qismlari
+       (odatda bannerning matni shu yerda) kesilib qolardi. Endi rasm
+       HECH QACHON kesilmaydi, faqat torroq ekranga mos ravishda
+       pastroq bo'lib ko'rinadi. */
     .hbc-wrap { padding: 10px 10px 0; }
-    .hbc { aspect-ratio: 4/3; border-radius: var(--radius); }
+    .hbc { border-radius: var(--radius); }
     .hbc-text { padding: 14px 16px 16px; }
-    .hbc-subtitle { max-width: 100%; }
-    .hbc-arrow { width: 30px; height: 30px; }
+    .hbc-title { font-size: 15px; }
+    .hbc-subtitle { max-width: 100%; font-size: 11px; }
+    .hbc-arrow { width: 28px; height: 28px; }
   }
 
   /* ---- Bosh sahifa qidiruv bo'limi: yumshoq rangli "mesh" fon ustida
