@@ -124,6 +124,18 @@ _RENTAL_TYPE_LABELS = {
 }
 
 
+def _caption_header(badges: list) -> str:
+    """Brend nomi + (bo'lsa) ijara turi/auditoriya/kategoriya belgilari -
+    MUHIM: belgilar qatori ATAYIN <blockquote> ichiga olingan (admin shuni
+    so'ragan - qisqa bitta qator uchun bu chiroyli "urg'u chizig'i" bo'lib
+    ko'rinadi, uzun erkin matn uchun esa YOMON ko'rinardi, shuning uchun
+    pastdagi Qulayliklar/E'lon matni blockquote'SIZ qoldirilgan)."""
+    header = "\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>"
+    if badges:
+        header += "\n<blockquote>" + "  ·  ".join(badges) + "</blockquote>"
+    return header
+
+
 def build_caption(data: dict, bot_username: str = None) -> str:
     """MUHIM (admin bilan kelishilgan shablon): manzil/mo'ljal/xona/narx
     KABI ASOSIY MAYDONLAR hech qachon maxsus blokka (blockquote) ichiga
@@ -153,9 +165,7 @@ def build_caption(data: dict, bot_username: str = None) -> str:
         # shuning uchun MUHIM: shu matn hech qachon yashirilmasligi kerak
         # (manzil/narx ham shu matn ichida bo'lishi mumkin).
         badges = [b for b in [*_kimlarga_badges(data.get("raw_text")), category_badge, trust_badge] if b]
-        header = "\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>"
-        if badges:
-            header += "\n" + "  \u00b7  ".join(badges)
+        header = _caption_header(badges)
         blocks = [header, f"\U0001F4AC <b>E'lon matni</b>\n{esc(data.get('raw_text') or '')}"]
         if location_line:
             blocks.append(location_line)
@@ -164,9 +174,7 @@ def build_caption(data: dict, bot_username: str = None) -> str:
 
     rental_type_badge = _RENTAL_TYPE_LABELS.get(data.get("rental_type"), "")
     badges = [b for b in [rental_type_badge, *_kimlarga_badges(data.get("kimlarga")), category_badge, trust_badge] if b]
-    header = "\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>"
-    if badges:
-        header += "\n" + "  \u00b7  ".join(badges)
+    header = _caption_header(badges)
     fields = (
         f"\U0001F4CD <b>Manzil:</b> {esc(data['manzil'])}\n"
         f"\U0001F3AF <b>Mo'ljal:</b> {esc(data['moljal'])}\n"
