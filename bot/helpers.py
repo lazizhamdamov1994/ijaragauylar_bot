@@ -106,54 +106,76 @@ _KIMLARGA_BADGES = [
 ]
 
 
-def _kimlarga_badge_line(kimlarga: str) -> str:
+def _kimlarga_badges(kimlarga: str) -> list:
     low = (kimlarga or "").lower()
-    badges = [label for keywords, label in _KIMLARGA_BADGES if any(k in low for k in keywords)]
-    return ("\n" + "\n".join(badges)) if badges else ""
+    return [label for keywords, label in _KIMLARGA_BADGES if any(k in low for k in keywords)]
+
+
+_CATEGORY_LABELS = {
+    "tasdiqlangan": "\u2705 <b>Tasdiqlangan e'lon</b>",
+    "subarenda": "\U0001F3E2 <b>Ijaraga Uylar tomonidan boshqariladi</b>",
+    "premium": "\U0001F48E <b>Premium e'lon</b>",
+}
+_RENTAL_TYPE_LABELS = {
+    "kunlik": "\U0001F4C5 <b>Kunlik ijara</b>",
+    "uzoq_muddat": "\U0001F3E0 <b>Uzoq muddatli ijara</b>",
+    "dacha": "\U0001F333 <b>Dacha</b>",
+    "mehmonxona": "\U0001F6CF <b>Mehmonxona</b>",
+}
 
 
 def build_caption(data: dict, bot_username: str = None) -> str:
+    """MUHIM (admin bilan kelishilgan shablon): manzil/mo'ljal/xona/narx
+    KABI ASOSIY MAYDONLAR hech qachon <blockquote expandable> ichiga
+    joylanmaydi (Telegram uni "Ko'proq" bosilmaguncha YASHIRADI - bu
+    kanal postida yomon, odamlar skrollab o'tib ketadi). Faqat erkin
+    matn (Qulayliklar / tezkor e'londagi to'liq matn) ODDIY (hech qachon
+    yashirilmaydigan) <blockquote> bilan ajratiladi. Sarlavhadagi
+    belgilar (ijara turi, auditoriya, kategoriya) BITTA qatorga " \u00b7 "
+    bilan birlashtirilgan - har biri alohida qatorda "ketma-ket" bo'lib
+    cho'zilib ketmasligi uchun."""
     bugun = datetime.now().strftime("%d.%m.%Y")
-    trust_badge = "\n\u2705 <b>Ishonchli e'lon beruvchi</b>" if is_trusted_poster(data.get("user_id")) else ""
-    location_badge = "\n\n\U0001F4CD <b>Aniq manzil mavjud</b> \u2014 pastdagi \u00abLokatsiya\u00bb tugmasini bosing" if data.get("latitude") and data.get("longitude") else ""
-    category_labels = {
-        "tasdiqlangan": "\u2705 <b>Tasdiqlangan e'lon</b>",
-        "subarenda": "\U0001F3E2 <b>Ijaraga Uylar tomonidan boshqariladi (Subarenda)</b>",
-        "premium": "\U0001F48E <b>Premium e'lon</b>",
-    }
-    category_badge = f"\n{category_labels[data['category']]}" if data.get("category") in category_labels else ""
-    rental_type_labels = {
-        "kunlik": "\U0001F4C5 <b>Kunlik ijara</b>",
-        "uzoq_muddat": "\U0001F3E0 <b>Uzoq muddatli ijara</b>",
-        "dacha": "\U0001F333 <b>Dacha</b>",
-        "mehmonxona": "\U0001F6CF <b>Mehmonxona</b>",
-    }
-    rental_type_badge = f"\n{rental_type_labels[data['rental_type']]}" if data.get("rental_type") in rental_type_labels else ""
+    trust_badge = "\u2705 <b>Ishonchli e'lon beruvchi</b>" if is_trusted_poster(data.get("user_id")) else ""
+    category_badge = _CATEGORY_LABELS.get(data.get("category"), "")
+    location_line = (
+        "\U0001F4CD <b>Aniq manzil mavjud</b> \u2014 pastdagi \u00abLokatsiya\u00bb tugmasini bosing"
+        if data.get("latitude") and data.get("longitude") else ""
+    )
+    footer = f"\U0001F4C5 {bugun}\n\U0001F517 @{CHANNEL_USERNAME} \u2014 uyingizni maklersiz bering va oling!"
+
     if data.get("is_quick"):
-        # Tezkor rejim: alohida "kimlarga"/"qulaylik" maydoni yo'q - erkin
-        # matn (raw_text) ichida kelishi mumkin, shuning uchun BOSQICHLI
-        # e'londagi BILAN BIR XIL yangi Telegram formatlash (auditoriya
-        # belgisi + <blockquote expandable>) shu yerda ham qo'llanadi -
-        # ikki rejim orasida vizual farq bo'lmasligi uchun.
-        quick_kimlarga_badge = _kimlarga_badge_line(data.get("raw_text"))
-        return (
-            f"\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>{trust_badge}{category_badge}{quick_kimlarga_badge}{location_badge}\n\n"
-            f"<blockquote expandable>{esc(data.get('raw_text') or '')}</blockquote>\n\n"
-            f"\U0001F4C5 {bugun}\n\n"
-            f"@{CHANNEL_USERNAME} \u2014 uyingizni maklersiz bering va oling!"
-        )
-    kimlarga_badge = _kimlarga_badge_line(data.get("kimlarga"))
-    return (
-        f"\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>{trust_badge}{category_badge}{rental_type_badge}{kimlarga_badge}{location_badge}\n\n"
+        # Tezkor rejim: alohida "kimlarga"/"narx"/"manzil" maydoni yo'q -
+        # hammasi foydalanuvchi yozgan erkin matn (raw_text) ichida -
+        # shuning uchun MUHIM: shu matn hech qachon yashirilmasligi kerak
+        # (manzil/narx ham shu matn ichida bo'lishi mumkin).
+        badges = [b for b in [*_kimlarga_badges(data.get("raw_text")), category_badge, trust_badge] if b]
+        header = "\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>"
+        if badges:
+            header += "\n" + "  \u00b7  ".join(badges)
+        blocks = [header, f"\U0001F4AC <b>E'lon matni</b>\n<blockquote>{esc(data.get('raw_text') or '')}</blockquote>"]
+        if location_line:
+            blocks.append(location_line)
+        blocks.append(footer)
+        return "\n\n".join(blocks)
+
+    rental_type_badge = _RENTAL_TYPE_LABELS.get(data.get("rental_type"), "")
+    badges = [b for b in [rental_type_badge, *_kimlarga_badges(data.get("kimlarga")), category_badge, trust_badge] if b]
+    header = "\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>"
+    if badges:
+        header += "\n" + "  \u00b7  ".join(badges)
+    fields = (
         f"\U0001F4CD <b>Manzil:</b> {esc(data['manzil'])}\n"
         f"\U0001F3AF <b>Mo'ljal:</b> {esc(data['moljal'])}\n"
         f"\U0001F465 <b>Kimlarga:</b> {esc(data['kimlarga'])}\n"
-        f"\U0001F6CF <b>Xonalar soni:</b> {esc(data['xona'])}\n\n"
-        f"\u2705 <b>Qulayliklar:</b>\n<blockquote expandable>{esc(data['qulaylik'])}</blockquote>\n\n"
-        f"\U0001F4B0 <b>Narxi:</b> {esc(data['narx'])}\n\n"
-        f"\U0001F4C5 {bugun}\n\n"
-        f"@{CHANNEL_USERNAME} \u2014 uyingizni maklersiz bering va oling!"
+        f"\U0001F6CF <b>Xonalar soni:</b> {esc(data['xona'])}"
     )
+    qulaylik_block = f"\U0001F4AC <b>Qulayliklar</b>\n<blockquote>{esc(data['qulaylik'])}</blockquote>"
+    price_block = f"\U0001F4B0 <b>Narxi:</b> {esc(data['narx'])}"
+    blocks = [header, fields, qulaylik_block, price_block]
+    if location_line:
+        blocks.append(location_line)
+    blocks.append(footer)
+    return "\n\n".join(blocks)
 
 
 def phone_reveal_text(listing: dict, expire=None) -> str:

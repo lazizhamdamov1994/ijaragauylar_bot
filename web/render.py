@@ -737,7 +737,7 @@ def render_listing_card(l: dict, favorited_ids: frozenset = frozenset()) -> str:
         cat_badge = f'<span class="lc-badge {css_cls}" style="{"left:auto;right:10px;" if paid_badge else ""}">{label}</span>'
     xona = (l.get("xona") or "").strip()
     kimlarga = (l.get("kimlarga") or "").strip()
-    # MUHIM: bot/helpers.py'dagi _kimlarga_badge_line BILAN BIR XIL kalit
+    # MUHIM: bot/helpers.py'dagi _kimlarga_badges BILAN BIR XIL kalit
     # so'zlar - lekin bu yerda web karta uchun KICHIK, alohida rangli
     # "chip" sifatida (photo ustidagi TOP/kategoriya belgilari bilan
     # bir joyga sig'ib ketmasligi uchun, matn qismida ko'rsatiladi).
