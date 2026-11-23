@@ -126,14 +126,15 @@ _RENTAL_TYPE_LABELS = {
 
 def build_caption(data: dict, bot_username: str = None) -> str:
     """MUHIM (admin bilan kelishilgan shablon): manzil/mo'ljal/xona/narx
-    KABI ASOSIY MAYDONLAR hech qachon <blockquote expandable> ichiga
-    joylanmaydi (Telegram uni "Ko'proq" bosilmaguncha YASHIRADI - bu
-    kanal postida yomon, odamlar skrollab o'tib ketadi). Faqat erkin
-    matn (Qulayliklar / tezkor e'londagi to'liq matn) ODDIY (hech qachon
-    yashirilmaydigan) <blockquote> bilan ajratiladi. Sarlavhadagi
-    belgilar (ijara turi, auditoriya, kategoriya) BITTA qatorga " \u00b7 "
-    bilan birlashtirilgan - har biri alohida qatorda "ketma-ket" bo'lib
-    cho'zilib ketmasligi uchun."""
+    KABI ASOSIY MAYDONLAR hech qachon maxsus blokka (blockquote) ichiga
+    joylanmaydi. Erkin matn (Qulayliklar / tezkor e'londagi to'liq matn)
+    ham ENDI <blockquote> EMAS - oddiy matn sifatida chiqadi (Telegram
+    blockquote'ni har doim chap tomondan chiziq/"iqtibos" ko'rinishida
+    chizadi, bu admin fikricha yoqimsiz ko'rinar edi - eng oddiy va
+    chiroyli yechim: hech qanday maxsus formatlashsiz, to'g'ridan-to'g'ri
+    matn). Sarlavhadagi belgilar (ijara turi, auditoriya, kategoriya)
+    BITTA qatorga " \u00b7 " bilan birlashtirilgan - har biri alohida
+    qatorda "ketma-ket" bo'lib cho'zilib ketmasligi uchun."""
     bugun = datetime.now().strftime("%d.%m.%Y")
     trust_badge = "\u2705 <b>Ishonchli e'lon beruvchi</b>" if is_trusted_poster(data.get("user_id")) else ""
     category_badge = _CATEGORY_LABELS.get(data.get("category"), "")
@@ -141,7 +142,10 @@ def build_caption(data: dict, bot_username: str = None) -> str:
         "\U0001F4CD <b>Aniq manzil mavjud</b> \u2014 pastdagi \u00abLokatsiya\u00bb tugmasini bosing"
         if data.get("latitude") and data.get("longitude") else ""
     )
-    footer = f"\U0001F4C5 {bugun}\n\U0001F517 @{CHANNEL_USERNAME} \u2014 uyingizni maklersiz bering va oling!"
+    # MUHIM: sana va kanal havolasi orasida ATAYIN bo'sh qator (admin
+    # shuni aniq so'ragan) - ikkalasi bitta "footer" bloki bo'lsa-da,
+    # vizual jihatdan alohida ajralib tursin.
+    footer = f"\U0001F4C5 {bugun}\n\n\U0001F517 @{CHANNEL_USERNAME} \u2014 uyingizni maklersiz bering va oling!"
 
     if data.get("is_quick"):
         # Tezkor rejim: alohida "kimlarga"/"narx"/"manzil" maydoni yo'q -
@@ -152,7 +156,7 @@ def build_caption(data: dict, bot_username: str = None) -> str:
         header = "\U0001F3E0 <b>Ijaraga Uylar Maklersiz</b>"
         if badges:
             header += "\n" + "  \u00b7  ".join(badges)
-        blocks = [header, f"\U0001F4AC <b>E'lon matni</b>\n<blockquote>{esc(data.get('raw_text') or '')}</blockquote>"]
+        blocks = [header, f"\U0001F4AC <b>E'lon matni</b>\n{esc(data.get('raw_text') or '')}"]
         if location_line:
             blocks.append(location_line)
         blocks.append(footer)
@@ -169,7 +173,7 @@ def build_caption(data: dict, bot_username: str = None) -> str:
         f"\U0001F465 <b>Kimlarga:</b> {esc(data['kimlarga'])}\n"
         f"\U0001F6CF <b>Xonalar soni:</b> {esc(data['xona'])}"
     )
-    qulaylik_block = f"\U0001F4AC <b>Qulayliklar</b>\n<blockquote>{esc(data['qulaylik'])}</blockquote>"
+    qulaylik_block = f"\U0001F4AC <b>Qulayliklar</b>\n{esc(data['qulaylik'])}"
     price_block = f"\U0001F4B0 <b>Narxi:</b> {esc(data['narx'])}"
     blocks = [header, fields, qulaylik_block, price_block]
     if location_line:
